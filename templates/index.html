@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='pico.min.css') }}"
+    />
+    <title>Apollos Bug Board</title>
+  </head>
+  <body>
+    <main class="container">
+      <h1>Apollos Bug Board</h1>
+      <p>Dashboard for tracking customer support in Apollos</p>
+      <h2>Open Priority Issues</h2>
+      {% for issue in priority_issues %}
+      <div class="card">
+        <a href="{{ issue.url }}">{{ issue.title }}</a>
+      </div>
+      {% endfor %}
+    </main>
+  </body>
+</html>
