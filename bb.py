@@ -7,15 +7,13 @@ from gql.transport.aiohttp import AIOHTTPTransport
 load_dotenv()
 
 
-def get_client():
-    headers = {"Authorization": os.getenv("LINEAR_API_KEY")}
-    transport = AIOHTTPTransport(url="https://api.linear.app/graphql", headers=headers)
-    return Client(transport=transport, fetch_schema_from_transport=True)
+headers = {"Authorization": os.getenv("LINEAR_API_KEY")}
+transport = AIOHTTPTransport(url="https://api.linear.app/graphql", headers=headers)
+client = Client(transport=transport, fetch_schema_from_transport=True)
 
 
 def get_priority_issues():
 
-    client = get_client()
     query = gql(
         """
         query Issues {
