@@ -24,7 +24,7 @@ def get_open_issues(priority, label):
               labels: { name: { eq: $label } }
               project: { name: { eq: "Customer Success" } }
               priority: { lte: $priority }
-              state: { name: { nin: ["Done", "Canceled"] } }
+              state: { name: { nin: ["Done", "Canceled", "Duplicate"] } }
             }
             orderBy: createdAt
           ) {
@@ -61,7 +61,7 @@ def get_completed_issues(priority, label):
               labels: { name: { eq: $label } }
               project: { name: { eq: "Customer Success" } }
               priority: { lte: $priority }
-              state: { name: { in: ["Done", "Canceled"] } }
+              state: { name: { in: ["Done"] } }
               completedAt:{lt:"P1M"}
             }
             orderBy: updatedAt
