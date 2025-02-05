@@ -40,6 +40,7 @@ def get_open_issues(priority, label):
                   name
                 }
               }
+              createdAt
             }
           }
         }
@@ -47,7 +48,21 @@ def get_open_issues(priority, label):
     )
 
     # Execute the query on the transport
-    return client.execute(query, variable_values=params)
+    data = client.execute(query, variable_values=params)
+    issues = data["issues"]["nodes"]
+    # add in platform (its the labels minus the label param above)
+    for issue in issues:
+        issue["platform"] = [
+            tag["name"] for tag in issue["labels"]["nodes"] if tag["name"] != label
+        ]
+        issue["daysOpen"] = (
+            datetime.now()
+            - datetime.strptime(issue["createdAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
+        ).days
+    import pprint
+
+    pprint.pprint(issues)
+    return issues
 
 
 def get_completed_issues(priority, label):
@@ -87,12 +102,14 @@ def get_completed_issues(priority, label):
     )
 
     # Execute the query on the transport
-    return client.execute(query, variable_values=params)
+    data = client.execute(query, variable_values=params)
+    issues = data["issues"]["nodes"]
+    return issues
 
 
 def by_assignee(issues):
     assignee_issues = {}
-    for issue in issues["issues"]["nodes"]:
+    for issue in issues:
         assignee = issue["assignee"]["name"]
         if assignee not in assignee_issues:
             assignee_issues[assignee] = []
@@ -103,7 +120,7 @@ def by_assignee(issues):
 
 def get_lead_time_data(issues):
     lead_times = []
-    for issue in issues["issues"]["nodes"]:
+    for issue in issues:
         completed_at = datetime.strptime(issue["completedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
         created_at = datetime.strptime(issue["createdAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
         lead_time = (completed_at - created_at).days

@@ -42,8 +42,11 @@
       <div class="card">
         <article>
           <a href="{{ issue.url }}">{{ issue.title }}</a>
-          {% if issue.assignee %} <small>({{ issue.assignee.name }})</small> {%
-          endif %}
+          <small
+            >({% if issue.platform %}{{ issue.platform[0] }}, {% endif %}+{{
+            issue.daysOpen }}d{% if issue.assignee %}, {{ issue.assignee.name
+            }}{% endif %})
+          </small>
         </article>
       </div>
       {% endfor %}

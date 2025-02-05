@@ -25,7 +25,7 @@ def with_retries(func):
 
 @with_retries
 def post_unassigned_priority_bugs():
-    open_priority_bugs = get_open_issues(2, "Bug")["issues"]["nodes"]
+    open_priority_bugs = get_open_issues(2, "Bug")
     unassigned_priority_bugs = [
         bug for bug in open_priority_bugs if bug["assignee"] is None
     ]

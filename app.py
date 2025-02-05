@@ -14,8 +14,8 @@ def index():
     lead_time_data = get_lead_time_data(completed_priority_bugs)
     return render_template(
         "index.html",
-        priority_issues=open_priority_bugs["issues"]["nodes"],
-        completed_issue_count=len(completed_priority_bugs["issues"]["nodes"]),
+        priority_issues=open_priority_bugs,
+        completed_issue_count=len(completed_priority_bugs),
         completed_priority_bugs_by_assignee=by_assignee(completed_priority_bugs),
         completed_bugs_by_assignee=by_assignee(completed_bugs),
         completed_features_by_assignee=by_assignee(completed_new_features),
