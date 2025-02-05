@@ -29,6 +29,10 @@ def post_unassigned_priority_bugs():
     unassigned_priority_bugs = [
         bug for bug in open_priority_bugs if bug["assignee"] is None
     ]
+
+    if not unassigned_priority_bugs:
+        return
+
     markdown = "*Unassigned Priority Bugs*\n\n"
     markdown += "\n".join(
         [
