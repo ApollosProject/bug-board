@@ -31,8 +31,13 @@ def post_unassigned_priority_bugs():
     ]
     markdown = "*Unassigned Priority Bugs*\n\n"
     markdown += "\n".join(
-        [f"- <{bug['url']}|{bug['title']}>" for bug in unassigned_priority_bugs]
+        [
+            f"- <{bug['url']}|{bug['title']}> - {bug['platform']}"
+            for bug in unassigned_priority_bugs
+        ]
     )
+    markdown += "\n\n"
+    markdown += f"<{os.getenv('APP_URL')}|View Dashboard>"
 
     url = os.getenv("SLACK_WEBHOOK_URL")
     requests.post(url, json={"text": markdown})
