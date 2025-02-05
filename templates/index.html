@@ -12,14 +12,38 @@
   </head>
   <body>
     <main class="container">
-      <h1>Apollos Bug Board</h1>
-      <p>Dashboard for tracking customer support in Apollos</p>
-      <h2>Open Priority Issues</h2>
+      <hgroup>
+        <h1>Apollos Bug Board</h1>
+        <p>Dashboard for tracking customer support in Apollos</p>
+      </hgroup>
+      <h2>Priority Issues</h2>
+      <div class="grid">
+        <div>
+          <article>
+            <header>Count (1mo)</header>
+            <h1>{{ completed_issue_count }}</h1>
+          </article>
+        </div>
+        <div>
+          <article>
+            <header>Average Resolution Time</header>
+            <h1>{{ lead_time_data["avg"] }}d</h1>
+          </article>
+        </div>
+        <div>
+          <article>
+            <header>p95 Resolution Time</header>
+            <h1>{{ lead_time_data["p95"] }}d</h1>
+          </article>
+        </div>
+      </div>
+      <h2>Open</h2>
       {% for issue in priority_issues %}
       <div class="card">
         <a href="{{ issue.url }}">{{ issue.title }}</a>
         {% if issue.assignee %} <small>({{ issue.assignee.name }})</small> {%
         endif %}
+        <hr />
       </div>
       {% endfor %}
     </main>
