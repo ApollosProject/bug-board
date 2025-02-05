@@ -60,9 +60,6 @@ def get_open_issues(priority, label):
             datetime.now()
             - datetime.strptime(issue["createdAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
         ).days
-    import pprint
-
-    pprint.pprint(issues)
     return issues
 
 
