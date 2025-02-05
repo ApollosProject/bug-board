@@ -52,9 +52,10 @@ def get_open_issues(priority, label):
     issues = data["issues"]["nodes"]
     # add in platform (its the labels minus the label param above)
     for issue in issues:
-        issue["platform"] = [
+        platforms = [
             tag["name"] for tag in issue["labels"]["nodes"] if tag["name"] != label
         ]
+        issue["platform"] = platforms[0] if platforms else None
         issue["daysOpen"] = (
             datetime.now()
             - datetime.strptime(issue["createdAt"], "%Y-%m-%dT%H:%M:%S.%fZ")

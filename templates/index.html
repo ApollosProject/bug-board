@@ -43,7 +43,7 @@
         <article>
           <a href="{{ issue.url }}">{{ issue.title }}</a>
           <small
-            >({% if issue.platform %}{{ issue.platform[0] }}, {% endif %}+{{
+            >({% if issue.platform %}{{ issue.platform }}, {% endif %}+{{
             issue.daysOpen }}d{% if issue.assignee %}, {{ issue.assignee.name
             }}{% endif %})
           </small>
