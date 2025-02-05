@@ -16,11 +16,10 @@
         <h1>Apollos Bug Board</h1>
         <p>Dashboard for tracking customer support in Apollos</p>
       </hgroup>
-      <h2>Priority Issues</h2>
       <div class="grid">
         <div>
           <article>
-            <header>Count (1mo)</header>
+            <header>Priority Bug Count (1mo)</header>
             <h1>{{ completed_issue_count }}</h1>
           </article>
         </div>
@@ -38,7 +37,7 @@
         </div>
       </div>
       <hr />
-      <h2>Open</h2>
+      <h2>Open Priority Bugs</h2>
       {% for issue in priority_issues %}
       <div class="card">
         <article>
