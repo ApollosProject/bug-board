@@ -37,13 +37,14 @@
           </article>
         </div>
       </div>
-      <h2>Open</h2>
+      <h3>Open</h3>
       {% for issue in priority_issues %}
       <div class="card">
-        <a href="{{ issue.url }}">{{ issue.title }}</a>
-        {% if issue.assignee %} <small>({{ issue.assignee.name }})</small> {%
-        endif %}
-        <hr />
+        <article>
+          <a href="{{ issue.url }}">{{ issue.title }}</a>
+          {% if issue.assignee %} <small>({{ issue.assignee.name }})</small> {%
+          endif %}
+        </article>
       </div>
       {% endfor %}
     </main>
