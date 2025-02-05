@@ -13,16 +13,17 @@ transport = AIOHTTPTransport(url="https://api.linear.app/graphql", headers=heade
 client = Client(transport=transport, fetch_schema_from_transport=True)
 
 
-def get_open_priority_issues():
+def get_open_issues(priority, label):
 
+    params = {"priority": priority, "label": label}
     query = gql(
         """
-        query PriorityIssues {
+        query PriorityIssues ($priority: Float, $label: String) {
           issues(
             filter: {
-              labels: { name: { eq: "Bug" } }
+              labels: { name: { eq: $label } }
               project: { name: { eq: "Customer Success" } }
-              priority: { lte: 2 }
+              priority: { lte: $priority }
               state: { name: { nin: ["Done", "Canceled"] } }
             }
             orderBy: createdAt
@@ -46,19 +47,20 @@ def get_open_priority_issues():
     )
 
     # Execute the query on the transport
-    return client.execute(query)
+    return client.execute(query, variable_values=params)
 
 
-def get_completed_priority_issues():
+def get_completed_issues(priority, label):
 
+    params = {"priority": priority, "label": label}
     query = gql(
         """
-        query CompletedIssues {
+        query CompletedIssues ($priority: Float, $label: String) {
           issues(
             filter: {
-              labels: { name: { eq: "Bug" } }
+              labels: { name: { eq: $label } }
               project: { name: { eq: "Customer Success" } }
-              priority: { lte: 2 }
+              priority: { lte: $priority }
               state: { name: { in: ["Done", "Canceled"] } }
               completedAt:{lt:"P1M"}
             }
@@ -85,7 +87,18 @@ def get_completed_priority_issues():
     )
 
     # Execute the query on the transport
-    return client.execute(query)
+    return client.execute(query, variable_values=params)
+
+
+def by_assignee(issues):
+    assignee_issues = {}
+    for issue in issues["issues"]["nodes"]:
+        assignee = issue["assignee"]["name"]
+        if assignee not in assignee_issues:
+            assignee_issues[assignee] = []
+        assignee_issues[assignee].append(issue)
+    # sort by the number of issues
+    return dict(sorted(assignee_issues.items(), key=lambda x: len(x[1]), reverse=True))
 
 
 def get_lead_time_data(issues):

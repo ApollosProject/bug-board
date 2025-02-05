@@ -37,7 +37,8 @@
           </article>
         </div>
       </div>
-      <h3>Open</h3>
+      <hr />
+      <h2>Open</h2>
       {% for issue in priority_issues %}
       <div class="card">
         <article>
@@ -47,6 +48,43 @@
         </article>
       </div>
       {% endfor %}
+      <hr />
+      <h2>Leaderboard (1mo)</h2>
+      <h4>Priority Bugs</h4>
+      <table>
+        <tbody>
+          {% for assignee in completed_priority_bugs_by_assignee %}
+          <tr>
+            <td>{{ assignee }}</td>
+            <td>
+              {{ completed_priority_bugs_by_assignee[assignee] | length }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <h4>All Bugs</h4>
+      <table>
+        <tbody>
+          {% for assignee in completed_bugs_by_assignee %}
+          <tr>
+            <td>{{ assignee }}</td>
+            <td>{{ completed_bugs_by_assignee[assignee] | length }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <h4>New Features</h4>
+      <table>
+        <tbody>
+          {% for assignee in completed_features_by_assignee %}
+          <tr>
+            <td>{{ assignee }}</td>
+            <td>{{ completed_features_by_assignee[assignee] | length }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </main>
   </body>
 </html>
