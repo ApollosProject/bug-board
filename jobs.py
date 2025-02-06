@@ -36,7 +36,7 @@ def post_unassigned_priority_bugs():
     markdown = "*Unassigned Priority Bugs*\n\n"
     markdown += "\n".join(
         [
-            f"- <{bug['url']}|{bug['title']}> - {bug['platform']}"
+            f"- <{bug['url']}|{bug['title']}>{' - ' + bug['platform'] if bug['platform'] else ''}"
             for bug in unassigned_priority_bugs
         ]
     )
