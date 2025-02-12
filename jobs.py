@@ -6,7 +6,7 @@ import requests
 import schedule
 from dotenv import load_dotenv
 
-from bb import get_open_issues
+from bb import get_completed_issues, get_lead_time_data, get_open_issues
 
 load_dotenv()
 
@@ -24,30 +24,51 @@ def with_retries(func):
 
 
 @with_retries
-def post_unassigned_priority_bugs():
+def post_priority_bugs():
     open_priority_bugs = get_open_issues(2, "Bug")
+    completed_priority_bugs = get_completed_issues(2, "Bug")
+    completed_lead_time_data = get_lead_time_data(completed_priority_bugs)
     unassigned_priority_bugs = [
         bug for bug in open_priority_bugs if bug["assignee"] is None
     ]
+    open_issues_over_avg_lead_time = [
+        bug
+        for bug in open_priority_bugs
+        if bug["daysOpen"] > completed_lead_time_data["avg"]
+    ]
 
-    if not unassigned_priority_bugs:
-        return
+    markdown = ""
+    if unassigned_priority_bugs:
+        markdown += "*Unassigned Priority Bugs*\n\n"
+        markdown += "\n".join(
+            [
+                f"- <{bug['url']}|{bug['title']}>{' (' + '+' + str(bug['daysOpen']) + 'd'}{', ' + bug['platform'] if bug['platform'] else ''})"
+                for bug in sorted(
+                    unassigned_priority_bugs, key=lambda x: x["daysOpen"], reverse=True
+                )
+            ]
+        )
+        markdown += "\n\n"
+    if open_issues_over_avg_lead_time:
+        markdown += "*At Risk Issues*\n\n"
+        markdown += "\n".join(
+            [
+                f"- <{bug['url']}|{bug['title']}>{' (' + '+' + str(bug['daysOpen']) + 'd'}{', ' + bug['assignee']['name'] if bug['assignee'] else ''})"
+                for bug in sorted(
+                    open_issues_over_avg_lead_time,
+                    key=lambda x: x["daysOpen"],
+                    reverse=True,
+                )
+            ]
+        )
+        markdown += "\n\n"
+    if markdown:
+        markdown += f"attn: @cleaners\n\n<{os.getenv('APP_URL')}|View Dashboard>"
+        url = os.getenv("SLACK_WEBHOOK_URL")
+        requests.post(url, json={"text": markdown})
 
-    markdown = "*Unassigned Priority Bugs*\n\n"
-    markdown += "\n".join(
-        [
-            f"- <{bug['url']}|{bug['title']}>{' - ' + bug['platform'] if bug['platform'] else ''}"
-            for bug in unassigned_priority_bugs
-        ]
-    )
-    markdown += "\n\n"
-    markdown += f"<{os.getenv('APP_URL')}|View Dashboard>"
 
-    url = os.getenv("SLACK_WEBHOOK_URL")
-    requests.post(url, json={"text": markdown})
-
-
-schedule.every(1).days.at("12:00").do(post_unassigned_priority_bugs)
+schedule.every(1).days.at("12:00").do(post_priority_bugs)
 
 while True:
     schedule.run_pending()
