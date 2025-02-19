@@ -108,6 +108,8 @@ def get_completed_issues(priority, label):
 def by_assignee(issues):
     assignee_issues = {}
     for issue in issues:
+        if not issue["assignee"]:
+            continue
         assignee = issue["assignee"]["name"]
         if assignee not in assignee_issues:
             assignee_issues[assignee] = []
