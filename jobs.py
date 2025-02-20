@@ -6,7 +6,7 @@ import requests
 import schedule
 from dotenv import load_dotenv
 
-from bb import get_completed_issues, get_lead_time_data, get_open_issues
+from linear import get_completed_issues, get_lead_time_data, get_open_issues
 
 load_dotenv()
 

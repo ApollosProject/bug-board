@@ -93,6 +93,11 @@ def get_completed_issues(priority, label):
               }
               completedAt
               createdAt
+              attachments {
+                nodes {
+                  metadata
+                }
+              }
             }
           }
         }
@@ -116,6 +121,23 @@ def by_assignee(issues):
         assignee_issues[assignee].append(issue)
     # sort by the number of issues
     return dict(sorted(assignee_issues.items(), key=lambda x: len(x[1]), reverse=True))
+
+
+def by_reviewer(issues):
+    issues_by_approver = {}
+    for issue in issues:
+        for attachment in issue["attachments"]["nodes"]:
+            metadata = attachment["metadata"]
+            if metadata.get("reviews"):
+                for review in metadata["reviews"]:
+                    if review["state"] == "approved":
+                        author = review["reviewerLogin"]
+                        if author not in issues_by_approver:
+                            issues_by_approver[author] = []
+                        issues_by_approver[author].append(issue)
+    return dict(
+        sorted(issues_by_approver.items(), key=lambda x: len(x[1]), reverse=True)
+    )
 
 
 def get_lead_time_data(issues):

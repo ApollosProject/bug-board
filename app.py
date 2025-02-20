@@ -1,6 +1,12 @@
 from flask import Flask, render_template
 
-from bb import by_assignee, get_completed_issues, get_lead_time_data, get_open_issues
+from linear import (
+    by_assignee,
+    by_reviewer,
+    get_completed_issues,
+    get_lead_time_data,
+    get_open_issues,
+)
 
 app = Flask(__name__)
 
@@ -19,6 +25,7 @@ def index():
         completed_priority_bugs_by_assignee=by_assignee(completed_priority_bugs),
         completed_bugs_by_assignee=by_assignee(completed_bugs),
         completed_features_by_assignee=by_assignee(completed_new_features),
+        issues_by_reviewer=by_reviewer(completed_bugs + completed_new_features),
         lead_time_data=lead_time_data,
     )
 

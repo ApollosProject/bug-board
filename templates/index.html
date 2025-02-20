@@ -87,6 +87,16 @@
           {% endfor %}
         </tbody>
       </table>
+      <h4>PR Reviewers</h4>
+      <table>
+        <tbody>
+          {% for reviewer in issues_by_reviewer %}
+          <tr>
+            <td>{{ reviewer }}</td>
+            <td>{{ issues_by_reviewer[reviewer] | length }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
     </main>
   </body>
 </html>
