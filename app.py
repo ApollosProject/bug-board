@@ -28,6 +28,11 @@ def index(days=30):
         days=days,
         priority_issues=open_priority_bugs,
         issue_count=len(created_priority_bugs),
+        priority_percentage=int(
+            len(completed_priority_bugs)
+            / len(completed_bugs + completed_new_features)
+            * 100
+        ),
         completed_priority_bugs_by_assignee=by_assignee(completed_priority_bugs),
         completed_bugs_by_assignee=by_assignee(completed_bugs),
         completed_features_by_assignee=by_assignee(completed_new_features),

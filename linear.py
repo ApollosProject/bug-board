@@ -85,6 +85,7 @@ def get_completed_issues(priority, label, days=30):
               title
               assignee {
                 name
+                email
               }
               url
               labels {
