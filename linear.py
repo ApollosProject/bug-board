@@ -63,19 +63,20 @@ def get_open_issues(priority, label):
     return issues
 
 
-def get_completed_issues(priority, label):
+def get_completed_issues(priority, label, days=30):
 
-    params = {"priority": priority, "label": label}
     query = gql(
         """
-        query CompletedIssues ($priority: Float, $label: String) {
+        query CompletedIssues ($priority: Float, $label: String, $days: DateTimeOrDuration, $cursor: String) {
           issues(
+            first: 50
+            after: $cursor
             filter: {
               labels: { name: { eq: $label } }
               project: { name: { eq: "Customer Success" } }
               priority: { lte: $priority }
               state: { name: { in: ["Done"] } }
-              completedAt:{gt:"-P30D"}
+              completedAt:{gt: $days}
             }
             orderBy: updatedAt
           ) {
@@ -100,49 +101,81 @@ def get_completed_issues(priority, label):
                 }
               }
             }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
           }
         }
         """
     )
 
-    # Execute the query on the transport
-    data = client.execute(query, variable_values=params)
-    issues = data["issues"]["nodes"]
+    cursor = None
+    issues = []
+    while True:
+        params = {
+            "priority": priority,
+            "label": label,
+            "days": f"-P{days}D",
+            "cursor": cursor,
+        }
+        data = client.execute(query, variable_values=params)
+        issues += data["issues"]["nodes"]
+        if not data["issues"]["pageInfo"]["hasNextPage"]:
+            break
+        cursor = data["issues"]["pageInfo"]["endCursor"]
     return issues
 
 
-def get_created_issues(priority, label):
+def get_created_issues(priority, label, days=30):
 
-    params = {"priority": priority, "label": label}
     query = gql(
         """
-            query CreatedIssues ($priority: Float, $label: String) {
+        query CreatedIssues ($priority: Float, $label: String, $days: DateTimeOrDuration, $cursor: String) {
             issues(
+                first: 50
+                after: $cursor
                 filter: {
-                labels: { name: { eq: $label } }
-                project: { name: { eq: "Customer Success" } }
-                priority: { lte: $priority }
-                createdAt:{gt:"-P30D"}
+                    labels: { name: { eq: $label } }
+                    project: { name: { eq: "Customer Success" } }
+                    priority: { lte: $priority }
+                    createdAt:{gt: $days}
                 }
                 orderBy: createdAt
             ) {
                 nodes {
-                id
-                title
-                labels {
-                    nodes {
-                    name
+                    id
+                    title
+                    labels {
+                        nodes {
+                        name
+                        }
                     }
+                    createdAt
                 }
-                createdAt
+                pageInfo {
+                  hasNextPage
+                  endCursor
                 }
             }
-            }
+        }
         """
     )
 
-    data = client.execute(query, variable_values=params)
-    issues = data["issues"]["nodes"]
+    cursor = None
+    issues = []
+    while True:
+        params = {
+            "priority": priority,
+            "label": label,
+            "days": f"-P{days}D",
+            "cursor": cursor,
+        }
+        data = client.execute(query, variable_values=params)
+        issues += data["issues"]["nodes"]
+        if not data["issues"]["pageInfo"]["hasNextPage"]:
+            break
+        cursor = data["issues"]["pageInfo"]["endCursor"]
     for issue in issues:
         platforms = [
             tag["name"] for tag in issue["labels"]["nodes"] if tag["name"] != label

@@ -11,12 +11,20 @@
     <title>Apollos Bug Board</title>
   </head>
   <body>
+    <header class="container">
+      <nav>
+        <ul>
+          <li><a href="{{ url_for('index') }}">Bug Board</a></li>
+        </ul>
+        <ul>
+          <li><a href="{{ url_for('index', days=7) }}">7d</a></li>
+          <li><a href="{{ url_for('index', days=30) }}">30d</a></li>
+          <li><a href="{{ url_for('index', days=90) }}">90d</a></li>
+        </ul>
+      </nav>
+    </header>
     <main class="container">
-      <hgroup>
-        <h1>Apollos Bug Board</h1>
-        <p>Support Engineering Dashboard</p>
-      </hgroup>
-      <h2>Priority Bug Stats (30d)</h2>
+      <h2>Priority Bug Stats ({{ days }}d)</h2>
       <div class="grid">
         <div>
           <article>
@@ -72,7 +80,7 @@
       </div>
       {% endfor %}
       <hr />
-      <h2>Leaderboard (30d)</h2>
+      <h2>Leaderboard</h2>
       <h4>Priority Bugs</h4>
       <table>
         <tbody>
