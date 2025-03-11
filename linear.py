@@ -57,7 +57,7 @@ def get_open_issues(priority, label):
         ]
         issue["platform"] = platforms[0] if platforms else None
         issue["daysOpen"] = (
-            datetime.now()
+            datetime.utcnow()
             - datetime.strptime(issue["createdAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
         ).days
     return issues
@@ -108,9 +108,6 @@ def get_completed_issues(priority, label):
     # Execute the query on the transport
     data = client.execute(query, variable_values=params)
     issues = data["issues"]["nodes"]
-    import pprint
-
-    pprint.pprint([(issue["title"], issue.get("startedAt")) for issue in issues])
     return issues
 
 
