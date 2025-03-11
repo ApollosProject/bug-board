@@ -90,28 +90,28 @@
             <td>
               {{ completed_priority_bugs_by_assignee[assignee] | length }}
             </td>
+            {#percentage of work on priority bugs out of everything#}
+            <td>
+              {{ (completed_priority_bugs_by_assignee[assignee] | length /
+              completed_issues_by_assignee[assignee] | length * 100) | round(1)
+              }}%
+              <small>of work</small>
+            </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
-      <h4>All Bugs</h4>
+      <h4>Everything</h4>
       <table>
         <tbody>
-          {% for assignee in completed_bugs_by_assignee %}
+          {% for assignee in completed_issues_by_assignee %}
           <tr>
             <td>{{ assignee }}</td>
-            <td>{{ completed_bugs_by_assignee[assignee] | length }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      <h4>New Features</h4>
-      <table>
-        <tbody>
-          {% for assignee in completed_features_by_assignee %}
-          <tr>
-            <td>{{ assignee }}</td>
-            <td>{{ completed_features_by_assignee[assignee] | length }}</td>
+            <td>{{ completed_issues_by_assignee[assignee] | length }}</td>
+            <td>
+              {{ (days / (completed_issues_by_assignee[assignee] | length)) | round(1) }}
+              <small>days per item</small>
+            </td>
           </tr>
           {% endfor %}
         </tbody>

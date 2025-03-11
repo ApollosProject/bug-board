@@ -31,6 +31,9 @@ def index(days=30):
         completed_priority_bugs_by_assignee=by_assignee(completed_priority_bugs),
         completed_bugs_by_assignee=by_assignee(completed_bugs),
         completed_features_by_assignee=by_assignee(completed_new_features),
+        completed_issues_by_assignee=by_assignee(
+            completed_bugs + completed_new_features
+        ),
         issues_by_reviewer=by_reviewer(completed_bugs + completed_new_features),
         lead_time_data=time_data["lead"],
         queue_time_data=time_data["queue"],
