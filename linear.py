@@ -75,7 +75,7 @@ def get_completed_issues(priority, label):
               project: { name: { eq: "Customer Success" } }
               priority: { lte: $priority }
               state: { name: { in: ["Done"] } }
-              completedAt:{lt:"P1M"}
+              completedAt:{gt:"-P30D"}
             }
             orderBy: updatedAt
           ) {
@@ -93,6 +93,7 @@ def get_completed_issues(priority, label):
               }
               completedAt
               createdAt
+              startedAt
               attachments {
                 nodes {
                   metadata
@@ -107,6 +108,49 @@ def get_completed_issues(priority, label):
     # Execute the query on the transport
     data = client.execute(query, variable_values=params)
     issues = data["issues"]["nodes"]
+    import pprint
+
+    pprint.pprint([(issue["title"], issue.get("startedAt")) for issue in issues])
+    return issues
+
+
+def get_created_issues(priority, label):
+
+    params = {"priority": priority, "label": label}
+    query = gql(
+        """
+            query CreatedIssues ($priority: Float, $label: String) {
+            issues(
+                filter: {
+                labels: { name: { eq: $label } }
+                project: { name: { eq: "Customer Success" } }
+                priority: { lte: $priority }
+                createdAt:{gt:"-P30D"}
+                }
+                orderBy: createdAt
+            ) {
+                nodes {
+                id
+                title
+                labels {
+                    nodes {
+                    name
+                    }
+                }
+                createdAt
+                }
+            }
+            }
+        """
+    )
+
+    data = client.execute(query, variable_values=params)
+    issues = data["issues"]["nodes"]
+    for issue in issues:
+        platforms = [
+            tag["name"] for tag in issue["labels"]["nodes"] if tag["name"] != label
+        ]
+        issue["platform"] = platforms[0] if platforms else None
     return issues
 
 
@@ -140,15 +184,26 @@ def by_reviewer(issues):
     )
 
 
-def get_lead_time_data(issues):
+def get_time_data(issues):
     lead_times = []
+    queue_times = []
     for issue in issues:
         completed_at = datetime.strptime(issue["completedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
         created_at = datetime.strptime(issue["createdAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
         lead_time = (completed_at - created_at).days
         lead_times.append(lead_time)
+        if issue["startedAt"]:
+            started_at = datetime.strptime(issue["startedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
+            queue_time = (started_at - created_at).days
+            queue_times.append(queue_time)
     data = {
-        "avg": int(sum(lead_times) / len(lead_times)),
-        "p95": int(sorted(lead_times)[int(len(lead_times) * 0.95)]),
+        "lead": {
+            "avg": int(sum(lead_times) / len(lead_times)),
+            "p95": int(sorted(lead_times)[int(len(lead_times) * 0.95)]),
+        },
+        "queue": {
+            "avg": int(sum(queue_times) / len(queue_times)),
+            "p95": int(sorted(queue_times)[int(len(queue_times) * 0.95)]),
+        },
     }
     return data

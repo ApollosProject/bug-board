@@ -6,7 +6,7 @@ import requests
 import schedule
 from dotenv import load_dotenv
 
-from linear import get_completed_issues, get_lead_time_data, get_open_issues
+from linear import get_completed_issues, get_open_issues, get_time_data
 
 load_dotenv()
 
@@ -27,7 +27,7 @@ def with_retries(func):
 def post_priority_bugs():
     open_priority_bugs = get_open_issues(2, "Bug")
     completed_priority_bugs = get_completed_issues(2, "Bug")
-    completed_lead_time_data = get_lead_time_data(completed_priority_bugs)
+    completed_lead_time_data = get_time_data(completed_priority_bugs)["lead"]
     unassigned_priority_bugs = [
         bug for bug in open_priority_bugs if bug["assignee"] is None
     ]

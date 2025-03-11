@@ -16,11 +16,32 @@
         <h1>Apollos Bug Board</h1>
         <p>Support Engineering Dashboard</p>
       </hgroup>
+      <h2>Priority Bug Stats (30d)</h2>
       <div class="grid">
         <div>
           <article>
-            <header>Priority Bug Count (1mo)</header>
+            <header>Created</header>
             <h1>{{ issue_count }}</h1>
+          </article>
+        </div>
+        <div>
+          <article>
+            <header>Fixes/Day</header>
+            <h1>{{ fixes_per_day|round(2) }}</h1>
+          </article>
+        </div>
+        <div>
+          <article>
+            <header>Escalations</header>
+            <h1>TBD</h1>
+          </article>
+        </div>
+      </div>
+      <div class="grid">
+        <div>
+          <article>
+            <header>Average Queue Time</header>
+            <h1>{{ queue_time_data["avg"] }}d</h1>
           </article>
         </div>
         <div>
@@ -51,7 +72,7 @@
       </div>
       {% endfor %}
       <hr />
-      <h2>Leaderboard (1mo)</h2>
+      <h2>Leaderboard (30d)</h2>
       <h4>Priority Bugs</h4>
       <table>
         <tbody>
