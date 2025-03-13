@@ -4,6 +4,7 @@ import time
 
 import requests
 import schedule
+import yaml
 from dotenv import load_dotenv
 
 from linear import get_open_issues
@@ -71,13 +72,37 @@ def post_priority_bugs():
         )
         markdown += "\n\n"
     if markdown:
-        markdown += f"attn: @cleaners\n\n<{os.getenv('APP_URL')}|View Dashboard>"
+        with open("config.yml", "r") as file:
+            config = yaml.safe_load(file)
+        all_issues = unassigned + at_risk + overdue
+        assigned = set(
+            [
+                bug["assignee"]["displayName"]
+                for bug in open_priority_bugs
+                if bug["assignee"]
+            ]
+        )
+        platforms = set([bug["platform"] for bug in all_issues if bug["platform"]])
+        notified = set()
+        for platform in platforms:
+            lead = config["platforms"][platform.lower()]["lead"]
+            notified.add(f"<@{config['people'][lead]['slack_id']}>")
+            for developer in config["platforms"][platform.lower()]["developers"]:
+                person = config["people"][developer]
+                if person["linear_username"] not in assigned:
+                    notified.add(f"<@{person['slack_id']}>")
+        if notified:
+            notified_text = "\n".join(notified)
+            markdown += f"attn:\n\n{notified_text}"
+        markdown += f"\n\n<{os.getenv('APP_URL')}|View Bug Board>"
         url = os.getenv("SLACK_WEBHOOK_URL")
         requests.post(url, json={"text": markdown})
 
 
-schedule.every(1).days.at("12:00").do(post_priority_bugs)
-
-while True:
-    schedule.run_pending()
-    time.sleep(1)
+if os.getenv("DEBUG") == "true":
+    post_priority_bugs()
+else:
+    schedule.every(1).days.at("12:00").do(post_priority_bugs)
+    while True:
+        schedule.run_pending()
+        time.sleep(1)

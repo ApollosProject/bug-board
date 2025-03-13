@@ -32,6 +32,7 @@ def get_open_issues(priority, label):
               id
               title
               assignee {
+                displayName
                 name
               }
               url

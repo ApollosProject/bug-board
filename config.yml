@@ -1,0 +1,83 @@
+---
+people:
+  michael:
+    slack_id: U01865757S9
+    linear_username: michael.neeley
+  rajuran:
+    slack_id: U063W0SFJ5A
+    linear_username: rajuran
+  russel:
+    slack_id: U05FLLGC2PM
+    linear_username: russel.rajitha
+  sherange:
+    slack_id: U05QRGANNDV
+    linear_username: sherange.fonseka
+  jimmy:
+    slack_id: U019TA865C2
+    linear_username: jimmy
+  andy:
+    slack_id: U080E70RQ4U
+    linear_username: andy.smith
+  nathan:
+    slack_id: U022N4RTD40
+    linear_username: nathan
+  vincent:
+    slack_id: U15CT1KEF
+    linear_username: vincent
+  darryl:
+    slack_id: U07SM59JTD2
+    linear_username: darryl
+
+
+platforms:
+  mobile:
+    lead: darryl
+    developers:
+      - michael
+      - sherange
+      - russel
+      - jimmy
+  tv:
+    lead: darryl
+    developers:
+      - michael
+      - darryl
+      - sherange
+      - russel
+      - jimmy
+  roku:
+    lead: andy
+    developers:
+      - michael
+  web:
+    lead: nathan
+    developers:
+      - michael
+      - sherange
+      - russel
+      - jimmy
+  admin:
+    lead: nathan
+    developers:
+      - michael
+      - sherange
+      - russel
+      - jimmy
+  cluster:
+    lead: vincent
+    developers:
+      - michael
+      - russel
+      - jimmy
+  shovel:
+    lead: vincent
+    developers:
+      - michael
+      - rajuran
+      - jimmy
+  transcriptions:
+    lead: vincent
+    developers:
+      - michael
+      - russel
+      - jimmy
