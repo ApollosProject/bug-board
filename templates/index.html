@@ -79,6 +79,18 @@
         </article>
       </div>
       {% endfor %}
+      <h2>Other Work</h2>
+      {% for issue in open_assigned_work %}
+      <div class="card">
+        <article>
+          <a href="{{ issue.url }}">{{ issue.title }}</a>
+          <small
+            >({% if issue.platform %}{{ issue.platform }}, {% endif %}+{{
+            issue.daysOpen }}d, {{ issue.assignee.name }})
+          </small>
+        </article>
+      </div>
+      {% endfor %}
       <hr />
       <h2>Leaderboard</h2>
       <h4>Priority Bugs</h4>

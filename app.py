@@ -21,6 +21,7 @@ def index(days=30):
     completed_priority_bugs = get_completed_issues(2, "Bug", days)
     completed_bugs = get_completed_issues(5, "Bug", days)
     completed_new_features = get_completed_issues(5, "New Feature", days)
+    open_work = get_open_issues(5, "Bug") + get_open_issues(5, "New Feature")
     time_data = get_time_data(completed_priority_bugs)
     issues_per_day = len(completed_bugs + completed_new_features) / days
     return render_template(
@@ -39,9 +40,19 @@ def index(days=30):
         completed_issues_by_assignee=by_assignee(
             completed_bugs + completed_new_features
         ),
+        all_issues=created_priority_bugs + open_priority_bugs,
         issues_by_reviewer=by_reviewer(completed_bugs + completed_new_features),
         lead_time_data=time_data["lead"],
         queue_time_data=time_data["queue"],
+        open_assigned_work=sorted(
+            [
+                issue
+                for issue in open_work
+                if issue["assignee"] is not None and issue["priority"] > 2
+            ],
+            key=lambda x: x["createdAt"],
+            reverse=True,
+        ),
         issues_per_day=issues_per_day,
     )
 

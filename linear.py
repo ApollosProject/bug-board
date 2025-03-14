@@ -42,6 +42,7 @@ def get_open_issues(priority, label):
                 }
               }
               createdAt
+              priority
             }
           }
         }
