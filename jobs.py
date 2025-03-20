@@ -46,10 +46,10 @@ def post_priority_bugs():
         )
         markdown += "\n\n"
     if at_risk:
-        markdown += "*At Risk Issues*\n\n"
+        markdown += "*At Risk*\n\n"
         markdown += "\n".join(
             [
-                f"- <{bug['url']}|{bug['title']}>{' (' + '+' + str(bug['daysOpen']) + 'd'}{', ' + bug['assignee']['name'] if bug['assignee'] else ''})"
+                f"- <{bug['url']}|{bug['title']}>{' (' + '+' + str(bug['daysOpen']) + 'd'}{', ' + bug['platform'] if bug['platform'] else ''}{', ' + bug['assignee']['name'] if bug['assignee'] else ''})"
                 for bug in sorted(
                     at_risk,
                     key=lambda x: x["daysOpen"],
@@ -59,10 +59,10 @@ def post_priority_bugs():
         )
         markdown += "\n\n"
     if overdue:
-        markdown += "*Overdue Issues*\n\n"
+        markdown += "*Overdue*\n\n"
         markdown += "\n".join(
             [
-                f"- <{bug['url']}|{bug['title']}>{' (' + '+' + str(bug['daysOpen']) + 'd'}{', ' + bug['assignee']['name'] if bug['assignee'] else ''})"
+                f"- <{bug['url']}|{bug['title']}>{' (' + '+' + str(bug['daysOpen']) + 'd'}{', ' + bug['platform'] if bug['platform'] else ''}{', ' + bug['assignee']['name'] if bug['assignee'] else ''})"
                 for bug in sorted(
                     overdue,
                     key=lambda x: x["daysOpen"],
