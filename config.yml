@@ -27,6 +27,9 @@ people:
   darryl:
     slack_id: U07SM59JTD2
     linear_username: darryl
+  aleks:
+    slack_id: U083XRVKMHN
+    linear_username: aleksander.trujic
 
 
 platforms:
@@ -37,6 +40,7 @@ platforms:
       - sherange
       - russel
       - jimmy
+      - aleks
   tv:
     lead: darryl
     developers:
