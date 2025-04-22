@@ -36,9 +36,16 @@ people:
   vitor:
     slack_id: U07KCR739QR
     linear_username: vitor.lelis
+  jordan:
+    slack_id: U03RUFCJRNF
+    linear_username: jordan.furdock
 
 
 platforms:
+  crossroads:
+    lead: jordan
+    developers:
+      - vitor
   mobile:
     lead: darryl
     developers:
