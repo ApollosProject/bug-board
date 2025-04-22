@@ -30,6 +30,12 @@ people:
   aleks:
     slack_id: U083XRVKMHN
     linear_username: aleksander.trujic
+  bruno:
+    slack_id: U07MLGM93D0
+    linear_username: bruno.arndt
+  vitor:
+    slack_id: U07KCR739QR
+    linear_username: vitor.lelis
 
 
 platforms:
@@ -67,6 +73,7 @@ platforms:
       - sherange
       - russel
       - jimmy
+      - bruno
   cluster:
     lead: vincent
     developers:
@@ -79,6 +86,7 @@ platforms:
       - michael
       - rajuran
       - jimmy
+      - bruno
   transcriptions:
     lead: vincent
     developers:

@@ -86,7 +86,7 @@ def post_priority_bugs():
         notified = set()
         for platform in platforms:
             lead = config["platforms"][platform.lower()]["lead"]
-            notified.add(f"<@{config['people'][lead]['slack_id']}>")
+            notified.add(f"<@{config['people'][lead]['slack_id']}> ({platform} Lead)")
             for developer in config["platforms"][platform.lower()]["developers"]:
                 person = config["people"][developer]
                 if person["linear_username"] not in assigned:
