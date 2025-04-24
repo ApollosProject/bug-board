@@ -50,13 +50,15 @@ platforms:
       - sherange
       - jimmy
       - aleks
+      - vitor
   tv:
     lead: darryl
     developers:
       - michael
-      - darryl
       - sherange
       - jimmy
+      - aleks
+      - vitor
   roku:
     lead: andy
     developers:
@@ -67,6 +69,7 @@ platforms:
       - michael
       - sherange
       - jimmy
+      - bruno
   admin:
     lead: nathan
     developers:
