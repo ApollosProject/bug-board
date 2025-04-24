@@ -6,9 +6,6 @@ people:
   rajuran:
     slack_id: U063W0SFJ5A
     linear_username: rajuran
-  russel:
-    slack_id: U05FLLGC2PM
-    linear_username: russel.rajitha
   sherange:
     slack_id: U05QRGANNDV
     linear_username: sherange.fonseka
@@ -51,7 +48,6 @@ platforms:
     developers:
       - michael
       - sherange
-      - russel
       - jimmy
       - aleks
   tv:
@@ -60,7 +56,6 @@ platforms:
       - michael
       - darryl
       - sherange
-      - russel
       - jimmy
   roku:
     lead: andy
@@ -71,21 +66,18 @@ platforms:
     developers:
       - michael
       - sherange
-      - russel
       - jimmy
   admin:
     lead: nathan
     developers:
       - michael
       - sherange
-      - russel
       - jimmy
       - bruno
   cluster:
     lead: vincent
     developers:
       - michael
-      - russel
       - jimmy
   shovel:
     lead: vincent
@@ -98,5 +90,4 @@ platforms:
     lead: vincent
     developers:
       - michael
-      - russel
       - jimmy
