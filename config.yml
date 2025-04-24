@@ -82,6 +82,7 @@ platforms:
     developers:
       - michael
       - jimmy
+      - aleks
   shovel:
     lead: vincent
     developers:
