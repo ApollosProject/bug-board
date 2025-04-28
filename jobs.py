@@ -82,7 +82,7 @@ def post_priority_bugs():
                 if bug["assignee"]
             ]
         )
-        platforms = set([bug["platform"] for bug in all_issues if bug["platform"]])
+        platforms = set([bug["platform"] for bug in unassigned if bug["platform"]])
         notified = set()
         for platform in platforms:
             lead = config["platforms"][platform.lower()]["lead"]
