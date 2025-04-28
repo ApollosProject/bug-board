@@ -36,6 +36,9 @@ people:
   jordan:
     slack_id: U03RUFCJRNF
     linear_username: jordan.furdock
+  cameron:
+    slack_id: U034L9QHG4C
+    linear_username: cameron.llewellyn
 
 
 platforms:
@@ -83,6 +86,7 @@ platforms:
       - michael
       - jimmy
       - aleks
+      - cameron
   shovel:
     lead: vincent
     developers:
@@ -90,6 +94,7 @@ platforms:
       - rajuran
       - jimmy
       - bruno
+      - cameron
   transcriptions:
     lead: vincent
     developers:
