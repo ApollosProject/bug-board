@@ -233,6 +233,7 @@ def by_platform(issues):
 def get_time_data(issues):
     lead_times = []
     queue_times = []
+    work_times = []
     for issue in issues:
         completed_at = datetime.strptime(issue["completedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
         created_at = datetime.strptime(issue["createdAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
@@ -242,6 +243,8 @@ def get_time_data(issues):
             started_at = datetime.strptime(issue["startedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
             queue_time = (started_at - created_at).days
             queue_times.append(queue_time)
+            work_time = (completed_at - started_at).days
+            work_times.append(work_time)
     data = {
         "lead": {
             "avg": int(sum(lead_times) / len(lead_times)),
@@ -250,6 +253,10 @@ def get_time_data(issues):
         "queue": {
             "avg": int(sum(queue_times) / len(queue_times)),
             "p95": int(sorted(queue_times)[int(len(queue_times) * 0.95)]),
+        },
+        "work": {
+            "avg": int(sum(work_times) / len(work_times)),
+            "p95": int(sorted(work_times)[int(len(work_times) * 0.95)]),
         },
     }
     return data
