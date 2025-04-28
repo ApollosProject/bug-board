@@ -217,6 +217,19 @@ def by_reviewer(issues):
     )
 
 
+def by_platform(issues):
+    platform_issues = {}
+    for issue in issues:
+        if not issue["platform"]:
+            continue
+        platform = issue["platform"]
+        if platform not in platform_issues:
+            platform_issues[platform] = []
+        platform_issues[platform].append(issue)
+    # sort by the number of issues
+    return dict(sorted(platform_issues.items(), key=lambda x: len(x[1]), reverse=True))
+
+
 def get_time_data(issues):
     lead_times = []
     queue_times = []

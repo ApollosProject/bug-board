@@ -2,6 +2,7 @@ from flask import Flask, render_template
 
 from linear import (
     by_assignee,
+    by_platform,
     by_reviewer,
     get_completed_issues,
     get_created_issues,
@@ -23,7 +24,7 @@ def index(days=30):
     completed_new_features = get_completed_issues(5, "New Feature", days)
     open_work = get_open_issues(5, "Bug") + get_open_issues(5, "New Feature")
     time_data = get_time_data(completed_priority_bugs)
-    issues_per_day = len(completed_bugs + completed_new_features) / days
+    fixes_per_day = len(completed_bugs + completed_new_features) / days
     return render_template(
         "index.html",
         days=days,
@@ -42,6 +43,7 @@ def index(days=30):
         ),
         all_issues=created_priority_bugs + open_priority_bugs,
         issues_by_reviewer=by_reviewer(completed_bugs + completed_new_features),
+        issues_by_platform=by_platform(created_priority_bugs),
         lead_time_data=time_data["lead"],
         queue_time_data=time_data["queue"],
         open_assigned_work=sorted(
@@ -53,7 +55,7 @@ def index(days=30):
             key=lambda x: x["createdAt"],
             reverse=True,
         ),
-        issues_per_day=issues_per_day,
+        fixes_per_day=fixes_per_day,
     )
 
 
