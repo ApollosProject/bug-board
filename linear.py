@@ -87,6 +87,7 @@ def get_completed_issues(priority, label, days=30):
               title
               assignee {
                 name
+                displayName
                 email
               }
               url
@@ -95,6 +96,7 @@ def get_completed_issues(priority, label, days=30):
                   name
                 }
               }
+              priority
               completedAt
               createdAt
               startedAt

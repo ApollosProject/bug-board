@@ -7,7 +7,7 @@ import schedule
 import yaml
 from dotenv import load_dotenv
 
-from linear import get_open_issues
+from linear import get_completed_issues, get_open_issues
 
 load_dotenv()
 
@@ -99,10 +99,48 @@ def post_priority_bugs():
         requests.post(url, json={"text": markdown})
 
 
+@with_retries
+def post_leaderboard():
+    with open("config.yml", "r") as file:
+        config = yaml.safe_load(file)
+    items = get_completed_issues(5, "Bug", 7) + get_completed_issues(
+        5, "New Feature", 7
+    )
+    priority_to_score = {1: 4, 2: 4, 3: 2, 4: 1, 5: 1}
+    leaderboard = {}
+    for item in items:
+        assignee = item["assignee"]
+        if not assignee:
+            continue
+        assignee_name = assignee["displayName"]
+        if assignee_name not in leaderboard:
+            leaderboard[assignee_name] = 0
+        score = priority_to_score.get(item["priority"], 0)
+        leaderboard[assignee_name] += score
+    leaderboard = dict(sorted(leaderboard.items(), key=lambda x: x[1], reverse=True))
+    medals = ["🥇", "🥈", "🥉"]
+    markdown = "*Weekly Leaderboard*\n\n"
+    for i, (assignee, score) in enumerate(leaderboard.items()):
+        if i >= 3:
+            break
+        for person in config["people"]:
+            if config["people"][person]["linear_username"] == assignee:
+                assignee = f"<@{config['people'][person]['slack_id']}>"
+        markdown += f"{medals[i]} {assignee}: {score}\n"
+    markdown += "\n\n"
+    markdown += "_scores - 4pts for high, 2pts for medium, 1pt for low_\n\n"
+    markdown += f"<{os.getenv('APP_URL')}/7|View Bug Board>"
+    url = os.getenv("SLACK_WEBHOOK_URL")
+    requests.post(url, json={"text": markdown})
+
+
 if os.getenv("DEBUG") == "true":
     post_priority_bugs()
+    post_leaderboard()
 else:
     schedule.every(1).days.at("12:00").do(post_priority_bugs)
+    schedule.every().friday.at("20:00").do(post_leaderboard)
+
     while True:
         schedule.run_pending()
         time.sleep(1)
