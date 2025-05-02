@@ -41,6 +41,7 @@ def index(days=30):
         completed_issues_by_assignee=by_assignee(
             completed_bugs + completed_new_features
         ),
+        completed_issues=completed_bugs + completed_new_features,
         all_issues=created_priority_bugs + open_priority_bugs,
         issues_by_reviewer=by_reviewer(completed_bugs + completed_new_features),
         issues_by_platform=by_platform(created_priority_bugs),

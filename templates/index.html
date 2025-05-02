@@ -35,7 +35,9 @@
         <div>
           <article>
             <header>Average Speed</header>
-            <h1>{{ fixes_per_day|round(2) }} <sup><small>fixes/day</small></sup></h1>
+            <h1>
+              {{ fixes_per_day|round(2) }} <sup><small>fixes/day</small></sup>
+            </h1>
           </article>
         </div>
         <div>
@@ -71,30 +73,53 @@
         </div>
       </article>
       <hr />
-      <h2>Open Priority Bugs</h2>
-      {% for issue in priority_issues %}
-      <div class="card">
-        <article>
-          <a href="{{ issue.url }}">{{ issue.title }}</a>
-          <small
-            >({% if issue.platform %}{{ issue.platform }}, {% endif %}+{{
-            issue.daysOpen }}d{% if issue.assignee %}, {{ issue.assignee.name
-            }}{% endif %})
-          </small>
-        </article>
-      </div>
-      {% endfor %}
-      <h2>Other Work</h2>
-      {% for issue in open_assigned_work %}
-      <div class="card">
-        <article>
-          <a href="{{ issue.url }}">{{ issue.title }}</a>
-          <small
-            >({% if issue.platform %}{{ issue.platform }}, {% endif %}+{{
-            issue.daysOpen }}d, {{ issue.assignee.name }})
-          </small>
-        </article>
-      </div>
+      <h2>Open Items</h2>
+      <details open>
+        <summary>Priority</summary>
+        {% for issue in priority_issues %}
+        <div class="card">
+          <article>
+            <a href="{{ issue.url }}">{{ issue.title }}</a>
+            <small
+              >({% if issue.platform %}{{ issue.platform }}, {% endif %}+{{
+              issue.daysOpen }}d{% if issue.assignee %}, {{ issue.assignee.name
+              }}{% endif %})
+            </small>
+          </article>
+        </div>
+        {% endfor %}
+      </details>
+      <hr />
+      <details>
+        <summary>Non-priority</summary>
+        {% for issue in open_assigned_work %}
+        <div class="card">
+          <article>
+            <a href="{{ issue.url }}">{{ issue.title }}</a>
+            <small
+              >({% if issue.platform %}{{ issue.platform }}, {% endif %}+{{
+              issue.daysOpen }}d, {{ issue.assignee.name }})
+            </small>
+          </article>
+        </div>
+        {% endfor %}
+      </details>
+      <hr />
+      <h2>Completed</h2>
+      {% for assignee in completed_issues_by_assignee %}
+      <details>
+        <summary>{{ assignee }}</summary>
+        {% for item in completed_issues_by_assignee[assignee] %}
+        <div class="card">
+          <article>
+            <a href="{{ item.url }}">{{ item.title }}</a>
+            <small
+              >{% if item.platform %}({{ item.platform }}){% endif %}</small
+            >
+          </article>
+        </div>
+        {% endfor %}
+      </details>
       {% endfor %}
       <hr />
       <h2>Leaderboard ({{ days }}d)</h2>
@@ -126,7 +151,8 @@
             <td>{{ assignee }}</td>
             <td>{{ completed_issues_by_assignee[assignee] | length }}</td>
             <td>
-              {{ (days / (completed_issues_by_assignee[assignee] | length)) | round(1) }}
+              {{ (days / (completed_issues_by_assignee[assignee] | length)) |
+              round(1) }}
               <small>days per item</small>
             </td>
           </tr>
@@ -143,6 +169,7 @@
           </tr>
           {% endfor %}
         </tbody>
+      </table>
     </main>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
