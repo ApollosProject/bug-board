@@ -52,7 +52,7 @@ platforms:
       - michael
       - sherange
       - jimmy
-      - aleks
+      #- aleks
       - vitor
   tv:
     lead: darryl
@@ -60,7 +60,7 @@ platforms:
       - michael
       - sherange
       - jimmy
-      - aleks
+      #- aleks
       - vitor
   roku:
     lead: andy
@@ -85,13 +85,13 @@ platforms:
     developers:
       - michael
       - jimmy
-      - aleks
+      #- aleks
       - cameron
   shovel:
     lead: vincent
     developers:
       - michael
-      - rajuran
+      #- rajuran
       - jimmy
       - bruno
       - cameron
