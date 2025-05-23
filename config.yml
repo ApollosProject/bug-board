@@ -39,6 +39,9 @@ people:
   cameron:
     slack_id: U034L9QHG4C
     linear_username: cameron.llewellyn
+  austin:
+    slack_id: U082ES6NT52
+    linear_username: austin.witherow
 
 
 platforms:
@@ -80,6 +83,7 @@ platforms:
       - sherange
       - jimmy
       - bruno
+      - austin
   cluster:
     lead: vincent
     developers:
@@ -87,6 +91,7 @@ platforms:
       - jimmy
       #- aleks
       - cameron
+      - vitor
   shovel:
     lead: vincent
     developers:
