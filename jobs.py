@@ -94,9 +94,10 @@ def post_priority_bugs():
         platforms = set([bug["platform"] for bug in unassigned if bug["platform"]])
         notified = set()
         for platform in platforms:
-            lead = config["platforms"][platform.lower()]["lead"]
+            platform_slug = platform.lower().replace(" ", "-")
+            lead = config["platforms"][platform_slug]["lead"]
             notified.add(f"<@{config['people'][lead]['slack_id']}> ({platform} Lead)")
-            for developer in config["platforms"][platform.lower()]["developers"]:
+            for developer in config["platforms"][platform_slug]["developers"]:
                 person = config["people"][developer]
                 if person["linear_username"] not in assigned:
                     notified.add(f"<@{person['slack_id']}>")

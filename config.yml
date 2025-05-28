@@ -45,7 +45,11 @@ people:
 
 
 platforms:
-  crossroads:
+  crossroads-anywhere:
+    lead: jordan
+    developers:
+      - vitor
+  crossroads-api:
     lead: jordan
     developers:
       - vitor
