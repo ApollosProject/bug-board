@@ -24,6 +24,15 @@ def with_retries(func):
     return wrapper
 
 
+def get_slack_markdown_by_linear_username(username):
+    with open("config.yml", "r") as file:
+        config = yaml.safe_load(file)
+    for person in config["people"]:
+        if config["people"][person]["linear_username"] == username:
+            return f"<@{config['people'][person]['slack_id']}>"
+    return None
+
+
 @with_retries
 def post_priority_bugs():
     open_priority_bugs = get_open_issues(2, "Bug")
@@ -49,7 +58,7 @@ def post_priority_bugs():
         markdown += "*At Risk*\n\n"
         markdown += "\n".join(
             [
-                f"- <{bug['url']}|{bug['title']}>{' (' + '+' + str(bug['daysOpen']) + 'd'}{', ' + bug['platform'] if bug['platform'] else ''}{', ' + bug['assignee']['name'] if bug['assignee'] else ''})"
+                f"- <{bug['url']}|{bug['title']}>{' (' + '+' + str(bug['daysOpen']) + 'd'}{', ' + bug['platform'] if bug['platform'] else ''}{', ' + get_slack_markdown_by_linear_username(bug['assignee']['displayName']) if bug['assignee'] else ''})"
                 for bug in sorted(
                     at_risk,
                     key=lambda x: x["daysOpen"],
@@ -62,7 +71,7 @@ def post_priority_bugs():
         markdown += "*Overdue*\n\n"
         markdown += "\n".join(
             [
-                f"- <{bug['url']}|{bug['title']}>{' (' + '+' + str(bug['daysOpen']) + 'd'}{', ' + bug['platform'] if bug['platform'] else ''}{', ' + bug['assignee']['name'] if bug['assignee'] else ''})"
+                f"- <{bug['url']}|{bug['title']}>{' (' + '+' + str(bug['daysOpen']) + 'd'}{', ' + bug['platform'] if bug['platform'] else ''}{', ' + get_slack_markdown_by_linear_username(bug['assignee']['displayName']) if bug['assignee'] else ''})"
                 for bug in sorted(
                     overdue,
                     key=lambda x: x["daysOpen"],
@@ -123,10 +132,8 @@ def post_leaderboard():
     for i, (assignee, score) in enumerate(leaderboard.items()):
         if i >= 3:
             break
-        for person in config["people"]:
-            if config["people"][person]["linear_username"] == assignee:
-                assignee = f"<@{config['people'][person]['slack_id']}>"
-        markdown += f"{medals[i]} {assignee}: {score}\n"
+        slack_markdown = get_slack_markdown_by_linear_username(assignee)
+        markdown += f"{medals[i]} {slack_markdown}: {score}\n"
     markdown += "\n\n"
     markdown += "_scores - 4pts for high, 2pts for medium, 1pt for low_\n\n"
     markdown += f"<{os.getenv('APP_URL')}/7|View Bug Board>"
