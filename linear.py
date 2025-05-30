@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 
+from config import get_platforms
+
 load_dotenv()
 
 
@@ -54,8 +56,11 @@ def get_open_issues(priority, label):
     issues = data["issues"]["nodes"]
     # add in platform (its the labels minus the label param above)
     for issue in issues:
+        valid_labels = get_platforms()
         platforms = [
-            tag["name"] for tag in issue["labels"]["nodes"] if tag["name"] != label
+            tag["name"]
+            for tag in issue["labels"]["nodes"]
+            if tag["name"] != label and tag["name"] in valid_labels
         ]
         issue["platform"] = platforms[0] if platforms else None
         issue["daysOpen"] = (
@@ -208,6 +213,7 @@ def by_assignee(issues):
     )
 
 
+# TODO maybe use this one day for adding PR reviews to the leaderboard
 def by_reviewer(issues):
     issues_by_approver = {}
     for issue in issues:

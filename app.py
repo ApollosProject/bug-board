@@ -3,7 +3,6 @@ from flask import Flask, render_template
 from linear import (
     by_assignee,
     by_platform,
-    by_reviewer,
     get_completed_issues,
     get_created_issues,
     get_open_issues,
@@ -42,7 +41,6 @@ def index(days=30):
         ),
         completed_issues=completed_bugs + completed_new_features,
         all_issues=created_priority_bugs + open_priority_bugs,
-        issues_by_reviewer=by_reviewer(completed_bugs + completed_new_features),
         issues_by_platform=by_platform(created_priority_bugs),
         lead_time_data=time_data["lead"],
         queue_time_data=time_data["queue"],

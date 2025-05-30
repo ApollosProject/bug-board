@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
 from gql import Client, gql
@@ -33,21 +34,43 @@ def get_repo_ids():
     return ids
 
 
-def get_prs(repo_id):
-    params = {"repo_id": repo_id}
+def get_prs(repo_id, pr_states):
+    params = {"repo_id": repo_id, "pr_states": pr_states}
     query = gql(
         """
-        query PRs ($repo_id: ID!) {
+        query PRs ($repo_id: ID!, $pr_states: [PullRequestState!]) {
             node(id: $repo_id) {
                 ... on Repository {
-                    pullRequests(first: 100, states: [MERGED], orderBy: {field: UPDATED_AT, direction: DESC}) {
+                    pullRequests(first: 100, states: $pr_states, orderBy: {field: UPDATED_AT, direction: DESC}) {
                         nodes {
                             title
+                            url
                             closedAt
                             reviews(first: 10, states: [APPROVED]) {
                                 nodes {
                                     author {
                                         login
+                                    }
+                                }
+                            }
+                            timelineItems(first: 50, itemTypes: [REVIEW_REQUESTED_EVENT]) {
+                              nodes {
+                                ... on ReviewRequestedEvent {
+                                  createdAt
+                                  requestedReviewer {
+                                    ... on User {
+                                      login
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                            reviewRequests(first: 10) {
+                                nodes {
+                                    requestedReviewer {
+                                        ... on User {
+                                            login
+                                        }
                                     }
                                 }
                             }
@@ -66,7 +89,7 @@ def prs_by_approver():
     repo_ids = get_repo_ids()
     all_prs = []
     for repo_id in repo_ids:
-        prs = get_prs(repo_id)
+        prs = get_prs(repo_id, pr_states=["MERGED"])
         all_prs.extend(prs)
     prs_by_approver = {}
     for pr in all_prs:
@@ -79,4 +102,27 @@ def prs_by_approver():
     return prs_by_approver
 
 
-pprint.pprint(prs_by_approver())
+def get_prs_waiting_for_review_by_reviewer():
+    """Returns dictonary of PRs waiting on review, grouped by reviewer, if they have been sitting for 24 hours, and there's no other approvals"""
+    repo_ids = get_repo_ids()
+    all_prs = []
+    for repo_id in repo_ids:
+        prs = get_prs(repo_id, pr_states=["OPEN"])
+        all_prs.extend(prs)
+    stuck_prs = {}
+    for pr in all_prs:
+        if pr["reviews"]["nodes"] or not pr["reviewRequests"]["nodes"]:
+            continue
+        for review in pr["timelineItems"]["nodes"]:
+            if review["createdAt"] < (datetime.now() - timedelta(hours=12)).isoformat():
+                reviewer = review["requestedReviewer"]["login"]
+                open_review_requests = [
+                    req["requestedReviewer"]["login"]
+                    for req in pr["reviewRequests"]["nodes"]
+                ]
+                if reviewer not in open_review_requests:
+                    continue
+                if reviewer not in stuck_prs:
+                    stuck_prs[reviewer] = []
+                stuck_prs[reviewer].append(pr)
+    return stuck_prs
