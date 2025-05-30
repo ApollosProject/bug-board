@@ -196,10 +196,16 @@ def by_assignee(issues):
             continue
         assignee = issue["assignee"]["name"]
         if assignee not in assignee_issues:
-            assignee_issues[assignee] = []
-        assignee_issues[assignee].append(issue)
-    # sort by the number of issues
-    return dict(sorted(assignee_issues.items(), key=lambda x: len(x[1]), reverse=True))
+            assignee_issues[assignee] = {"score": 0, "issues": []}
+        assignee_issues[assignee]["issues"].append(issue)
+        # high - 4, medium - 2, everything else - 1
+        priority_to_score = {1: 4, 2: 4, 3: 2, 4: 1, 5: 1}
+        score = priority_to_score.get(issue["priority"], 1)
+        assignee_issues[assignee]["score"] += score
+    # sort by the score
+    return dict(
+        sorted(assignee_issues.items(), key=lambda x: x[1]["score"], reverse=True)
+    )
 
 
 def by_reviewer(issues):

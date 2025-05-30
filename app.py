@@ -35,7 +35,6 @@ def index(days=30):
             / len(completed_bugs + completed_new_features)
             * 100
         ),
-        completed_priority_bugs_by_assignee=by_assignee(completed_priority_bugs),
         completed_bugs_by_assignee=by_assignee(completed_bugs),
         completed_features_by_assignee=by_assignee(completed_new_features),
         completed_issues_by_assignee=by_assignee(
