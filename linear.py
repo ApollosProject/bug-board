@@ -56,11 +56,10 @@ def get_open_issues(priority, label):
     issues = data["issues"]["nodes"]
     # add in platform (its the labels minus the label param above)
     for issue in issues:
-        valid_labels = get_platforms()
         platforms = [
             tag["name"]
             for tag in issue["labels"]["nodes"]
-            if tag["name"] != label and tag["name"] in valid_labels
+            if tag["name"] != label and tag["name"] in get_platforms()
         ]
         issue["platform"] = platforms[0] if platforms else None
         issue["daysOpen"] = (
@@ -188,7 +187,9 @@ def get_created_issues(priority, label, days=30):
         cursor = data["issues"]["pageInfo"]["endCursor"]
     for issue in issues:
         platforms = [
-            tag["name"] for tag in issue["labels"]["nodes"] if tag["name"] != label
+            tag["name"]
+            for tag in issue["labels"]["nodes"]
+            if tag["name"] != label and tag["name"] in get_platforms()
         ]
         issue["platform"] = platforms[0] if platforms else None
     return issues
