@@ -44,6 +44,7 @@ def get_open_issues(priority, label):
                 }
               }
               createdAt
+              updatedAt
               priority
             }
           }
@@ -232,6 +233,30 @@ def by_reviewer(issues):
     )
 
 
+def get_stale_issues_by_assignee(issues, days=30):
+    """Returns dictionary of issues that have not been updated in the last `days` days, grouped by assignee."""
+    stale_issues = {}
+    for issue in issues:
+        if not issue["assignee"]:
+            continue
+        assignee = issue["assignee"]["displayName"]
+        if assignee not in stale_issues:
+            stale_issues[assignee] = []
+        last_updated = datetime.strptime(issue["updatedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
+        if (datetime.utcnow() - last_updated).days > days:
+            days_stale = (datetime.utcnow() - last_updated).days
+            stale_issues[assignee].append(
+                {
+                    "title": issue["title"],
+                    "url": issue["url"],
+                    "daysStale": days_stale,
+                    "priority": issue["priority"],
+                    "platform": issue.get("platform"),
+                }
+            )
+    return stale_issues
+
+
 def by_platform(issues):
     platform_issues = {}
     for issue in issues:
@@ -241,7 +266,6 @@ def by_platform(issues):
         if platform not in platform_issues:
             platform_issues[platform] = []
         platform_issues[platform].append(issue)
-    # sort by the number of issues
     return dict(sorted(platform_issues.items(), key=lambda x: len(x[1]), reverse=True))
 
 

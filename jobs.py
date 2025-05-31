@@ -8,7 +8,7 @@ import yaml
 from dotenv import load_dotenv
 
 from github import get_prs_waiting_for_review_by_reviewer
-from linear import get_completed_issues, get_open_issues
+from linear import get_completed_issues, get_open_issues, get_stale_issues_by_assignee
 
 load_dotenv()
 
@@ -144,28 +144,51 @@ def post_leaderboard():
 
 
 @with_retries
-def post_prs_waiting_for_review():
+def post_stale():
     with open("config.yml", "r") as file:
         config = yaml.safe_load(file)
     people_by_github_username = {
         person["github_username"]: person for person in config["people"].values()
     }
     prs = get_prs_waiting_for_review_by_reviewer()
-    if not prs:
+    stale_issues = get_stale_issues_by_assignee(
+        get_open_issues(5, "Bug") + get_open_issues(5, "New Feature"), 7
+    )
+    if not prs and not stale_issues:
         return
-    markdown = "*PRs Waiting for Review*\n\n"
-    for reviewer, pr_list in prs.items():
-        if not pr_list:
-            continue
-        reviwer_slack_id = people_by_github_username.get(reviewer, {}).get("slack_id")
-        if reviwer_slack_id:
-            reviewer_slack_markdown = f"<@{reviwer_slack_id}>"
-        else:
-            reviewer_slack_markdown = reviewer
-        markdown += f"{reviewer_slack_markdown}:\n"
-        for pr in pr_list:
-            markdown += f"- <{pr['url']}|{pr['title']}>\n"
-        markdown += "\n"
+
+    markdown = ""
+    if prs:
+        markdown += "*PRs Waiting for Review*\n"
+        for reviewer, pr_list in prs.items():
+            if not pr_list:
+                continue
+            reviwer_slack_id = people_by_github_username.get(reviewer, {}).get(
+                "slack_id"
+            )
+            if reviwer_slack_id:
+                reviewer_slack_markdown = f"<@{reviwer_slack_id}>"
+            else:
+                reviewer_slack_markdown = reviewer
+            markdown += f"\n{reviewer_slack_markdown}:\n\n"
+            for pr in pr_list:
+                markdown += f"- <{pr['url']}|{pr['title']}>\n"
+        markdown += "\n\n"
+
+    if stale_issues:
+        markdown += "*Stale Open Issues*\n"
+        for assignee, issues in stale_issues.items():
+            if not issues:
+                continue
+            assignee_slack_markdown = get_slack_markdown_by_linear_username(assignee)
+            markdown += f"\n{assignee_slack_markdown}:\n\n"
+            for issue in issues:
+                markdown += (
+                    f"- <{issue['url']}|{issue['title']}> ({issue['daysStale']}d)\n"
+                )
+        markdown += "\n\n"
+    markdown += f"<{os.getenv('APP_URL')}|View Bug Board>"
+
     url = os.getenv("SLACK_WEBHOOK_URL")
     requests.post(url, json={"text": markdown})
 
@@ -173,11 +196,11 @@ def post_prs_waiting_for_review():
 if os.getenv("DEBUG") == "true":
     post_priority_bugs()
     post_leaderboard()
-    post_prs_waiting_for_review()
+    post_stale()
 else:
     schedule.every(1).days.at("12:00").do(post_priority_bugs)
     schedule.every().friday.at("20:00").do(post_leaderboard)
-    schedule.every().day.at("14:00").do(post_prs_waiting_for_review)
+    schedule.every().day.at("14:00").do(post_stale)
 
     while True:
         schedule.run_pending()
