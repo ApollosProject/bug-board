@@ -200,7 +200,7 @@ if os.getenv("DEBUG") == "true":
 else:
     schedule.every(1).days.at("12:00").do(post_priority_bugs)
     schedule.every().friday.at("20:00").do(post_leaderboard)
-    schedule.every().day.at("14:00").do(post_stale)
+    schedule.every(1).days.at("14:00").do(post_stale)
 
     while True:
         schedule.run_pending()
