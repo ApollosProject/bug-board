@@ -175,7 +175,7 @@ def post_stale():
                 markdown += f"- <{pr['url']}|{pr['title']}>\n"
         markdown += "\n\n"
 
-    if stale_issues:
+    if any(issues for issues in stale_issues.values()):
         markdown += "*Stale Open Issues*\n"
         for assignee, issues in stale_issues.items():
             if not issues:
