@@ -163,6 +163,7 @@ def post_stale():
         for reviewer, pr_list in prs.items():
             if not pr_list:
                 continue
+            unique_prs = {pr["url"]: pr for pr in pr_list}.values()
             reviwer_slack_id = people_by_github_username.get(reviewer, {}).get(
                 "slack_id"
             )
@@ -171,7 +172,7 @@ def post_stale():
             else:
                 reviewer_slack_markdown = reviewer
             markdown += f"\n{reviewer_slack_markdown}:\n\n"
-            for pr in pr_list:
+            for pr in unique_prs:
                 markdown += f"- <{pr['url']}|{pr['title']}>\n"
         markdown += "\n\n"
 
