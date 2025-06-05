@@ -60,6 +60,10 @@ people:
     slack_id: U02GJG77A
     linear_username: nick
     github_username: nickw
+  brandon:
+    slack_id: U3V0GB3T8
+    linear_username: brandon
+    github_username: bkraeling
 
 
 platforms:
