@@ -46,6 +46,7 @@ def get_prs(repo_id, pr_states):
                             title
                             url
                             closedAt
+                            isDraft
                             reviews(first: 10, states: [APPROVED]) {
                                 nodes {
                                     author {
@@ -82,7 +83,9 @@ def get_prs(repo_id, pr_states):
     """
     )
     data = client.execute(query, variable_values=params)
-    return data["node"]["pullRequests"]["nodes"]
+    prs = data["node"]["pullRequests"]["nodes"]
+    non_draft_prs = [pr for pr in prs if not pr.get("isDraft", False)]
+    return non_draft_prs
 
 
 def prs_by_approver():
