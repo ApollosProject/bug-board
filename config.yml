@@ -64,6 +64,10 @@ people:
     slack_id: U3V0GB3T8
     linear_username: brandon
     github_username: bkraeling
+  conrad:
+    slack_id: U055MFLMY
+    linear_username: conrad
+    github_username: conrad-vanl
 
 
 platforms:
