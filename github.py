@@ -117,7 +117,11 @@ def get_prs_waiting_for_review_by_reviewer():
         if pr["reviews"]["nodes"] or not pr["reviewRequests"]["nodes"]:
             continue
         for review in pr["timelineItems"]["nodes"]:
-            if review["createdAt"] < (datetime.now() - timedelta(hours=12)).isoformat():
+            if (
+                review["requestedReviewer"]
+                and review["createdAt"]
+                < (datetime.now() - timedelta(hours=12)).isoformat()
+            ):
                 reviewer = review["requestedReviewer"]["login"]
                 open_review_requests = [
                     req["requestedReviewer"]["login"]

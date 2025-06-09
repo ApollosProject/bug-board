@@ -34,8 +34,10 @@ def get_slack_markdown_by_linear_username(username):
     return None
 
 
-@with_retries
+# @with_retries
 def post_priority_bugs():
+    with open("config.yml", "r") as file:
+        config = yaml.safe_load(file)
     open_priority_bugs = get_open_issues(2, "Bug")
     unassigned = [bug for bug in open_priority_bugs if bug["assignee"] is None]
     at_risk = [
@@ -55,8 +57,28 @@ def post_priority_bugs():
             ]
         )
         markdown += "\n\n"
+        assigned = set(
+            [
+                bug["assignee"]["displayName"]
+                for bug in open_priority_bugs
+                if bug["assignee"]
+            ]
+        )
+        platforms = set([bug["platform"] for bug in unassigned if bug["platform"]])
+        notified = set()
+        for platform in platforms:
+            platform_slug = platform.lower().replace(" ", "-")
+            lead = config["platforms"][platform_slug]["lead"]
+            notified.add(f"<@{config['people'][lead]['slack_id']}> ({platform} Lead)")
+            for developer in config["platforms"][platform_slug]["developers"]:
+                person = config["people"][developer]
+                if person["linear_username"] not in assigned:
+                    notified.add(f"<@{person['slack_id']}>")
+        if notified:
+            notified_text = "\n".join(notified)
+            markdown += f"attn:\n\n{notified_text}"
     if at_risk:
-        markdown += "*At Risk*\n\n"
+        markdown += "\n\n*At Risk*\n\n"
         markdown += "\n".join(
             [
                 f"- <{bug['url']}|{bug['title']}>{' (' + '+' + str(bug['daysOpen']) + 'd'}{', ' + bug['platform'] if bug['platform'] else ''}{', ' + get_slack_markdown_by_linear_username(bug['assignee']['displayName']) if bug['assignee'] else ''})"
@@ -82,35 +104,12 @@ def post_priority_bugs():
         )
         markdown += "\n\n"
     if markdown:
-        with open("config.yml", "r") as file:
-            config = yaml.safe_load(file)
-        all_issues = unassigned + at_risk + overdue
-        assigned = set(
-            [
-                bug["assignee"]["displayName"]
-                for bug in open_priority_bugs
-                if bug["assignee"]
-            ]
-        )
-        platforms = set([bug["platform"] for bug in unassigned if bug["platform"]])
-        notified = set()
-        for platform in platforms:
-            platform_slug = platform.lower().replace(" ", "-")
-            lead = config["platforms"][platform_slug]["lead"]
-            notified.add(f"<@{config['people'][lead]['slack_id']}> ({platform} Lead)")
-            for developer in config["platforms"][platform_slug]["developers"]:
-                person = config["people"][developer]
-                if person["linear_username"] not in assigned:
-                    notified.add(f"<@{person['slack_id']}>")
-        if notified:
-            notified_text = "\n".join(notified)
-            markdown += f"attn:\n\n{notified_text}"
         markdown += f"\n\n<{os.getenv('APP_URL')}|View Bug Board>"
         url = os.getenv("SLACK_WEBHOOK_URL")
         requests.post(url, json={"text": markdown})
 
 
-@with_retries
+# @with_retries
 def post_leaderboard():
     with open("config.yml", "r") as file:
         config = yaml.safe_load(file)
@@ -143,7 +142,7 @@ def post_leaderboard():
     requests.post(url, json={"text": markdown})
 
 
-@with_retries
+# @with_retries
 def post_stale():
     with open("config.yml", "r") as file:
         config = yaml.safe_load(file)
