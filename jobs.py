@@ -31,7 +31,7 @@ def get_slack_markdown_by_linear_username(username):
     for person in config["people"]:
         if config["people"][person]["linear_username"] == username:
             return f"<@{config['people'][person]['slack_id']}>"
-    return None
+    return "No Assignee"
 
 
 # @with_retries
@@ -91,7 +91,7 @@ def post_priority_bugs():
         )
         markdown += "\n\n"
     if overdue:
-        markdown += "*Overdue*\n\n"
+        markdown += "\n\n*Overdue*\n\n"
         markdown += "\n".join(
             [
                 f"- <{bug['url']}|{bug['title']}>{' (' + '+' + str(bug['daysOpen']) + 'd'}{', ' + bug['platform'] if bug['platform'] else ''}{', ' + get_slack_markdown_by_linear_username(bug['assignee']['displayName']) if bug['assignee'] else ''})"

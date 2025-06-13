@@ -35,7 +35,7 @@ people:
   aleks:
     slack_id: U083XRVKMHN
     linear_username: aleksander.trujic
-    github_username:
+    github_username: trujic1000
   bruno:
     slack_id: U07MLGM93D0
     linear_username: bruno.arndt
@@ -68,6 +68,14 @@ people:
     slack_id: U055MFLMY
     linear_username: conrad
     github_username: conrad-vanl
+  drew:
+    slack_id: U4KG1FQV8
+    linear_username: drew
+    github_username: drewbarontini
+  lucas:
+    slack_id: U07P9FP9XB2
+    linear_username: lucas
+    github_username: diff-eq
 
 
 platforms:
