@@ -83,7 +83,7 @@ platforms:
     lead: darryl
     developers:
       - michael
-      - sherange
+      #- sherange
       - jimmy
       #- aleks
       - vitor
@@ -91,7 +91,7 @@ platforms:
     lead: darryl
     developers:
       - michael
-      - sherange
+      #- sherange
       - jimmy
       #- aleks
       - vitor
@@ -103,14 +103,14 @@ platforms:
     lead: nathan
     developers:
       - michael
-      - sherange
+      #- sherange
       - jimmy
       - bruno
   admin:
     lead: nathan
     developers:
       - michael
-      - sherange
+      #- sherange
       - jimmy
       - bruno
       - austin
@@ -126,7 +126,7 @@ platforms:
     lead: vincent
     developers:
       - michael
-      #- rajuran
+      - rajuran
       - jimmy
       - bruno
       - cameron
