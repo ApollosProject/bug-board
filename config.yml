@@ -87,6 +87,7 @@ platforms:
     lead: jordan
     developers:
       - vitor
+      - sherange
   crossroads-api:
     lead: jordan
     developers:
@@ -95,17 +96,17 @@ platforms:
     lead: darryl
     developers:
       - michael
-      #- sherange
+      - sherange
       - jimmy
-      #- aleks
+      - aleks
       - vitor
   tv:
     lead: darryl
     developers:
       - michael
-      #- sherange
+      - sherange
       - jimmy
-      #- aleks
+      - aleks
       - vitor
   roku:
     lead: andy
@@ -115,14 +116,14 @@ platforms:
     lead: nathan
     developers:
       - michael
-      #- sherange
+      - sherange
       - jimmy
       - bruno
   admin:
     lead: nathan
     developers:
       - michael
-      #- sherange
+      - sherange
       - jimmy
       - bruno
       - austin
@@ -131,7 +132,7 @@ platforms:
     developers:
       - michael
       - jimmy
-      #- aleks
+      - aleks
       - cameron
       - vitor
   shovel:
@@ -147,3 +148,4 @@ platforms:
     developers:
       - michael
       - jimmy
+      - bruno
