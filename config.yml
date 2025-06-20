@@ -80,16 +80,27 @@ people:
     slack_id: U06N28DLL0Z
     linear_username: tharindu.perera
     github_username:
+  dylan:
+    slack_id: U03LD9MJLNP
+    linear_username: dylan
+    github_username:
 
 
 platforms:
+  marketing-site:
+    lead: michael
+    developers:
+      - vitor
+      - sherange
+      - bruno
+      - jimmy
   crossroads-anywhere:
-    lead: jordan
+    lead: dylan
     developers:
       - vitor
       - sherange
   crossroads-api:
-    lead: jordan
+    lead: dylan
     developers:
       - vitor
   mobile:
