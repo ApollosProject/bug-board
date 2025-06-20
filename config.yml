@@ -88,8 +88,9 @@ people:
 
 platforms:
   marketing-site:
-    lead: michael
+    lead: nathan
     developers:
+      - michael
       - vitor
       - sherange
       - bruno
