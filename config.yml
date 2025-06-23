@@ -4,86 +4,107 @@ people:
     slack_id: U01865757S9
     linear_username: michael.neeley
     github_username: redreceipt
+    on_call_support: false
   rajuran:
     slack_id: U063W0SFJ5A
     linear_username: rajuran
     github_username:
+    on_call_support: true
   sherange:
     slack_id: U05QRGANNDV
     linear_username: sherange.fonseka
     github_username:
+    on_call_support: true
   jimmy:
     slack_id: U019TA865C2
     linear_username: jimmy
     github_username:
+    on_call_support: true
   andy:
     slack_id: U080E70RQ4U
     linear_username: andy.smith
     github_username:
+    on_call_support: true
   nathan:
     slack_id: U022N4RTD40
     linear_username: nathan
     github_username: nlewis84
+    on_call_support: false
   vincent:
     slack_id: U15CT1KEF
     linear_username: vincent
     github_username: vinnyjth
+    on_call_support: false
   darryl:
     slack_id: U07SM59JTD2
     linear_username: darryl
     github_username: darrylyip
+    on_call_support: false
   aleks:
     slack_id: U083XRVKMHN
     linear_username: aleksander.trujic
     github_username: trujic1000
+    on_call_support: false
   bruno:
     slack_id: U07MLGM93D0
     linear_username: bruno.arndt
     github_username:
+    on_call_support: false
   vitor:
     slack_id: U07KCR739QR
     linear_username: vitor.lelis
     github_username: vitlelis
+    on_call_support: true
   jordan:
     slack_id: U03RUFCJRNF
     linear_username: jordan.furdock
     github_username: jfurdock
+    on_call_support: false
   cameron:
     slack_id: U034L9QHG4C
     linear_username: cameron.llewellyn
     github_username:
+    on_call_support: false
   austin:
     slack_id: U082ES6NT52
     linear_username: austin.witherow
     github_username:
+    on_call_support: false
   nick:
     slack_id: U02GJG77A
     linear_username: nick
     github_username: nickw
+    on_call_support: false
   brandon:
     slack_id: U3V0GB3T8
     linear_username: brandon
     github_username: bkraeling
+    on_call_support: false
   conrad:
     slack_id: U055MFLMY
     linear_username: conrad
     github_username: conrad-vanl
+    on_call_support: false
   drew:
     slack_id: U4KG1FQV8
     linear_username: drew
     github_username: drewbarontini
+    on_call_support: false
   lucas:
     slack_id: U07P9FP9XB2
     linear_username: lucas
     github_username: diff-eq
+    on_call_support: false
   tharindu:
     slack_id: U06N28DLL0Z
     linear_username: tharindu.perera
     github_username:
+    on_call_support: false
   dylan:
     slack_id: U03LD9MJLNP
     linear_username: dylan
     github_username:
+    on_call_support: false
 
 
 platforms:
