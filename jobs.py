@@ -69,10 +69,16 @@ def post_priority_bugs():
         for platform in platforms:
             platform_slug = platform.lower().replace(" ", "-")
             lead = config["platforms"][platform_slug]["lead"]
-            notified.add(f"<@{config['people'][lead]['slack_id']}> ({platform} Lead)")
+            lead_info = config["people"][lead]
+            notified.add(
+                f"<@{lead_info['slack_id']}> ({platform} Lead)"
+            )
             for developer in config["platforms"][platform_slug]["developers"]:
                 person = config["people"][developer]
-                if person["linear_username"] not in assigned:
+                if (
+                    person["linear_username"] not in assigned
+                    and not person.get("on_call_support", False)
+                ):
                     notified.add(f"<@{person['slack_id']}>")
         if notified:
             notified_text = "\n".join(notified)
