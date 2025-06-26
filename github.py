@@ -106,7 +106,11 @@ def prs_by_approver():
 
 
 def get_prs_waiting_for_review_by_reviewer():
-    """Returns dictonary of PRs waiting on review, grouped by reviewer, if they have been sitting for 24 hours, and there's no other approvals"""
+    """Return PRs waiting on review, grouped by reviewer.
+
+    Includes pull requests with an open review request that was made more
+    than 12 hours ago, even if the PR has previously been reviewed.
+    """
     repo_ids = get_repo_ids()
     all_prs = []
     for repo_id in repo_ids:
@@ -114,7 +118,7 @@ def get_prs_waiting_for_review_by_reviewer():
         all_prs.extend(prs)
     stuck_prs = {}
     for pr in all_prs:
-        if pr["reviews"]["nodes"] or not pr["reviewRequests"]["nodes"]:
+        if not pr["reviewRequests"]["nodes"]:
             continue
         for review in pr["timelineItems"]["nodes"]:
             if (
