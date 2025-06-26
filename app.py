@@ -21,9 +21,16 @@ def index(days=30):
     completed_priority_bugs = get_completed_issues(2, "Bug", days)
     completed_bugs = get_completed_issues(5, "Bug", days)
     completed_new_features = get_completed_issues(5, "New Feature", days)
-    open_work = get_open_issues(5, "Bug") + get_open_issues(5, "New Feature")
+    completed_technical_changes = get_completed_issues(5, "Technical Change", days)
+    open_work = (
+        get_open_issues(5, "Bug")
+        + get_open_issues(5, "New Feature")
+        + get_open_issues(5, "Technical Change")
+    )
     time_data = get_time_data(completed_priority_bugs)
-    fixes_per_day = len(completed_bugs + completed_new_features) / days
+    fixes_per_day = len(
+        completed_bugs + completed_new_features + completed_technical_changes
+    ) / days
     return render_template(
         "index.html",
         days=days,
@@ -31,15 +38,24 @@ def index(days=30):
         issue_count=len(created_priority_bugs),
         priority_percentage=int(
             len(completed_priority_bugs)
-            / len(completed_bugs + completed_new_features)
+            / len(
+                completed_bugs
+                + completed_new_features
+                + completed_technical_changes
+            )
             * 100
         ),
         completed_bugs_by_assignee=by_assignee(completed_bugs),
-        completed_features_by_assignee=by_assignee(completed_new_features),
-        completed_issues_by_assignee=by_assignee(
-            completed_bugs + completed_new_features
+        completed_features_by_assignee=by_assignee(
+            completed_new_features + completed_technical_changes
         ),
-        completed_issues=completed_bugs + completed_new_features,
+        completed_issues_by_assignee=by_assignee(
+            completed_bugs
+            + completed_new_features
+            + completed_technical_changes
+        ),
+        completed_issues=
+            completed_bugs + completed_new_features + completed_technical_changes,
         all_issues=created_priority_bugs + open_priority_bugs,
         issues_by_platform=by_platform(created_priority_bugs),
         lead_time_data=time_data["lead"],

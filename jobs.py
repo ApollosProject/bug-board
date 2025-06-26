@@ -116,8 +116,10 @@ def post_priority_bugs():
 def post_leaderboard():
     with open("config.yml", "r") as file:
         config = yaml.safe_load(file)
-    items = get_completed_issues(5, "Bug", 7) + get_completed_issues(
-        5, "New Feature", 7
+    items = (
+        get_completed_issues(5, "Bug", 7)
+        + get_completed_issues(5, "New Feature", 7)
+        + get_completed_issues(5, "Technical Change", 7)
     )
     priority_to_score = {1: 4, 2: 4, 3: 2, 4: 1, 5: 1}
     leaderboard = {}
@@ -154,7 +156,10 @@ def post_stale():
     }
     prs = get_prs_waiting_for_review_by_reviewer()
     stale_issues = get_stale_issues_by_assignee(
-        get_open_issues(5, "Bug") + get_open_issues(5, "New Feature"), 7
+        get_open_issues(5, "Bug")
+        + get_open_issues(5, "New Feature")
+        + get_open_issues(5, "Technical Change"),
+        7,
     )
     if not prs and not stale_issues:
         return
