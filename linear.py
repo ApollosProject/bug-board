@@ -336,3 +336,112 @@ def get_time_data(issues):
         },
     }
     return data
+
+
+def get_open_issues_for_person(person_id):
+    """Return open issues assigned to a given user across all projects."""
+
+    query = gql(
+        """
+        query OpenIssues($assignee: ID!, $cursor: String) {
+          issues(
+            first: 50
+            after: $cursor
+            filter: {
+              assignee: { id: { eq: $assignee } }
+              state: { name: { nin: ["Done", "Canceled", "Duplicate"] } }
+            }
+            orderBy: createdAt
+          ) {
+            nodes {
+              id
+              title
+              url
+              createdAt
+              project { name }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+        """
+    )
+
+    cursor = None
+    issues = []
+    while True:
+        params = {"assignee": person_id, "cursor": cursor}
+        data = client.execute(query, variable_values=params)
+        issues += data["issues"]["nodes"]
+        if not data["issues"]["pageInfo"]["hasNextPage"]:
+            break
+        cursor = data["issues"]["pageInfo"]["endCursor"]
+
+    for issue in issues:
+        issue["daysOpen"] = (
+            datetime.utcnow()
+            - datetime.strptime(issue["createdAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
+        ).days
+    return issues
+
+
+def get_completed_issues_for_person(person_id, days=30):
+    """Return completed issues for a user over the last `days` days."""
+
+    query = gql(
+        """
+        query CompletedIssues($assignee: ID!, $days: DateTimeOrDuration, $cursor: String) {
+          issues(
+            first: 50
+            after: $cursor
+            filter: {
+              assignee: { id: { eq: $assignee } }
+              state: { name: { in: ["Done"] } }
+              completedAt: { gt: $days }
+            }
+            orderBy: completedAt
+          ) {
+            nodes {
+              id
+              title
+              url
+              project { name }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+        """
+    )
+
+    cursor = None
+    issues = []
+    while True:
+        params = {
+            "assignee": person_id,
+            "days": f"-P{days}D",
+            "cursor": cursor,
+        }
+        data = client.execute(query, variable_values=params)
+        issues += data["issues"]["nodes"]
+        if not data["issues"]["pageInfo"]["hasNextPage"]:
+            break
+        cursor = data["issues"]["pageInfo"]["endCursor"]
+    return issues
+
+
+def by_project(issues):
+    """Group issues by project name."""
+    project_issues = {}
+    for issue in issues:
+        project = (
+            issue.get("project", {}).get("name") if issue.get("project") else "No Project"
+        )
+        if project not in project_issues:
+            project_issues[project] = []
+        project_issues[project].append(issue)
+    return project_issues
