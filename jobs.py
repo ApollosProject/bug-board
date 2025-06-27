@@ -8,9 +8,28 @@ import yaml
 from dotenv import load_dotenv
 
 from github import get_prs_waiting_for_review_by_reviewer
-from linear import get_completed_issues, get_open_issues, get_stale_issues_by_assignee
+from linear import (
+    get_completed_issues,
+    get_open_issues,
+    get_stale_issues_by_assignee,
+)
 
 load_dotenv()
+
+
+def format_bug_line(bug):
+    """Return a formatted Slack message line for a bug."""
+    reviewer = (
+        get_slack_markdown_by_linear_username(bug["assignee"]["displayName"])
+        if bug["assignee"]
+        else ""
+    )
+    platform_text = f", {bug['platform']}" if bug["platform"] else ""
+    reviewer_text = f", {reviewer}" if reviewer else ""
+    return (
+        f"- <{bug['url']}|{bug['title']}> "
+        f"(+{bug['daysOpen']}d{platform_text}{reviewer_text})"
+    )
 
 
 def with_retries(func):
@@ -52,19 +71,25 @@ def post_priority_bugs():
         markdown += "*Unassigned Priority Bugs*\n\n"
         markdown += "\n".join(
             [
-                f"- <{bug['url']}|{bug['title']}>{' (' + '+' + str(bug['daysOpen']) + 'd'}{', ' + bug['platform'] if bug['platform'] else ''})"
-                for bug in sorted(unassigned, key=lambda x: x["daysOpen"], reverse=True)
+                format_bug_line(bug)
+                for bug in sorted(
+                    unassigned,
+                    key=lambda x: x["daysOpen"],
+                    reverse=True,
+                )
             ]
         )
         markdown += "\n\n"
-        assigned = set(
-            [
-                bug["assignee"]["displayName"]
-                for bug in open_priority_bugs
-                if bug["assignee"]
-            ]
-        )
-        platforms = set([bug["platform"] for bug in unassigned if bug["platform"]])
+        assigned = {
+            bug["assignee"]["displayName"]
+            for bug in open_priority_bugs
+            if bug["assignee"]
+        }
+        platforms = {
+            bug["platform"]
+            for bug in unassigned
+            if bug["platform"]
+        }
         notified = set()
         for platform in platforms:
             platform_slug = platform.lower().replace(" ", "-")
@@ -73,8 +98,9 @@ def post_priority_bugs():
             notified.add(f"<@{lead_info['slack_id']}> ({platform} Lead)")
             for developer in config["platforms"][platform_slug]["developers"]:
                 person = config["people"][developer]
-                if person["linear_username"] not in assigned and person.get(
-                    "on_call_support", False
+                if (
+                    person["linear_username"] not in assigned
+                    and person.get("on_call_support", False)
                 ):
                     notified.add(f"<@{person['slack_id']}>")
         if notified:
@@ -84,7 +110,7 @@ def post_priority_bugs():
         markdown += "\n\n*At Risk*\n\n"
         markdown += "\n".join(
             [
-                f"- <{bug['url']}|{bug['title']}>{' (' + '+' + str(bug['daysOpen']) + 'd'}{', ' + bug['platform'] if bug['platform'] else ''}{', ' + get_slack_markdown_by_linear_username(bug['assignee']['displayName']) if bug['assignee'] else ''})"
+                format_bug_line(bug)
                 for bug in sorted(
                     at_risk,
                     key=lambda x: x["daysOpen"],
@@ -97,7 +123,7 @@ def post_priority_bugs():
         markdown += "\n\n*Overdue*\n\n"
         markdown += "\n".join(
             [
-                f"- <{bug['url']}|{bug['title']}>{' (' + '+' + str(bug['daysOpen']) + 'd'}{', ' + bug['platform'] if bug['platform'] else ''}{', ' + get_slack_markdown_by_linear_username(bug['assignee']['displayName']) if bug['assignee'] else ''})"
+                format_bug_line(bug)
                 for bug in sorted(
                     overdue,
                     key=lambda x: x["daysOpen"],
@@ -114,8 +140,6 @@ def post_priority_bugs():
 
 # @with_retries
 def post_leaderboard():
-    with open("config.yml", "r") as file:
-        config = yaml.safe_load(file)
     items = (
         get_completed_issues(5, "Bug", 7)
         + get_completed_issues(5, "New Feature", 7)
@@ -132,7 +156,9 @@ def post_leaderboard():
             leaderboard[assignee_name] = 0
         score = priority_to_score.get(item["priority"], 0)
         leaderboard[assignee_name] += score
-    leaderboard = dict(sorted(leaderboard.items(), key=lambda x: x[1], reverse=True))
+    leaderboard = dict(
+        sorted(leaderboard.items(), key=lambda x: x[1], reverse=True)
+    )
     medals = ["🥇", "🥈", "🥉"]
     markdown = "*Weekly Leaderboard*\n\n"
     for i, (assignee, score) in enumerate(leaderboard.items()):
@@ -142,7 +168,7 @@ def post_leaderboard():
         markdown += f"{medals[i]} {slack_markdown}: {score}\n"
     markdown += "\n\n"
     markdown += "_scores - 4pts for high, 2pts for medium, 1pt for low_\n\n"
-    markdown += f"<{os.getenv('APP_URL')}/7|View Bug Board>"
+    markdown += f"<{os.getenv('APP_URL')}?days=7|View Bug Board>"
     url = os.getenv("SLACK_WEBHOOK_URL")
     requests.post(url, json={"text": markdown})
 
@@ -152,7 +178,8 @@ def post_stale():
     with open("config.yml", "r") as file:
         config = yaml.safe_load(file)
     people_by_github_username = {
-        person["github_username"]: person for person in config["people"].values()
+        person["github_username"]: person
+        for person in config["people"].values()
     }
     prs = get_prs_waiting_for_review_by_reviewer()
     stale_issues = get_stale_issues_by_assignee(
@@ -188,11 +215,14 @@ def post_stale():
         for assignee, issues in stale_issues.items():
             if not issues:
                 continue
-            assignee_slack_markdown = get_slack_markdown_by_linear_username(assignee)
+            assignee_slack_markdown = get_slack_markdown_by_linear_username(
+                assignee
+            )
             markdown += f"\n{assignee_slack_markdown}:\n\n"
             for issue in issues:
                 markdown += (
-                    f"- <{issue['url']}|{issue['title']}> ({issue['daysStale']}d)\n"
+                    f"- <{issue['url']}|{issue['title']}>"
+                    f" ({issue['daysStale']}d)\n"
                 )
         markdown += "\n\n"
     markdown += f"<{os.getenv('APP_URL')}|View Bug Board>"
