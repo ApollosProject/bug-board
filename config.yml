@@ -105,6 +105,16 @@ people:
     linear_username: dylan
     github_username:
     on_call_support: false
+  dennis:
+    slack_id: U03KDSLUW7L
+    linear_username: dennis
+    github_username: dsilva609
+    on_call_support: false
+  john:
+    slack_id: UJ0AHPX6J
+    linear_username: john
+    github_username: jcanver
+    on_call_support: false
 
 
 platforms:
@@ -121,10 +131,14 @@ platforms:
     developers:
       - vitor
       - sherange
+      - dennis
+      - john
   crossroads-api:
     lead: dylan
     developers:
       - vitor
+      - dennis
+      - john
   mobile:
     lead: darryl
     developers:
@@ -133,6 +147,8 @@ platforms:
       - jimmy
       - aleks
       - vitor
+      - dennis
+      - john
   tv:
     lead: darryl
     developers:
@@ -141,10 +157,13 @@ platforms:
       - jimmy
       - aleks
       - vitor
+      - dennis
+      - john
   roku:
     lead: andy
     developers:
       - michael
+      - dennis
   web:
     lead: nathan
     developers:
@@ -152,6 +171,7 @@ platforms:
       - sherange
       - jimmy
       - bruno
+      - dennis
   admin:
     lead: nathan
     developers:
@@ -160,6 +180,7 @@ platforms:
       - jimmy
       - bruno
       - austin
+      - dennis
   cluster:
     lead: vincent
     developers:
@@ -168,6 +189,11 @@ platforms:
       - aleks
       - cameron
       - vitor
+      - dennis
+  rock:
+    lead: dennis
+    developers:
+      - dennis
   shovel:
     lead: vincent
     developers:
@@ -176,9 +202,11 @@ platforms:
       - jimmy
       - bruno
       - cameron
+      - dennis
   transcriptions:
     lead: vincent
     developers:
       - michael
       - jimmy
       - bruno
+      - dennis
