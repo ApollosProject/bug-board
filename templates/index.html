@@ -9,6 +9,11 @@
       href="{{ url_for('static', filename='pico.min.css') }}"
     />
     <title>Apollos Bug Board</title>
+    <style>
+      #score-tooltip[data-tooltip]::before {
+        font-size: 0.7em;
+      }
+    </style>
   </head>
   <body>
     <header class="container">
@@ -126,6 +131,7 @@
       <h4>
         Scores
         <small
+          id="score-tooltip"
           data-tooltip="4pts for high, 2pts for medium, 1pt for low"
           style="font-size: 0.8em; opacity: 0.6;"
           >ⓘ</small>
