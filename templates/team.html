@@ -19,7 +19,7 @@
       <h2>Engineering Team</h2>
       <h3>Tech Leads</h3>
       <ul>
-      {% for platform, lead in leads.items() %}
+      {% for platform, lead in leads|dictsort %}
         <li>{{ platform.replace('-', ' ').title() }}: {{ lead }}</li>
       {% endfor %}
       </ul>
