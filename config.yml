@@ -190,7 +190,7 @@ platforms:
       - cameron
       - vitor
       - dennis
-  rock:
+  rock-plugin:
     lead: dennis
     developers:
       - dennis
