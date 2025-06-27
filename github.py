@@ -18,7 +18,12 @@ client = Client(transport=transport, fetch_schema_from_transport=True)
 
 
 def get_repo_ids():
-    repos = ["apollos-platforms"]
+    repos = [
+        "apollos-platforms",
+        "apollos-cluster",
+        "admin-transcriptions",
+        "apollos-shovel",
+    ]
     ids = []
     for repo in repos:
         params = {"name": repo}
