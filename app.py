@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request
+import yaml
 
 from linear import (
     by_assignee,
@@ -81,6 +82,38 @@ def index():
             reverse=True,
         ),
         fixes_per_day=fixes_per_day,
+    )
+
+
+@app.route("/team")
+def team():
+    with open("config.yml", "r") as file:
+        config = yaml.safe_load(file)
+
+    def format_name(key):
+        data = config["people"].get(key, {})
+        name = data.get("linear_username", key)
+        return name.replace(".", " ").replace("-", " ").title()
+
+    team_info = {}
+    for slug, info in config.get("platforms", {}).items():
+        team_info[slug] = {
+            "lead": format_name(info.get("lead")),
+            "developers": [
+                format_name(dev) for dev in info.get("developers", [])
+            ],
+        }
+
+    on_call_support = [
+        format_name(name)
+        for name, person in config.get("people", {}).items()
+        if person.get("on_call_support")
+    ]
+
+    return render_template(
+        "team.html",
+        team=team_info,
+        on_call_support=on_call_support,
     )
 
 

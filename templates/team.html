@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='pico.min.css') }}" />
+    <title>Engineering Team</title>
+  </head>
+  <body>
+    <header class="container">
+      <nav>
+        <ul>
+          <li><a href="{{ url_for('index') }}">Bug Board</a></li>
+        </ul>
+      </nav>
+    </header>
+    <main class="container">
+      <h2>Engineering Team</h2>
+      <h3>Platforms</h3>
+      {% for platform, info in team.items() %}
+      <details>
+        <summary>{{ platform.replace('-', ' ').title() }}</summary>
+        <p><strong>Lead:</strong> {{ info.lead }}</p>
+        <p><strong>Team:</strong> {{ ', '.join(info.developers) }}</p>
+      </details>
+      {% endfor %}
+      <hr />
+      <h3>On Call Support</h3>
+      <p>{{ ', '.join(on_call_support) }}</p>
+    </main>
+    <footer class="container">
+      <small><a href="{{ url_for('team') }}">Engineering Team</a></small>
+    </footer>
+  </body>
+</html>
