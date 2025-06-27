@@ -3,9 +3,12 @@ from flask import Flask, render_template, request
 from linear import (
     by_assignee,
     by_platform,
+    by_project,
     get_completed_issues,
+    get_completed_issues_for_person,
     get_created_issues,
     get_open_issues,
+    get_open_issues_for_person,
     get_time_data,
 )
 
@@ -81,6 +84,21 @@ def index():
             reverse=True,
         ),
         fixes_per_day=fixes_per_day,
+    )
+
+
+@app.route("/person/<person_id>")
+def person(person_id):
+    """Display open and completed work for a person."""
+    days = request.args.get("days", default=30, type=int)
+    open_items = get_open_issues_for_person(person_id)
+    completed_items = get_completed_issues_for_person(person_id, days)
+    return render_template(
+        "person.html",
+        person_id=person_id,
+        days=days,
+        open_by_project=by_project(open_items),
+        completed_by_project=by_project(completed_items),
     )
 
 
