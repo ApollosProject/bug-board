@@ -8,11 +8,13 @@ from gql.transport.aiohttp import AIOHTTPTransport
 load_dotenv()
 
 
-headers = {"Authorization": f"bearer {os.getenv('GITHUB_TOKEN')}"}
-transport = AIOHTTPTransport(url="https://api.github.com/graphql", headers=headers)
+token = os.getenv("GITHUB_TOKEN")
+headers = {"Authorization": f"bearer {token}"}
+transport = AIOHTTPTransport(
+    url="https://api.github.com/graphql",
+    headers=headers,
+)
 client = Client(transport=transport, fetch_schema_from_transport=True)
-
-import pprint
 
 
 def get_repo_ids():
@@ -41,7 +43,11 @@ def get_prs(repo_id, pr_states):
         query PRs ($repo_id: ID!, $pr_states: [PullRequestState!]) {
             node(id: $repo_id) {
                 ... on Repository {
-                    pullRequests(first: 100, states: $pr_states, orderBy: {field: UPDATED_AT, direction: DESC}) {
+                    pullRequests(
+                        first: 100,
+                        states: $pr_states,
+                        orderBy: {field: UPDATED_AT, direction: DESC}
+                    ) {
                         nodes {
                             title
                             url
@@ -54,7 +60,10 @@ def get_prs(repo_id, pr_states):
                                     }
                                 }
                             }
-                            timelineItems(first: 50, itemTypes: [REVIEW_REQUESTED_EVENT]) {
+                            timelineItems(
+                                first: 50,
+                                itemTypes: [REVIEW_REQUESTED_EVENT],
+                            ) {
                               nodes {
                                 ... on ReviewRequestedEvent {
                                   createdAt

@@ -11,7 +11,10 @@ load_dotenv()
 
 
 headers = {"Authorization": os.getenv("LINEAR_API_KEY")}
-transport = AIOHTTPTransport(url="https://api.linear.app/graphql", headers=headers)
+transport = AIOHTTPTransport(
+    url="https://api.linear.app/graphql",
+    headers=headers,
+)
 client = Client(transport=transport, fetch_schema_from_transport=True)
 
 
@@ -75,7 +78,12 @@ def get_completed_issues(priority, label, days=30):
 
     query = gql(
         """
-        query CompletedIssues ($priority: Float, $label: String, $days: DateTimeOrDuration, $cursor: String) {
+        query CompletedIssues (
+            $priority: Float,
+            $label: String,
+            $days: DateTimeOrDuration,
+            $cursor: String
+        ) {
           issues(
             first: 50
             after: $cursor
@@ -142,7 +150,12 @@ def get_created_issues(priority, label, days=30):
 
     query = gql(
         """
-        query CreatedIssues ($priority: Float, $label: String, $days: DateTimeOrDuration, $cursor: String) {
+        query CreatedIssues (
+            $priority: Float,
+            $label: String,
+            $days: DateTimeOrDuration,
+            $cursor: String
+        ) {
             issues(
                 first: 50
                 after: $cursor
@@ -213,7 +226,11 @@ def by_assignee(issues):
         assignee_issues[assignee]["score"] += score
     # sort by the score
     return dict(
-        sorted(assignee_issues.items(), key=lambda x: x[1]["score"], reverse=True)
+        sorted(
+            assignee_issues.items(),
+            key=lambda x: x[1]["score"],
+            reverse=True,
+        )
     )
 
 
@@ -231,12 +248,16 @@ def by_reviewer(issues):
                             issues_by_approver[author] = []
                         issues_by_approver[author].append(issue)
     return dict(
-        sorted(issues_by_approver.items(), key=lambda x: len(x[1]), reverse=True)
+        sorted(
+            issues_by_approver.items(),
+            key=lambda x: len(x[1]),
+            reverse=True,
+        )
     )
 
 
 def get_stale_issues_by_assignee(issues, days=30):
-    """Returns dictionary of issues that have not been updated in the last `days` days, grouped by assignee."""
+    """Return issues not updated in `days` days, grouped by assignee."""
     stale_issues = {}
     for issue in issues:
         if not issue["assignee"]:
@@ -244,7 +265,9 @@ def get_stale_issues_by_assignee(issues, days=30):
         assignee = issue["assignee"]["displayName"]
         if assignee not in stale_issues:
             stale_issues[assignee] = []
-        last_updated = datetime.strptime(issue["updatedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
+        last_updated = datetime.strptime(
+            issue["updatedAt"], "%Y-%m-%dT%H:%M:%S.%fZ"
+        )
         if (datetime.utcnow() - last_updated).days > days:
             days_stale = (datetime.utcnow() - last_updated).days
             stale_issues[assignee].append(
@@ -268,7 +291,13 @@ def by_platform(issues):
         if platform not in platform_issues:
             platform_issues[platform] = []
         platform_issues[platform].append(issue)
-    return dict(sorted(platform_issues.items(), key=lambda x: len(x[1]), reverse=True))
+    return dict(
+        sorted(
+            platform_issues.items(),
+            key=lambda x: len(x[1]),
+            reverse=True,
+        )
+    )
 
 
 def get_time_data(issues):
@@ -276,12 +305,18 @@ def get_time_data(issues):
     queue_times = []
     work_times = []
     for issue in issues:
-        completed_at = datetime.strptime(issue["completedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
-        created_at = datetime.strptime(issue["createdAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
+        completed_at = datetime.strptime(
+            issue["completedAt"], "%Y-%m-%dT%H:%M:%S.%fZ"
+        )
+        created_at = datetime.strptime(
+            issue["createdAt"], "%Y-%m-%dT%H:%M:%S.%fZ"
+        )
         lead_time = (completed_at - created_at).days
         lead_times.append(lead_time)
         if issue["startedAt"]:
-            started_at = datetime.strptime(issue["startedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
+            started_at = datetime.strptime(
+                issue["startedAt"], "%Y-%m-%dT%H:%M:%S.%fZ"
+            )
             queue_time = (started_at - created_at).days
             queue_times.append(queue_time)
             work_time = (completed_at - started_at).days
