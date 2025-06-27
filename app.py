@@ -95,15 +95,13 @@ def team():
         name = data.get("linear_username", key)
         return name.replace(".", " ").replace("-", " ").title()
 
-    team_info = {}
-    for slug, info in config.get("platforms", {}).items():
-        team_info[slug] = {
-            "lead": format_name(info.get("lead")),
-            "developers": [
-                format_name(dev) for dev in info.get("developers", [])
-            ],
-        }
-
+    leads = {
+        slug: format_name(info.get("lead"))
+        for slug, info in config.get("platforms", {}).items()
+    }
+    developers = sorted(
+        {format_name(person) for person in config.get("people", {})}
+    )
     on_call_support = [
         format_name(name)
         for name, person in config.get("people", {}).items()
@@ -112,7 +110,8 @@ def team():
 
     return render_template(
         "team.html",
-        team=team_info,
+        leads=leads,
+        developers=developers,
         on_call_support=on_call_support,
     )
 

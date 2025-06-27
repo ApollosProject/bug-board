@@ -17,14 +17,15 @@
     </header>
     <main class="container">
       <h2>Engineering Team</h2>
-      <h3>Platforms</h3>
-      {% for platform, info in team.items() %}
-      <details>
-        <summary>{{ platform.replace('-', ' ').title() }}</summary>
-        <p><strong>Lead:</strong> {{ info.lead }}</p>
-        <p><strong>Team:</strong> {{ ', '.join(info.developers) }}</p>
-      </details>
+      <h3>Tech Leads</h3>
+      <ul>
+      {% for platform, lead in leads.items() %}
+        <li>{{ platform.replace('-', ' ').title() }}: {{ lead }}</li>
       {% endfor %}
+      </ul>
+      <hr />
+      <h3>All Developers</h3>
+      <p>{{ ', '.join(developers) }}</p>
       <hr />
       <h3>On Call Support</h3>
       <p>{{ ', '.join(on_call_support) }}</p>
