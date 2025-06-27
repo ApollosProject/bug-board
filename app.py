@@ -100,6 +100,7 @@ def person(person_id):
         days=days,
         open_by_project=by_project(open_items),
         completed_by_project=by_project(completed_items),
+    )
 
 
 @app.route("/team")
