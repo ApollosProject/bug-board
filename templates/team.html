@@ -36,7 +36,7 @@
               {% endif %}
               <span class="health-icon" title="{{ project.health }}">{{ icon }}</span>
             {% endif %}
-            <a href="{{ project.url }}">{{ project.name }}</a>:
+            <a href="{{ project.url }}">{{ project.name }}{% if project.progress is not none %} ({{ (project.progress * 100) | round(0) | int }}%){% endif %}</a>:
             {% set members = project.members %}
             {% if project.lead %}
               {% set members = members | reject("equalto", project.lead.displayName) | list %}
