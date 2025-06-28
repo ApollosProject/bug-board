@@ -18,6 +18,24 @@ transport = AIOHTTPTransport(
 client = Client(transport=transport, fetch_schema_from_transport=True)
 
 
+def get_user_id(username):
+    """Look up a Linear user ID by their username."""
+
+    query = gql(
+        """
+        query FindUser($name: String!) {
+          users(filter: { name: { eq: $name } }) {
+            nodes { id }
+          }
+        }
+        """
+    )
+
+    data = client.execute(query, variable_values={"name": username})
+    users = data.get("users", {}).get("nodes", [])
+    return users[0]["id"] if users else None
+
+
 def get_open_issues(priority, label):
 
     params = {"priority": priority, "label": label}
