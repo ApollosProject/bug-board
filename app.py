@@ -55,7 +55,7 @@ def index():
     return render_template(
         "index.html",
         days=days,
-        priority_issues=open_priority_bugs,
+        priority_issues=sorted(open_priority_bugs, key=lambda x: x["createdAt"]),
         issue_count=len(created_priority_bugs),
         priority_percentage=int(
             len(completed_priority_bugs)
