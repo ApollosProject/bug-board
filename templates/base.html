@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='pico.min.css') }}" />
+    <title>{% block title %}{% endblock %}</title>
+    {% block extra_head %}{% endblock %}
+  </head>
+  <body>
+    <header class="container">
+      <nav>
+        <ul>
+          <li><a href="{{ url_for('index') }}">Bug Board</a></li>
+        </ul>
+        {% block header_nav %}{% endblock %}
+      </nav>
+    </header>
+    <main class="container">
+      {% block content %}{% endblock %}
+    </main>
+    <footer class="container">
+      <small><a href="{{ url_for('team') }}">Engineering Teams</a></small>
+    </footer>
+    {% block extra_scripts %}{% endblock %}
+  </body>
+</html>
