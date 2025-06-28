@@ -338,17 +338,34 @@ def get_time_data(issues):
     return data
 
 
-def get_open_issues_for_person(username):
-    """Return open issues assigned to a user across all projects by username."""
+def get_user_id(username):
+    """Return a Linear user ID for the given username."""
 
     query = gql(
         """
-        query OpenIssues($assignee: String!, $cursor: String) {
+        query ($name: String!) {
+          users(filter: { name: { eq: $name } }) {
+            nodes { id }
+          }
+        }
+        """
+    )
+    data = client.execute(query, variable_values={"name": username})
+    users = data.get("users", {}).get("nodes", [])
+    return users[0]["id"] if users else None
+
+
+def get_open_issues_for_person(user_id):
+    """Return open issues assigned to a user across all projects by Linear ID."""
+
+    query = gql(
+        """
+        query OpenIssues($assignee: ID!, $cursor: String) {
           issues(
             first: 50
             after: $cursor
             filter: {
-              assignee: { name: { eq: $assignee } }
+              assignee: { id: { eq: $assignee } }
               state: { name: { nin: ["Done", "Canceled", "Duplicate"] } }
             }
             orderBy: createdAt
@@ -372,7 +389,7 @@ def get_open_issues_for_person(username):
     cursor = None
     issues = []
     while True:
-        params = {"assignee": username, "cursor": cursor}
+        params = {"assignee": user_id, "cursor": cursor}
         data = client.execute(query, variable_values=params)
         issues += data["issues"]["nodes"]
         if not data["issues"]["pageInfo"]["hasNextPage"]:
@@ -387,17 +404,17 @@ def get_open_issues_for_person(username):
     return issues
 
 
-def get_completed_issues_for_person(username, days=30):
-    """Return completed issues for a user over the last `days` days by username."""
+def get_completed_issues_for_person(user_id, days=30):
+    """Return completed issues for a user over the last `days` days by ID."""
 
     query = gql(
         """
-        query CompletedIssues($assignee: String!, $days: DateTimeOrDuration, $cursor: String) {
+        query CompletedIssues($assignee: ID!, $days: DateTimeOrDuration, $cursor: String) {
           issues(
             first: 50
             after: $cursor
             filter: {
-              assignee: { name: { eq: $assignee } }
+              assignee: { id: { eq: $assignee } }
               state: { name: { in: ["Done"] } }
               completedAt: { gt: $days }
             }
@@ -422,7 +439,7 @@ def get_completed_issues_for_person(username, days=30):
     issues = []
     while True:
         params = {
-            "assignee": username,
+            "assignee": user_id,
             "days": f"-P{days}D",
             "cursor": cursor,
         }
