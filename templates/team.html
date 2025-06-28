@@ -2,6 +2,12 @@
 
 {% block title %}Engineering Teams{% endblock %}
 
+{% block extra_head %}
+<style>
+  .health-icon { font-size: 0.9em; margin-right: 0.3em; }
+</style>
+{% endblock %}
+
 {% block content %}
       <h2>Engineering Teams</h2>
       <h3>Platforms</h3>
@@ -20,6 +26,16 @@
       {% for initiative, projects in cycle_projects_by_initiative.items() %}
         {% for project in projects %}
           <li>
+            {% if project.health %}
+              {% if project.health == 'onTrack' %}
+                {% set icon = '🟢' %}
+              {% elif project.health == 'atRisk' %}
+                {% set icon = '🟡' %}
+              {% else %}
+                {% set icon = '🔴' %}
+              {% endif %}
+              <span class="health-icon" title="{{ project.health }}">{{ icon }}</span>
+            {% endif %}
             <a href="{{ project.url }}">{{ project.name }}</a>:
             {% set members = project.members %}
             {% if project.lead %}

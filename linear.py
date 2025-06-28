@@ -456,6 +456,7 @@ def get_projects():
                   id
                   name
                   url
+                  health
                   lead {
                     displayName
                   }
