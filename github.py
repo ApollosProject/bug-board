@@ -61,12 +61,13 @@ def get_prs(repo_id, pr_states):
                             isDraft
                             reviews(
                                 first: 10,
-                                states: [APPROVED]
+                                states: [APPROVED, CHANGES_REQUESTED]
                             ) {
                                 nodes {
                                     author {
                                         login
                                     }
+                                    state
                                 }
                             }
                             timelineItems(
@@ -127,11 +128,9 @@ def prs_by_approver():
     prs_by_approver = {}
     for pr in all_prs:
         for review in pr["reviews"]["nodes"]:
-            if review["author"]:
+            if review.get("author") and review.get("state") == "APPROVED":
                 approver = review["author"]["login"]
-                if approver not in prs_by_approver:
-                    prs_by_approver[approver] = []
-                prs_by_approver[approver].append(pr)
+                prs_by_approver.setdefault(approver, []).append(pr)
     return prs_by_approver
 
 
@@ -153,8 +152,7 @@ def get_prs_waiting_for_review_by_reviewer():
             continue
         if not pr["reviewRequests"]["nodes"]:
             continue
-        if pr["reviews"]["nodes"]:
-            # PR already has an approval
+        if any(r.get("state") == "APPROVED" for r in pr["reviews"]["nodes"]):
             continue
         if has_failing_required_checks(pr):
             # waiting on author to fix checks
@@ -176,3 +174,18 @@ def get_prs_waiting_for_review_by_reviewer():
                     stuck_prs[reviewer] = []
                 stuck_prs[reviewer].append(pr)
     return stuck_prs
+
+def get_prs_with_changes_requested_by_reviewer():
+    """Return open PRs with change requests, grouped by the reviewer who requested changes."""
+    repo_ids = get_repo_ids()
+    all_prs = []
+    for repo_id in repo_ids:
+        prs = get_prs(repo_id, pr_states=["OPEN"])
+        all_prs.extend(prs)
+    cr_prs = {}
+    for pr in all_prs:
+        for review in pr.get("reviews", {}).get("nodes", []):
+            if review.get("author") and review.get("state") == "CHANGES_REQUESTED":
+                reviewer = review["author"]["login"]
+                cr_prs.setdefault(reviewer, []).append(pr)
+    return cr_prs

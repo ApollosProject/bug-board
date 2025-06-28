@@ -7,7 +7,10 @@ import schedule
 import yaml
 from dotenv import load_dotenv
 
-from github import get_prs_waiting_for_review_by_reviewer
+from github import (
+    get_prs_waiting_for_review_by_reviewer,
+    get_prs_with_changes_requested_by_reviewer,
+)
 from linear import (
     get_completed_issues,
     get_open_issues,
@@ -182,6 +185,7 @@ def post_stale():
         for person in config["people"].values()
     }
     prs = get_prs_waiting_for_review_by_reviewer()
+    cr_prs = get_prs_with_changes_requested_by_reviewer()
     stale_issues = get_stale_issues_by_assignee(
         get_open_issues(5, "Bug")
         + get_open_issues(5, "New Feature")
@@ -192,6 +196,17 @@ def post_stale():
         return
 
     markdown = ""
+    filtered = {}
+    for reviewer, pr_list in prs.items():
+        keep = []
+        for pr in pr_list:
+            crers = [r for r, pls in cr_prs.items() if pr in pls]
+            if any(r != reviewer for r in crers):
+                continue
+            keep.append(pr)
+        if keep:
+            filtered[reviewer] = keep
+    prs = filtered
     if prs:
         markdown += "*PRs - Checks Passing, Waiting for Review*\n"
         for reviewer, pr_list in prs.items():
