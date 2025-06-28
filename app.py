@@ -113,10 +113,6 @@ def team():
         name = data.get("linear_username", key)
         return name.replace(".", " ").replace("-", " ").title()
 
-    leads = {
-        slug: format_name(info.get("lead"))
-        for slug, info in config.get("platforms", {}).items()
-    }
     platform_teams = {
         slug: [
             {"name": format_name(info.get("lead")), "lead": True}
@@ -139,7 +135,6 @@ def team():
 
     return render_template(
         "team.html",
-        leads=leads,
         platform_teams=platform_teams,
         developers=developers,
         on_call_support=on_call_support,
