@@ -58,7 +58,10 @@ def get_prs(repo_id, pr_states):
                             url
                             closedAt
                             isDraft
-                            reviews(first: 10, states: [APPROVED]) {
+                            reviews(
+                                first: 10,
+                                states: [APPROVED, CHANGES_REQUESTED]
+                            ) {
                                 nodes {
                                     author {
                                         login
@@ -133,6 +136,9 @@ def get_prs_waiting_for_review_by_reviewer():
     stuck_prs = {}
     for pr in all_prs:
         if not pr["reviewRequests"]["nodes"]:
+            continue
+        if pr["reviews"]["nodes"]:
+            # PR already has an approval or changes requested
             continue
         for review in pr["timelineItems"]["nodes"]:
             if (
