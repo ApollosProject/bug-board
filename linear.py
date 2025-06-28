@@ -401,7 +401,7 @@ def get_completed_issues_for_person(username, days=30):
               state: { name: { in: ["Done"] } }
               completedAt: { gt: $days }
             }
-            orderBy: completedAt
+            orderBy: updatedAt
           ) {
             nodes {
               id
