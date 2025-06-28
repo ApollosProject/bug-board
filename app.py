@@ -12,7 +12,6 @@ from linear import (
     get_open_issues,
     get_open_issues_for_person,
     get_time_data,
-    get_user_id,
 )
 
 app = Flask(__name__)
@@ -96,11 +95,11 @@ def person(slug):
     info = get_person(slug)
     if not info:
         abort(404)
-    user_id = info.get("linear_id") or get_user_id(info.get("linear_username", slug))
+    username = info.get("linear_username", slug)
 
     days = request.args.get("days", default=30, type=int)
-    open_items = get_open_issues_for_person(user_id)
-    completed_items = get_completed_issues_for_person(user_id, days)
+    open_items = get_open_issues_for_person(username)
+    completed_items = get_completed_issues_for_person(username, days)
     return render_template(
         "person.html",
         slug=slug,
