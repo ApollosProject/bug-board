@@ -98,11 +98,13 @@ def team_slug(slug):
     if not person_cfg:
         abort(404)
     login = person_cfg.get("linear_username", slug)
+    person_name = login.replace(".", " ").replace("-", " ").title()
     open_items = get_open_issues_for_person(login)
     completed_items = get_completed_issues_for_person(login, days)
     return render_template(
         "person.html",
         person_slug=slug,
+        person_name=person_name,
         days=days,
         open_by_project=by_project(open_items),
         completed_by_project=by_project(completed_items),
