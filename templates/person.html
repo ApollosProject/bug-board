@@ -4,9 +4,9 @@
 
 {% block header_nav %}
 <ul>
-  <li><a href="{{ url_for('person', slug=person_slug, days=7) }}">7d</a></li>
-  <li><a href="{{ url_for('person', slug=person_slug, days=30) }}">30d</a></li>
-  <li><a href="{{ url_for('person', slug=person_slug, days=90) }}">90d</a></li>
+  <li><a href="{{ url_for('team_slug', slug=person_slug, days=7) }}">7d</a></li>
+  <li><a href="{{ url_for('team_slug', slug=person_slug, days=30) }}">30d</a></li>
+  <li><a href="{{ url_for('team_slug', slug=person_slug, days=90) }}">90d</a></li>
 </ul>
 {% endblock %}
 

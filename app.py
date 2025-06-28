@@ -89,8 +89,8 @@ def index():
 
 
 @app.route("/team/<slug>")
-def person(slug):
-    """Display open and completed work for a person."""
+def team_slug(slug):
+    """Display open and completed work for a team member."""
     days = request.args.get("days", default=30, type=int)
     with open("config.yml", "r") as file:
         config = yaml.safe_load(file)
