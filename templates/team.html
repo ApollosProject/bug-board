@@ -17,7 +17,11 @@
       </ul>
       <hr />
       <h3>All Developers</h3>
-      <p>{{ ', '.join(developers) }}</p>
+      <p>
+      {% for dev in developers %}
+        <a href="{{ url_for('team_slug', slug=dev.slug) }}">{{ dev.name }}</a>{% if not loop.last %}, {% endif %}
+      {% endfor %}
+      </p>
       <hr />
       <h3>On Call Support</h3>
       <p>{{ ', '.join(on_call_support) }}</p>
