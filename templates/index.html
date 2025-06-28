@@ -1,34 +1,24 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light dark" />
-    <link
-      rel="stylesheet"
-      href="{{ url_for('static', filename='pico.min.css') }}"
-    />
-    <title>Apollos Bug Board</title>
-    <style>
-      #score-tooltip[data-tooltip]::before {
-        font-size: 0.7em;
-      }
-    </style>
-  </head>
-  <body>
-    <header class="container">
-      <nav>
-        <ul>
-          <li><a href="{{ url_for('index') }}">Bug Board</a></li>
-        </ul>
-        <ul>
-          <li><a href="{{ url_for('index', days=7) }}">7d</a></li>
-          <li><a href="{{ url_for('index', days=30) }}">30d</a></li>
-          <li><a href="{{ url_for('index', days=90) }}">90d</a></li>
-        </ul>
-      </nav>
-    </header>
-    <main class="container">
+{% extends "base.html" %}
+
+{% block title %}Apollos Bug Board{% endblock %}
+
+{% block extra_head %}
+<style>
+  #score-tooltip[data-tooltip]::before {
+    font-size: 0.7em;
+  }
+</style>
+{% endblock %}
+
+{% block header_nav %}
+<ul>
+  <li><a href="{{ url_for('index', days=7) }}">7d</a></li>
+  <li><a href="{{ url_for('index', days=30) }}">30d</a></li>
+  <li><a href="{{ url_for('index', days=90) }}">90d</a></li>
+</ul>
+{% endblock %}
+
+{% block content %}
       <h2>Priority Bug Stats ({{ days }}d)</h2>
       <div class="grid">
         <div>
@@ -146,46 +136,42 @@
           {% endfor %}
         </tbody>
       </table>
-    </main>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
 
-    <script>
-      const ctx = document.getElementById('myChart');
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-      // issues by platform
-      // use issues_by_platform dict
-      new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: [
-            {% for platform in issues_by_platform %}
-            '{{ platform }}',
-            {% endfor %}
-          ],
-          datasets: [{
-            label: 'New Priority Bugs',
-            data: [
-              {% for platform in issues_by_platform %}
-              {{ issues_by_platform[platform] | length }},
-              {% endfor %}
-            ],
-            borderWidth: 1
-          }]
-        },
-        options: {
-          scales: {
-            y: {
-              beginAtZero: true,
-              ticks: {
-                stepSize: 1,
-              }
-            }
+<script>
+  const ctx = document.getElementById('myChart');
+
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: [
+        {% for platform in issues_by_platform %}
+        '{{ platform }}',
+        {% endfor %}
+      ],
+      datasets: [{
+        label: 'New Priority Bugs',
+        data: [
+          {% for platform in issues_by_platform %}
+          {{ issues_by_platform[platform] | length }},
+          {% endfor %}
+        ],
+        borderWidth: 1
+      }]
+    },
+    options: {
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            stepSize: 1,
           }
         }
-      });
-    </script>
-    <footer class="container">
-      <small><a href="{{ url_for('team') }}">Engineering Teams</a></small>
-    </footer>
-  </body>
-</html>
+      }
+    }
+  });
+</script>
+{% endblock %}

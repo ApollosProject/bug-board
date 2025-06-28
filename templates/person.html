@@ -1,26 +1,16 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light dark" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='pico.min.css') }}" />
-    <title>Person Work</title>
-  </head>
-  <body>
-    <header class="container">
-      <nav>
-        <ul>
-          <li><a href="{{ url_for('index') }}">Bug Board</a></li>
-        </ul>
-        <ul>
-          <li><a href="{{ url_for('person', slug=person_slug, days=7) }}">7d</a></li>
-          <li><a href="{{ url_for('person', slug=person_slug, days=30) }}">30d</a></li>
-          <li><a href="{{ url_for('person', slug=person_slug, days=90) }}">90d</a></li>
-        </ul>
-      </nav>
-    </header>
-    <main class="container">
+{% extends "base.html" %}
+
+{% block title %}Person Work{% endblock %}
+
+{% block header_nav %}
+<ul>
+  <li><a href="{{ url_for('person', slug=person_slug, days=7) }}">7d</a></li>
+  <li><a href="{{ url_for('person', slug=person_slug, days=30) }}">30d</a></li>
+  <li><a href="{{ url_for('person', slug=person_slug, days=90) }}">90d</a></li>
+</ul>
+{% endblock %}
+
+{% block content %}
       <h2>Ongoing Work</h2>
       {% for project, issues in open_by_project.items() %}
       <details open>
@@ -49,6 +39,4 @@
         {% endfor %}
       </details>
       {% endfor %}
-    </main>
-  </body>
-</html>
+{% endblock %}
