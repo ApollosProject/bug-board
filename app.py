@@ -117,6 +117,17 @@ def team():
         slug: format_name(info.get("lead"))
         for slug, info in config.get("platforms", {}).items()
     }
+    platform_teams = {
+        slug: [
+            format_name(info.get("lead"))
+        ]
+        + [
+            format_name(dev)
+            for dev in info.get("developers", [])
+            if dev != info.get("lead")
+        ]
+        for slug, info in config.get("platforms", {}).items()
+    }
     developers = sorted(
         {format_name(person) for person in config.get("people", {})}
     )
@@ -129,6 +140,7 @@ def team():
     return render_template(
         "team.html",
         leads=leads,
+        platform_teams=platform_teams,
         developers=developers,
         on_call_support=on_call_support,
     )

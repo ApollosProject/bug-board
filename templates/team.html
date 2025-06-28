@@ -17,6 +17,13 @@
     </header>
     <main class="container">
       <h2>Engineering Team</h2>
+      <h3>Platforms</h3>
+      <ul>
+      {% for platform, members in platform_teams|dictsort %}
+        <li>{{ platform.replace('-', ' ').title() }}: {{ ', '.join(members) }}</li>
+      {% endfor %}
+      </ul>
+      <hr />
       <h3>Tech Leads</h3>
       <ul>
       {% for platform, lead in leads|dictsort %}
