@@ -10,7 +10,7 @@
         <li>
           {{ platform.replace('-', ' ').title() }}:
           {% for member in members %}
-            {{ member.name }}{% if member.lead %} (Lead){% endif %}{% if not loop.last %}, {% endif %}
+            {{ member.name|first_name }}{% if member.lead %} (Lead){% endif %}{% if not loop.last %}, {% endif %}
           {% endfor %}
         </li>
       {% endfor %}
@@ -19,7 +19,7 @@
       <h3>All Developers</h3>
       <p>
       {% for dev in developers %}
-        <a href="{{ url_for('team_slug', slug=dev.slug) }}">{{ dev.name }}</a>{% if not loop.last %}, {% endif %}
+        <a href="{{ url_for('team_slug', slug=dev.slug) }}">{{ dev.name|first_name }}</a>{% if not loop.last %}, {% endif %}
       {% endfor %}
       </p>
       <hr />
@@ -37,7 +37,7 @@
               {% set team_members = members %}
             {% endif %}
             {% for member in team_members %}
-              {{ member|title }}{% if project.lead and loop.first %} (Lead){% endif %}{% if not loop.last %}, {% endif %}
+              {{ member|first_name }}{% if project.lead and loop.first %} (Lead){% endif %}{% if not loop.last %}, {% endif %}
             {% endfor %}
           </li>
         {% endfor %}
@@ -45,5 +45,9 @@
       </ul>
       <hr />
       <h3>On Call Support</h3>
-      <p>{{ ', '.join(on_call_support) }}</p>
+      <p>
+      {%- for name in on_call_support -%}
+        {{ name|first_name }}{% if not loop.last %}, {% endif %}
+      {%- endfor -%}
+      </p>
 {% endblock %}

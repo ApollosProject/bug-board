@@ -77,7 +77,7 @@
             <a href="{{ issue.url }}">{{ issue.title }}</a>
             <small
               >({% if issue.platform %}{{ issue.platform }}, {% endif %}+{{
-              issue.daysOpen }}d{% if issue.assignee %}, {{ issue.assignee.name
+              issue.daysOpen }}d{% if issue.assignee %}, {{ issue.assignee.name|first_name
               }}{% endif %})
             </small>
           </article>
@@ -93,7 +93,7 @@
             <a href="{{ issue.url }}">{{ issue.title }}</a>
             <small
               >({% if issue.platform %}{{ issue.platform }}, {% endif %}+{{
-              issue.daysOpen }}d, {{ issue.assignee.name }})
+              issue.daysOpen }}d, {{ issue.assignee.name|first_name }})
             </small>
           </article>
         </div>
@@ -103,7 +103,7 @@
       <h2>Completed</h2>
       {% for assignee in completed_issues_by_assignee %}
       <details>
-        <summary>{{ assignee }}</summary>
+        <summary>{{ assignee|first_name }}</summary>
         {% for item in completed_issues_by_assignee[assignee]["issues"] %}
         <div class="card">
           <article>
@@ -130,7 +130,7 @@
         <tbody>
           {% for assignee in completed_issues_by_assignee %}
           <tr>
-            <td>{{ assignee }}</td>
+            <td>{{ assignee|first_name }}</td>
             <td>{{ completed_issues_by_assignee[assignee]["score"] }}</td>
           </tr>
           {% endfor %}

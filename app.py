@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, abort
 import yaml
+import re
 
 from linear import (
     by_assignee,
@@ -15,6 +16,13 @@ from linear import (
 )
 
 app = Flask(__name__)
+
+@app.template_filter('first_name')
+def first_name_filter(name: str) -> str:
+    parts = re.split(r'[.\-\s]+', name)
+    if parts and parts[0]:
+        return parts[0].title()
+    return name.title()
 
 
 # use a query string parameter for days on the index route
