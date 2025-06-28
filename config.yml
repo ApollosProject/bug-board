@@ -18,7 +18,7 @@ people:
   jimmy:
     slack_id: U019TA865C2
     linear_username: jimmy
-    github_username:
+    github_username: jimmyhogoboom
     on_call_support: true
   andy:
     slack_id: U080E70RQ4U
@@ -63,7 +63,7 @@ people:
   cameron:
     slack_id: U034L9QHG4C
     linear_username: cameron.llewellyn
-    github_username:
+    github_username: camrun91
     on_call_support: false
   austin:
     slack_id: U082ES6NT52
