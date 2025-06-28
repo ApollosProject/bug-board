@@ -15,14 +15,6 @@
         </li>
       {% endfor %}
       </ul>
-      <hr />
-      <h3>All Developers</h3>
-      <p>
-      {% for dev in developers %}
-        <a href="{{ url_for('team_slug', slug=dev.slug) }}">{{ dev.name|first_name }}</a>{% if not loop.last %}, {% endif %}
-      {% endfor %}
-      </p>
-      <hr />
       <h3>Cycle Projects</h3>
       <ul>
       {% for initiative, projects in cycle_projects_by_initiative.items() %}
@@ -49,5 +41,12 @@
       {%- for name in on_call_support -%}
         {{ name|first_name }}{% if not loop.last %}, {% endif %}
       {%- endfor -%}
+      </p>
+      <hr />
+      <h3>Everyone</h3>
+      <p>
+      {% for dev in developers %}
+        <a href="{{ url_for('team_slug', slug=dev.slug) }}">{{ dev.name|first_name }}</a>{% if not loop.last %}, {% endif %}
+      {% endfor %}
       </p>
 {% endblock %}
