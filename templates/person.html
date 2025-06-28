@@ -14,9 +14,9 @@
           <li><a href="{{ url_for('index') }}">Bug Board</a></li>
         </ul>
         <ul>
-          <li><a href="{{ url_for('person', person_id=person_id, days=7) }}">7d</a></li>
-          <li><a href="{{ url_for('person', person_id=person_id, days=30) }}">30d</a></li>
-          <li><a href="{{ url_for('person', person_id=person_id, days=90) }}">90d</a></li>
+          <li><a href="{{ url_for('person', slug=person_slug, days=7) }}">7d</a></li>
+          <li><a href="{{ url_for('person', slug=person_slug, days=30) }}">30d</a></li>
+          <li><a href="{{ url_for('person', slug=person_slug, days=90) }}">90d</a></li>
         </ul>
       </nav>
     </header>

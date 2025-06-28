@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, abort
 import yaml
 
 from linear import (
@@ -88,15 +88,21 @@ def index():
     )
 
 
-@app.route("/person/<person_id>")
-def person(person_id):
+@app.route("/person/<slug>")
+def person(slug):
     """Display open and completed work for a person."""
     days = request.args.get("days", default=30, type=int)
-    open_items = get_open_issues_for_person(person_id)
-    completed_items = get_completed_issues_for_person(person_id, days)
+    with open("config.yml", "r") as file:
+        config = yaml.safe_load(file)
+    person_cfg = config.get("people", {}).get(slug)
+    if not person_cfg:
+        abort(404)
+    login = person_cfg.get("linear_username", slug)
+    open_items = get_open_issues_for_person(login)
+    completed_items = get_completed_issues_for_person(login, days)
     return render_template(
         "person.html",
-        person_id=person_id,
+        person_slug=slug,
         days=days,
         open_by_project=by_project(open_items),
         completed_by_project=by_project(completed_items),
