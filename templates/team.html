@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
     <link rel="stylesheet" href="{{ url_for('static', filename='pico.min.css') }}" />
-    <title>Engineering Team</title>
+    <title>Engineering Teams</title>
   </head>
   <body>
     <header class="container">
@@ -16,11 +16,16 @@
       </nav>
     </header>
     <main class="container">
-      <h2>Engineering Team</h2>
-      <h3>Tech Leads</h3>
+      <h2>Engineering Teams</h2>
+      <h3>Platforms</h3>
       <ul>
-      {% for platform, lead in leads|dictsort %}
-        <li>{{ platform.replace('-', ' ').title() }}: {{ lead }}</li>
+      {% for platform, members in platform_teams|dictsort %}
+        <li>
+          {{ platform.replace('-', ' ').title() }}:
+          {% for member in members %}
+            {{ member.name }}{% if member.lead %} (Lead){% endif %}{% if not loop.last %}, {% endif %}
+          {% endfor %}
+        </li>
       {% endfor %}
       </ul>
       <hr />
@@ -31,7 +36,7 @@
       <p>{{ ', '.join(on_call_support) }}</p>
     </main>
     <footer class="container">
-      <small><a href="{{ url_for('team') }}">Engineering Team</a></small>
+      <small><a href="{{ url_for('team') }}">Engineering Teams</a></small>
     </footer>
   </body>
 </html>

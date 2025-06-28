@@ -121,7 +121,6 @@ platforms:
   marketing-site:
     lead: nathan
     developers:
-      - michael
       - vitor
       - sherange
       - bruno
@@ -142,7 +141,6 @@ platforms:
   mobile:
     lead: darryl
     developers:
-      - michael
       - sherange
       - jimmy
       - aleks
@@ -152,7 +150,6 @@ platforms:
   tv:
     lead: darryl
     developers:
-      - michael
       - sherange
       - jimmy
       - aleks
@@ -162,12 +159,10 @@ platforms:
   roku:
     lead: andy
     developers:
-      - michael
       - dennis
   web:
     lead: nathan
     developers:
-      - michael
       - sherange
       - jimmy
       - bruno
@@ -175,7 +170,6 @@ platforms:
   admin:
     lead: nathan
     developers:
-      - michael
       - sherange
       - jimmy
       - bruno
@@ -184,7 +178,6 @@ platforms:
   cluster:
     lead: vincent
     developers:
-      - michael
       - jimmy
       - aleks
       - cameron
@@ -197,7 +190,6 @@ platforms:
   shovel:
     lead: vincent
     developers:
-      - michael
       - rajuran
       - jimmy
       - bruno
@@ -206,7 +198,6 @@ platforms:
   transcriptions:
     lead: vincent
     developers:
-      - michael
       - jimmy
       - bruno
       - dennis
