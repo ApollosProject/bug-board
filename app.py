@@ -89,22 +89,22 @@ def index():
     )
 
 
-@app.route("/person/<person_id>")
-def person(person_id):
+@app.route("/person/<slug>")
+def person(slug):
     """Display open and completed work for a person."""
     with open("config.yml", "r") as file:
         config = yaml.safe_load(file)
-    info = config.get("people", {}).get(person_id)
+    info = config.get("people", {}).get(slug)
     if not info:
         abort(404)
-    user_id = info.get("linear_id") or get_user_id(info.get("linear_username", person_id))
+    user_id = info.get("linear_id") or get_user_id(info.get("linear_username", slug))
 
     days = request.args.get("days", default=30, type=int)
     open_items = get_open_issues_for_person(user_id)
     completed_items = get_completed_issues_for_person(user_id, days)
     return render_template(
         "person.html",
-        person_id=person_id,
+        slug=slug,
         days=days,
         open_by_project=by_project(open_items),
         completed_by_project=by_project(completed_items),
