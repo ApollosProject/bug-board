@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, abort
-import yaml
+
+from config import get_people, get_platforms, get_person
 
 from linear import (
     by_assignee,
@@ -92,9 +93,7 @@ def index():
 @app.route("/person/<slug>")
 def person(slug):
     """Display open and completed work for a person."""
-    with open("config.yml", "r") as file:
-        config = yaml.safe_load(file)
-    info = config.get("people", {}).get(slug)
+    info = get_person(slug)
     if not info:
         abort(404)
     user_id = info.get("linear_id") or get_user_id(info.get("linear_username", slug))
@@ -113,16 +112,16 @@ def person(slug):
 
 @app.route("/team")
 def team():
-    with open("config.yml", "r") as file:
-        config = yaml.safe_load(file)
+    people = get_people()
+    platforms = get_platforms()
 
     def format_name(key):
-        data = config["people"].get(key, {})
+        data = people.get(key, {})
         name = data.get("linear_username", key)
         return name.replace(".", " ").replace("-", " ").title()
 
     platform_teams = {}
-    for slug, info in config.get("platforms", {}).items():
+    for slug, info in platforms.items():
         lead = info.get("lead")
         developers = [dev for dev in info.get("developers", []) if dev != lead]
         developers = sorted(developers, key=lambda d: format_name(d))
@@ -133,12 +132,12 @@ def team():
 
     developers = [
         {"name": format_name(person), "slug": person}
-        for person in config.get("people", {})
+        for person in people
     ]
     developers = sorted(developers, key=lambda d: d["name"])
     on_call_support = [
         format_name(name)
-        for name, person in config.get("people", {}).items()
+        for name, person in people.items()
         if person.get("on_call_support")
     ]
 
