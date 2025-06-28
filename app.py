@@ -88,7 +88,7 @@ def index():
     )
 
 
-@app.route("/person/<slug>")
+@app.route("/team/<slug>")
 def person(slug):
     """Display open and completed work for a person."""
     days = request.args.get("days", default=30, type=int)

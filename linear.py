@@ -9,13 +9,13 @@ from config import get_platforms
 
 load_dotenv()
 
-
-headers = {"Authorization": os.getenv("LINEAR_API_KEY")}
-transport = AIOHTTPTransport(
-    url="https://api.linear.app/graphql",
-    headers=headers,
-)
-client = Client(transport=transport, fetch_schema_from_transport=True)
+def _get_client():
+    headers = {"Authorization": os.getenv("LINEAR_API_KEY")}
+    transport = AIOHTTPTransport(
+        url="https://api.linear.app/graphql",
+        headers=headers,
+    )
+    return Client(transport=transport, fetch_schema_from_transport=True)
 
 
 def get_open_issues(priority, label):
@@ -56,7 +56,7 @@ def get_open_issues(priority, label):
     )
 
     # Execute the query on the transport
-    data = client.execute(query, variable_values=params)
+    data = _get_client().execute(query, variable_values=params)
     issues = data["issues"]["nodes"]
     # add in platform (its the labels minus the label param above)
     for issue in issues:
@@ -138,7 +138,7 @@ def get_completed_issues(priority, label, days=30):
             "days": f"-P{days}D",
             "cursor": cursor,
         }
-        data = client.execute(query, variable_values=params)
+        data = _get_client().execute(query, variable_values=params)
         issues += data["issues"]["nodes"]
         if not data["issues"]["pageInfo"]["hasNextPage"]:
             break
@@ -195,7 +195,7 @@ def get_created_issues(priority, label, days=30):
             "days": f"-P{days}D",
             "cursor": cursor,
         }
-        data = client.execute(query, variable_values=params)
+        data = _get_client().execute(query, variable_values=params)
         issues += data["issues"]["nodes"]
         if not data["issues"]["pageInfo"]["hasNextPage"]:
             break
@@ -373,7 +373,7 @@ def get_open_issues_for_person(login: str):
     issues = []
     while True:
         params = {"login": login, "cursor": cursor}
-        data = client.execute(query, variable_values=params)
+        data = _get_client().execute(query, variable_values=params)
         issues += data["issues"]["nodes"]
         if not data["issues"]["pageInfo"]["hasNextPage"]:
             break
@@ -422,7 +422,7 @@ def get_completed_issues_for_person(login: str, days=30):
     issues = []
     while True:
         params = {"login": login, "days": f"-P{days}D", "cursor": cursor}
-        data = client.execute(query, variable_values=params)
+        data = _get_client().execute(query, variable_values=params)
         issues += data["issues"]["nodes"]
         if not data["issues"]["pageInfo"]["hasNextPage"]:
             break
