@@ -28,13 +28,17 @@
       {% for initiative, projects in cycle_projects_by_initiative.items() %}
         {% for project in projects %}
           <li>
-            <a href="{{ project.url }}">{{ project.name }}</a>
-            <small>
-              {% if project.lead %}Lead: {{ project.lead.displayName }}{% endif %}
-              {% if project.members %}
-                Team: {{ project.members | join(', ') }}
-              {% endif %}
-            </small>
+            <a href="{{ project.url }}">{{ project.name }}</a>:
+            {% set members = project.members %}
+            {% if project.lead %}
+              {% set members = members | reject("equalto", project.lead.displayName) | list %}
+              {% set team_members = [project.lead.displayName] + members %}
+            {% else %}
+              {% set team_members = members %}
+            {% endif %}
+            {% for member in team_members %}
+              {{ member|title }}{% if project.lead and loop.first %} (Lead){% endif %}{% if not loop.last %}, {% endif %}
+            {% endfor %}
           </li>
         {% endfor %}
       {% endfor %}
