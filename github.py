@@ -92,25 +92,20 @@ def get_prs(repo_id, pr_states):
                                     }
                                 }
                             }
-                            commits(last: 1) {
-                                nodes {
-                                    commit {
-                                        statusCheckRollup {
-                                            contexts(first: 100) {
-                                                nodes {
-                                                    __typename
-                                                    ... on CheckRun {
-                                                        name
-                                                        conclusion
-                                                        isRequired
-                                                    }
-                                                    ... on StatusContext {
-                                                        context
-                                                        state
-                                                        isRequired
-                                                    }
-                                                }
-                                            }
+                            number
+                            statusCheckRollup {
+                                contexts(first: 100) {
+                                    nodes {
+                                        __typename
+                                        ... on CheckRun {
+                                            name
+                                            conclusion
+                                            isRequired
+                                        }
+                                        ... on StatusContext {
+                                            context
+                                            state
+                                            isRequired
                                         }
                                     }
                                 }
@@ -131,13 +126,8 @@ def get_prs(repo_id, pr_states):
 def has_failing_required_checks(pr):
     """Return True if the PR has any failing required checks."""
 
-    commits = pr.get("commits", {}).get("nodes", [])
-    if not commits:
-        return False
     contexts = (
-        commits[0]
-        .get("commit", {})
-        .get("statusCheckRollup", {})
+        pr.get("statusCheckRollup", {})
         .get("contexts", {})
         .get("nodes", [])
     )
