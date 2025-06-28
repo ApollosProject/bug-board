@@ -9,6 +9,7 @@ from config import get_platforms
 
 load_dotenv()
 
+
 def _get_client():
     headers = {"Authorization": os.getenv("LINEAR_API_KEY")}
     transport = AIOHTTPTransport(
@@ -265,9 +266,7 @@ def get_stale_issues_by_assignee(issues, days=30):
         assignee = issue["assignee"]["displayName"]
         if assignee not in stale_issues:
             stale_issues[assignee] = []
-        last_updated = datetime.strptime(
-            issue["updatedAt"], "%Y-%m-%dT%H:%M:%S.%fZ"
-        )
+        last_updated = datetime.strptime(issue["updatedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
         if (datetime.utcnow() - last_updated).days > days:
             days_stale = (datetime.utcnow() - last_updated).days
             stale_issues[assignee].append(
@@ -305,18 +304,12 @@ def get_time_data(issues):
     queue_times = []
     work_times = []
     for issue in issues:
-        completed_at = datetime.strptime(
-            issue["completedAt"], "%Y-%m-%dT%H:%M:%S.%fZ"
-        )
-        created_at = datetime.strptime(
-            issue["createdAt"], "%Y-%m-%dT%H:%M:%S.%fZ"
-        )
+        completed_at = datetime.strptime(issue["completedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
+        created_at = datetime.strptime(issue["createdAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
         lead_time = (completed_at - created_at).days
         lead_times.append(lead_time)
         if issue["startedAt"]:
-            started_at = datetime.strptime(
-                issue["startedAt"], "%Y-%m-%dT%H:%M:%S.%fZ"
-            )
+            started_at = datetime.strptime(issue["startedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
             queue_time = (started_at - created_at).days
             queue_times.append(queue_time)
             work_time = (completed_at - started_at).days
