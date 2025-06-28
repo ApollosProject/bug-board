@@ -23,6 +23,7 @@ def get_repo_ids():
         "apollos-cluster",
         "admin-transcriptions",
         "apollos-shovel",
+        "apollos-embeds",
     ]
     ids = []
     for repo in repos:
@@ -92,6 +93,11 @@ def get_prs(repo_id, pr_states):
                                     }
                                 }
                             }
+                            number
+                            mergeable
+                            statusCheckRollup {
+                                state
+                            }
                         }
                     }
                 }
@@ -103,6 +109,13 @@ def get_prs(repo_id, pr_states):
     prs = data["node"]["pullRequests"]["nodes"]
     non_draft_prs = [pr for pr in prs if not pr.get("isDraft", False)]
     return non_draft_prs
+
+
+def has_failing_required_checks(pr):
+    """Return True if the PR has any failing required checks."""
+
+    rollup = pr.get("statusCheckRollup") or {}
+    return rollup.get("state") != "SUCCESS"
 
 
 def prs_by_approver():
@@ -135,10 +148,16 @@ def get_prs_waiting_for_review_by_reviewer():
         all_prs.extend(prs)
     stuck_prs = {}
     for pr in all_prs:
+        # only consider pull requests that are mergeable
+        if pr.get("mergeable") != "MERGEABLE":
+            continue
         if not pr["reviewRequests"]["nodes"]:
             continue
         if pr["reviews"]["nodes"]:
             # PR already has an approval
+            continue
+        if has_failing_required_checks(pr):
+            # waiting on author to fix checks
             continue
         for review in pr["timelineItems"]["nodes"]:
             if (
