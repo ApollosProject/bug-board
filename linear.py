@@ -392,11 +392,7 @@ def get_completed_issues_for_person(person_id, days=30):
 
     query = gql(
         """
-        query CompletedIssues(
-            $assignee: ID!,
-            $days: DateTimeOrDuration,
-            $cursor: String
-        ) {
+        query CompletedIssues($assignee: ID!, $days: DateTimeOrDuration, $cursor: String) {
           issues(
             first: 50
             after: $cursor
@@ -442,10 +438,9 @@ def by_project(issues):
     """Group issues by project name."""
     project_issues = {}
     for issue in issues:
-        if issue.get("project"):
-            project = issue["project"].get("name")
-        else:
-            project = "No Project"
+        project = (
+            issue.get("project", {}).get("name") if issue.get("project") else "No Project"
+        )
         if project not in project_issues:
             project_issues[project] = []
         project_issues[project].append(issue)

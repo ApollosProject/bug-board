@@ -92,24 +92,6 @@ def get_prs(repo_id, pr_states):
                                     }
                                 }
                             }
-                            number
-                            statusCheckRollup {
-                                contexts(first: 100) {
-                                    nodes {
-                                        __typename
-                                        ... on CheckRun {
-                                            name
-                                            conclusion
-                                            isRequired
-                                        }
-                                        ... on StatusContext {
-                                            context
-                                            state
-                                            isRequired
-                                        }
-                                    }
-                                }
-                            }
                         }
                     }
                 }
@@ -121,26 +103,6 @@ def get_prs(repo_id, pr_states):
     prs = data["node"]["pullRequests"]["nodes"]
     non_draft_prs = [pr for pr in prs if not pr.get("isDraft", False)]
     return non_draft_prs
-
-
-def has_failing_required_checks(pr):
-    """Return True if the PR has any failing required checks."""
-
-    contexts = (
-        pr.get("statusCheckRollup", {})
-        .get("contexts", {})
-        .get("nodes", [])
-    )
-    for ctx in contexts:
-        if not ctx.get("isRequired"):
-            continue
-        if ctx["__typename"] == "CheckRun":
-            if ctx.get("conclusion") != "SUCCESS":
-                return True
-        elif ctx["__typename"] == "StatusContext":
-            if ctx.get("state") != "SUCCESS":
-                return True
-    return False
 
 
 def prs_by_approver():
@@ -177,9 +139,6 @@ def get_prs_waiting_for_review_by_reviewer():
             continue
         if pr["reviews"]["nodes"]:
             # PR already has an approval
-            continue
-        if has_failing_required_checks(pr):
-            # waiting on author to fix checks
             continue
         for review in pr["timelineItems"]["nodes"]:
             if (
