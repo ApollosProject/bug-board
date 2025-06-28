@@ -110,13 +110,40 @@ def team_slug(slug):
     person_name = login.replace(".", " ").replace("-", " ").title()
     open_items = get_open_issues_for_person(login)
     completed_items = get_completed_issues_for_person(login, days)
+
+    # Group open and completed items by project
+    open_by_project = by_project(open_items)
+    completed_by_project = by_project(completed_items)
+
+    # Determine current cycle initiative projects
+    cycle_initiative = config.get("cycle_initiative")
+    cycle_projects = get_projects()
+    projects_by_initiative = {}
+    for project in cycle_projects:
+        nodes = project.get("initiatives", {}).get("nodes", [])
+        if nodes:
+            for init in nodes:
+                name = init.get("name") or "Unnamed Initiative"
+                projects_by_initiative.setdefault(name, []).append(project)
+        else:
+            projects_by_initiative.setdefault("No Initiative", []).append(project)
+    # Sort initiatives alphabetically
+    projects_by_initiative = dict(sorted(projects_by_initiative.items(), key=lambda x: x[0]))
+    current_projects = projects_by_initiative.get(cycle_initiative, []) if cycle_initiative else []
+    current_names = [proj.get("name") for proj in current_projects]
+
+    # Split open projects into current cycle and others
+    open_current_cycle = {proj: issues for proj, issues in open_by_project.items() if proj in current_names}
+    open_other = {proj: issues for proj, issues in open_by_project.items() if proj not in current_names}
+
     return render_template(
         "person.html",
         person_slug=slug,
         person_name=person_name,
         days=days,
-        open_by_project=by_project(open_items),
-        completed_by_project=by_project(completed_items),
+        open_current_cycle=open_current_cycle,
+        open_other=open_other,
+        completed_by_project=completed_by_project,
     )
 
 

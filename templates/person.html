@@ -11,9 +11,21 @@
 {% endblock %}
 
 {% block content %}
-      <h2>Current Work</h2>
-      {% for project, issues in open_by_project.items() %}
+      <h2>Current cycle work</h2>
+      {% for project, issues in open_current_cycle.items() %}
       <details open>
+        <summary>{{ project }}</summary>
+        {% for issue in issues %}
+        <div class="card">
+          <article>
+            <a href="{{ issue.url }}">{{ issue.title }}</a>
+          </article>
+        </div>
+        {% endfor %}
+      </details>
+      {% endfor %}
+      {% for project, issues in open_other.items() %}
+      <details>
         <summary>{{ project }}</summary>
         {% for issue in issues %}
         <div class="card">
