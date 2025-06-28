@@ -119,10 +119,10 @@ def team():
     }
     platform_teams = {
         slug: [
-            format_name(info.get("lead"))
+            {"name": format_name(info.get("lead")), "lead": True}
         ]
         + [
-            format_name(dev)
+            {"name": format_name(dev), "lead": False}
             for dev in info.get("developers", [])
             if dev != info.get("lead")
         ]
