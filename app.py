@@ -122,9 +122,12 @@ def team():
             {"name": format_name(dev), "lead": False} for dev in developers
         ]
         platform_teams[slug] = members
-    developers = sorted(
-        {format_name(person) for person in config.get("people", {})}
-    )
+
+    developers = [
+        {"name": format_name(person), "slug": person}
+        for person in config.get("people", {})
+    ]
+    developers = sorted(developers, key=lambda d: d["name"])
     on_call_support = [
         format_name(name)
         for name, person in config.get("people", {}).items()
