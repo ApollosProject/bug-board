@@ -1,21 +1,8 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light dark" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='pico.min.css') }}" />
-    <title>Engineering Teams</title>
-  </head>
-  <body>
-    <header class="container">
-      <nav>
-        <ul>
-          <li><a href="{{ url_for('index') }}">Bug Board</a></li>
-        </ul>
-      </nav>
-    </header>
-    <main class="container">
+{% extends "base.html" %}
+
+{% block title %}Engineering Teams{% endblock %}
+
+{% block content %}
       <h2>Engineering Teams</h2>
       <h3>Platforms</h3>
       <ul>
@@ -34,9 +21,4 @@
       <hr />
       <h3>On Call Support</h3>
       <p>{{ ', '.join(on_call_support) }}</p>
-    </main>
-    <footer class="container">
-      <small><a href="{{ url_for('team') }}">Engineering Teams</a></small>
-    </footer>
-  </body>
-</html>
+{% endblock %}
