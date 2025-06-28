@@ -66,16 +66,7 @@ def index():
             )
             * 100
         ),
-        completed_bugs_by_assignee=by_assignee(completed_bugs),
-        completed_features_by_assignee=by_assignee(
-            completed_new_features + completed_technical_changes
-        ),
         completed_issues_by_assignee=by_assignee(
-            completed_bugs
-            + completed_new_features
-            + completed_technical_changes
-        ),
-        completed_issues=(
             completed_bugs
             + completed_new_features
             + completed_technical_changes
