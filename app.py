@@ -11,6 +11,7 @@ from linear import (
     get_open_issues,
     get_open_issues_for_person,
     get_time_data,
+    get_projects,
 )
 
 app = Flask(__name__)
@@ -142,11 +143,36 @@ def team():
         for name, person in config.get("people", {}).items()
         if person.get("on_call_support")
     ]
+    cycle_projects = get_projects()
+
+    # group cycle projects by initiatives
+    projects_by_initiative = {}
+    for project in cycle_projects:
+        nodes = project.get("initiatives", {}).get("nodes", [])
+        if nodes:
+            for init in nodes:
+                name = init.get("name") or "Unnamed Initiative"
+                projects_by_initiative.setdefault(name, []).append(project)
+        else:
+            projects_by_initiative.setdefault("No Initiative", []).append(project)
+    # sort initiatives alphabetically
+    projects_by_initiative = dict(
+        sorted(projects_by_initiative.items(), key=lambda x: x[0])
+    )
+    # filter to only the cycle initiative (from config.yml)
+    current_init = config.get("cycle_initiative")
+    if current_init:
+        projects_by_initiative = {
+            name: projects
+            for name, projects in projects_by_initiative.items()
+            if name == current_init
+        }
 
     return render_template(
         "team.html",
         platform_teams=platform_teams,
         developers=developers,
+        cycle_projects_by_initiative=projects_by_initiative,
         on_call_support=on_call_support,
     )
 
