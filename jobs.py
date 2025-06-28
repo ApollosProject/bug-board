@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from datetime import datetime
 
 import requests
 import schedule
@@ -222,7 +223,19 @@ def post_stale():
                 reviewer_slack_markdown = reviewer
             markdown += f"\n{reviewer_slack_markdown}:\n\n"
             for pr in unique_prs:
-                markdown += f"- <{pr['url']}|{pr['title']}>\n"
+                events = [
+                    ev for ev in pr.get("timelineItems", {}).get("nodes", [])
+                    if ev.get("requestedReviewer", {}).get("login") == reviewer
+                ]
+                if events:
+                    created = max(ev["createdAt"] for ev in events)
+                    if created.endswith("Z"):
+                        created = created[:-1]
+                    dt = datetime.fromisoformat(created)
+                    days_waiting = (datetime.now() - dt).days
+                else:
+                    days_waiting = 0
+                markdown += f"- <{pr['url']}|{pr['title']}> (+{days_waiting}d)\n"
         markdown += "\n\n"
 
     if any(issues for issues in stale_issues.values()):
