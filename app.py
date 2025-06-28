@@ -113,17 +113,15 @@ def team():
         name = data.get("linear_username", key)
         return name.replace(".", " ").replace("-", " ").title()
 
-    platform_teams = {
-        slug: [
-            {"name": format_name(info.get("lead")), "lead": True}
+    platform_teams = {}
+    for slug, info in config.get("platforms", {}).items():
+        lead = info.get("lead")
+        developers = [dev for dev in info.get("developers", []) if dev != lead]
+        developers = sorted(developers, key=lambda d: format_name(d))
+        members = [{"name": format_name(lead), "lead": True}] + [
+            {"name": format_name(dev), "lead": False} for dev in developers
         ]
-        + [
-            {"name": format_name(dev), "lead": False}
-            for dev in info.get("developers", [])
-            if dev != info.get("lead")
-        ]
-        for slug, info in config.get("platforms", {}).items()
-    }
+        platform_teams[slug] = members
     developers = sorted(
         {format_name(person) for person in config.get("people", {})}
     )
