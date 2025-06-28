@@ -132,9 +132,28 @@ def team_slug(slug):
     current_projects = projects_by_initiative.get(cycle_initiative, []) if cycle_initiative else []
     current_names = [proj.get("name") for proj in current_projects]
 
-    # Split open projects into current cycle and others
-    open_current_cycle = {proj: issues for proj, issues in open_by_project.items() if proj in current_names}
-    open_other = {proj: issues for proj, issues in open_by_project.items() if proj not in current_names}
+    if person_cfg.get("on_call_support"):
+        open_current_cycle = {
+            proj: issues
+            for proj, issues in open_by_project.items()
+            if proj == "Customer Success"
+        }
+        open_other = {
+            proj: issues
+            for proj, issues in open_by_project.items()
+            if proj != "Customer Success"
+        }
+    else:
+        open_current_cycle = {
+            proj: issues
+            for proj, issues in open_by_project.items()
+            if proj in current_names
+        }
+        open_other = {
+            proj: issues
+            for proj, issues in open_by_project.items()
+            if proj not in current_names
+        }
 
     return render_template(
         "person.html",
