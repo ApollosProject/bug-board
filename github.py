@@ -23,6 +23,7 @@ def get_repo_ids():
         "apollos-cluster",
         "admin-transcriptions",
         "apollos-shovel",
+        "apollos-embeds",
     ]
     ids = []
     for repo in repos:
@@ -93,22 +94,9 @@ def get_prs(repo_id, pr_states):
                                 }
                             }
                             number
+                            mergeable
                             statusCheckRollup {
-                                contexts(first: 100) {
-                                    nodes {
-                                        __typename
-                                        ... on CheckRun {
-                                            name
-                                            conclusion
-                                            isRequired
-                                        }
-                                        ... on StatusContext {
-                                            context
-                                            state
-                                            isRequired
-                                        }
-                                    }
-                                }
+                                state
                             }
                         }
                     }
@@ -126,21 +114,8 @@ def get_prs(repo_id, pr_states):
 def has_failing_required_checks(pr):
     """Return True if the PR has any failing required checks."""
 
-    contexts = (
-        pr.get("statusCheckRollup", {})
-        .get("contexts", {})
-        .get("nodes", [])
-    )
-    for ctx in contexts:
-        if not ctx.get("isRequired"):
-            continue
-        if ctx["__typename"] == "CheckRun":
-            if ctx.get("conclusion") != "SUCCESS":
-                return True
-        elif ctx["__typename"] == "StatusContext":
-            if ctx.get("state") != "SUCCESS":
-                return True
-    return False
+    rollup = pr.get("statusCheckRollup") or {}
+    return rollup.get("state") != "SUCCESS"
 
 
 def prs_by_approver():
@@ -173,6 +148,9 @@ def get_prs_waiting_for_review_by_reviewer():
         all_prs.extend(prs)
     stuck_prs = {}
     for pr in all_prs:
+        # only consider pull requests that are mergeable
+        if pr.get("mergeable") != "MERGEABLE":
+            continue
         if not pr["reviewRequests"]["nodes"]:
             continue
         if pr["reviews"]["nodes"]:
