@@ -52,6 +52,14 @@ def index():
     fixes_per_day = len(
         completed_bugs + completed_new_features + completed_technical_changes
     ) / days
+
+    with open("config.yml", "r") as file:
+        config_data = yaml.safe_load(file)
+    username_to_slug = {
+        info.get("linear_username"): slug
+        for slug, info in config_data.get("people", {}).items()
+    }
+
     return render_template(
         "index.html",
         days=days,
@@ -85,6 +93,7 @@ def index():
             reverse=True,
         ),
         fixes_per_day=fixes_per_day,
+        username_to_slug=username_to_slug,
     )
 
 

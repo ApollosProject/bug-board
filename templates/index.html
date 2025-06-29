@@ -113,7 +113,15 @@
         <tbody>
           {% for assignee in completed_issues_by_assignee %}
           <tr>
-            <td>{{ assignee|first_name }}</td>
+            <td>
+              {% if assignee in username_to_slug %}
+                <a href="{{ url_for('team_slug', slug=username_to_slug[assignee], days=days) }}">
+                  {{ assignee|first_name }}
+                </a>
+              {% else %}
+                {{ assignee|first_name }}
+              {% endif %}
+            </td>
             <td>{{ completed_issues_by_assignee[assignee]["score"] }}</td>
           </tr>
           {% endfor %}

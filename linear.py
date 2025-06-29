@@ -217,7 +217,7 @@ def by_assignee(issues):
     for issue in issues:
         if not issue["assignee"]:
             continue
-        assignee = issue["assignee"]["name"]
+        assignee = issue["assignee"]["displayName"]
         if assignee not in assignee_issues:
             assignee_issues[assignee] = {"score": 0, "issues": []}
         assignee_issues[assignee]["issues"].append(issue)
