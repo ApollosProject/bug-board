@@ -23,6 +23,7 @@
       {% else %}
         <p>(Empty)</p>
       {% endif %}
+      {% if open_other %}
       <h2>Other Work</h2>
       {% for project, issues in open_other.items() %}
       <details>
@@ -37,6 +38,7 @@
         {% endfor %}
       </details>
       {% endfor %}
+      {% endif %}
       <hr />
       <h2>Completed</h2>
       <form method="get" style="display:inline-block; margin-bottom: 0.5em;">
