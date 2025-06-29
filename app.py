@@ -167,6 +167,8 @@ def team_slug(slug):
             if proj not in current_names
         }
 
+    work_by_platform = by_platform(open_items + completed_items)
+
     return render_template(
         "person.html",
         person_slug=slug,
@@ -176,6 +178,7 @@ def team_slug(slug):
         open_other=open_other,
         completed_by_project=completed_by_project,
         on_call_support=person_cfg.get("on_call_support"),
+        work_by_platform=work_by_platform,
     )
 
 

@@ -46,17 +46,61 @@
           <option value="30" {{ 'selected' if days == 30 else '' }}>30d</option>
         </select>
       </form>
-      {% for project, issues in completed_by_project.items() %}
-      <details>
-        <summary>{{ project }}</summary>
-        {% for issue in issues %}
-        <div class="card">
-          <article>
-            <a href="{{ issue.url }}">{{ issue.title }}</a>
-            <small style="opacity: 0.6">({{ issue.daysCompleted }}d)</small>
-          </article>
-        </div>
+        {% for project, issues in completed_by_project.items() %}
+        <details>
+          <summary>{{ project }}</summary>
+          {% for issue in issues %}
+          <div class="card">
+            <article>
+              <a href="{{ issue.url }}">{{ issue.title }}</a>
+              <small style="opacity: 0.6">({{ issue.daysCompleted }}d)</small>
+            </article>
+          </div>
+          {% endfor %}
+        </details>
         {% endfor %}
-      </details>
-      {% endfor %}
+        <hr />
+        <h2>Work by Platform</h2>
+        <article>
+          <div>
+  <canvas id="platformChart"></canvas>
+  </div>
+  </article>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const ctx = document.getElementById('platformChart');
+
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: [
+        {% for platform in work_by_platform %}
+        '{{ platform }}',
+        {% endfor %}
+      ],
+      datasets: [{
+        label: 'Work by Platform',
+        data: [
+          {% for platform in work_by_platform %}
+          {{ work_by_platform[platform] | length }},
+          {% endfor %}
+        ],
+        borderWidth: 1
+      }]
+    },
+    options: {
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            stepSize: 1,
+          }
+        }
+      }
+    }
+  });
+</script>
 {% endblock %}

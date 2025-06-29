@@ -355,6 +355,11 @@ def get_open_issues_for_person(login: str):
               updatedAt
               createdAt
               project { name }
+              labels {
+                nodes {
+                  name
+                }
+              }
             }
             pageInfo {
               hasNextPage
@@ -376,6 +381,12 @@ def get_open_issues_for_person(login: str):
         cursor = data["issues"]["pageInfo"]["endCursor"]
 
     for issue in issues:
+        platforms = [
+            tag["name"]
+            for tag in issue.get("labels", {}).get("nodes", [])
+            if tag["name"].lower().replace(" ", "-") in get_platforms()
+        ]
+        issue["platform"] = platforms[0] if platforms else None
         issue["daysOpen"] = (
             datetime.utcnow()
             - datetime.strptime(issue["createdAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
@@ -409,6 +420,11 @@ def get_completed_issues_for_person(login: str, days=30):
               url
               completedAt
               project { name }
+              labels {
+                nodes {
+                  name
+                }
+              }
             }
             pageInfo {
               hasNextPage
@@ -429,6 +445,12 @@ def get_completed_issues_for_person(login: str, days=30):
             break
         cursor = data["issues"]["pageInfo"]["endCursor"]
     for issue in issues:
+        platforms = [
+            tag["name"]
+            for tag in issue.get("labels", {}).get("nodes", [])
+            if tag["name"].lower().replace(" ", "-") in get_platforms()
+        ]
+        issue["platform"] = platforms[0] if platforms else None
         issue["daysCompleted"] = (
             datetime.utcnow()
             - datetime.strptime(issue["completedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
