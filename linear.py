@@ -352,6 +352,7 @@ def get_open_issues_for_person(login: str):
               id
               title
               url
+              updatedAt
               createdAt
               project { name }
             }
@@ -379,6 +380,10 @@ def get_open_issues_for_person(login: str):
             datetime.utcnow()
             - datetime.strptime(issue["createdAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
         ).days
+        issue["daysUpdated"] = (
+            datetime.utcnow()
+            - datetime.strptime(issue["updatedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
+        ).days
     return issues
 
 
@@ -402,6 +407,7 @@ def get_completed_issues_for_person(login: str, days=30):
               id
               title
               url
+              completedAt
               project { name }
             }
             pageInfo {
@@ -422,6 +428,11 @@ def get_completed_issues_for_person(login: str, days=30):
         if not data["issues"]["pageInfo"]["hasNextPage"]:
             break
         cursor = data["issues"]["pageInfo"]["endCursor"]
+    for issue in issues:
+        issue["daysCompleted"] = (
+            datetime.utcnow()
+            - datetime.strptime(issue["completedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
+        ).days
     return issues
 
 

@@ -107,12 +107,25 @@ def team_slug(slug):
         abort(404)
     login = person_cfg.get("linear_username", slug)
     person_name = login.replace(".", " ").replace("-", " ").title()
-    open_items = get_open_issues_for_person(login)
-    completed_items = get_completed_issues_for_person(login, days)
+    open_items = sorted(
+        get_open_issues_for_person(login),
+        key=lambda x: x["updatedAt"],
+        reverse=True,
+    )
+    completed_items = sorted(
+        get_completed_issues_for_person(login, days),
+        key=lambda x: x["completedAt"],
+        reverse=True,
+    )
 
     # Group open and completed items by project
     open_by_project = by_project(open_items)
     completed_by_project = by_project(completed_items)
+
+    for issues in open_by_project.values():
+        issues.sort(key=lambda x: x["updatedAt"], reverse=True)
+    for issues in completed_by_project.values():
+        issues.sort(key=lambda x: x["completedAt"], reverse=True)
 
     # Determine current cycle initiative projects
     cycle_initiative = config.get("cycle_initiative")
