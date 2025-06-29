@@ -13,6 +13,7 @@
       <nav>
         <ul>
           <li><a href="{{ url_for('index') }}">Bug Board</a></li>
+          <li><a href="{{ url_for('team') }}">Engineering Teams</a></li>
         </ul>
         {% block header_nav %}{% endblock %}
       </nav>
@@ -20,9 +21,7 @@
     <main class="container">
       {% block content %}{% endblock %}
     </main>
-    <footer class="container">
-      <small><a href="{{ url_for('team') }}">Engineering Teams</a></small>
-    </footer>
+    <footer class="container"></footer>
     {% block extra_scripts %}{% endblock %}
   </body>
 </html>
