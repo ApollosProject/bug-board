@@ -61,6 +61,9 @@ def get_prs(repo_id, pr_states):
                             url
                             closedAt
                             isDraft
+                            author {
+                                login
+                            }
                             reviews(
                                 first: 10,
                                 states: [APPROVED, CHANGES_REQUESTED]
@@ -134,6 +137,58 @@ def prs_by_approver():
                 approver = review["author"]["login"]
                 prs_by_approver.setdefault(approver, []).append(pr)
     return prs_by_approver
+
+
+def get_merged_pr_count_for_user(username: str, days: int = 30) -> int:
+    """Return the number of PRs merged by ``username`` in the last ``days`` days."""
+
+    if not username:
+        return 0
+    since = datetime.utcnow() - timedelta(days=days)
+    repo_ids = get_repo_ids()
+    count = 0
+    for repo_id in repo_ids:
+        prs = get_prs(repo_id, pr_states=["MERGED"])
+        for pr in prs:
+            closed = pr.get("closedAt")
+            author = pr.get("author", {}).get("login")
+            if not closed or author != username:
+                continue
+            if closed.endswith("Z"):
+                closed = closed[:-1]
+            closed_dt = datetime.fromisoformat(closed)
+            if closed_dt >= since:
+                count += 1
+    return count
+
+
+def get_approved_pr_count_for_user(username: str, days: int = 30) -> int:
+    """Return the number of PRs the user approved in the last ``days`` days."""
+
+    if not username:
+        return 0
+    since = datetime.utcnow() - timedelta(days=days)
+    repo_ids = get_repo_ids()
+    count = 0
+    for repo_id in repo_ids:
+        prs = get_prs(repo_id, pr_states=["MERGED"])
+        for pr in prs:
+            closed = pr.get("closedAt")
+            if not closed:
+                continue
+            if closed.endswith("Z"):
+                closed = closed[:-1]
+            closed_dt = datetime.fromisoformat(closed)
+            if closed_dt < since:
+                continue
+            for review in pr.get("reviews", {}).get("nodes", []):
+                if (
+                    review.get("author", {}).get("login") == username
+                    and review.get("state") == "APPROVED"
+                ):
+                    count += 1
+                    break
+    return count
 
 
 def get_prs_waiting_for_review_by_reviewer():

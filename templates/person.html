@@ -5,6 +5,23 @@
 {% block header_nav %}{% endblock %}
 
 {% block content %}
+      <div class="grid">
+        <div>
+          <article>
+            <header>PRs Merged</header>
+            <h1>{{ merged_prs }}</h1>
+          </article>
+        </div>
+        <div>
+          <article>
+            <header>PRs Approved</header>
+            <h1>{{ approved_prs }}</h1>
+          </article>
+        </div>
+      </div>
+      <article>
+        <canvas id="platformChart"></canvas>
+      </article>
       <h2>{{ 'Current Support Work' if on_call_support else 'Current Cycle Work' }}</h2>
       {% if open_current_cycle %}
       {% for project, issues in open_current_cycle.items() %}
@@ -56,4 +73,35 @@
         {% endfor %}
       </details>
       {% endfor %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const ctx = document.getElementById('platformChart');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: [
+        {% for platform in completed_by_platform %}
+        '{{ platform }}',
+        {% endfor %}
+      ],
+      datasets: [{
+        label: 'Completed Issues',
+        data: [
+          {% for platform in completed_by_platform %}
+          {{ completed_by_platform[platform] | length }},
+          {% endfor %}
+        ],
+        borderWidth: 1
+      }]
+    },
+    options: {
+      scales: {
+        y: { beginAtZero: true, ticks: { stepSize: 1 } }
+      }
+    }
+  });
+</script>
 {% endblock %}

@@ -15,12 +15,17 @@ from linear import (
     get_time_data,
     get_projects,
 )
+from github import (
+    get_merged_pr_count_for_user,
+    get_approved_pr_count_for_user,
+)
 
 app = Flask(__name__)
 
-@app.template_filter('first_name')
+
+@app.template_filter("first_name")
 def first_name_filter(name: str) -> str:
-    parts = re.split(r'[.\-\s]+', name)
+    parts = re.split(r"[.\-\s]+", name)
     if parts and parts[0]:
         return parts[0].title()
     return name.title()
@@ -50,9 +55,10 @@ def index():
         + get_open_issues(5, "Technical Change")
     )
     time_data = get_time_data(completed_priority_bugs)
-    fixes_per_day = len(
-        completed_bugs + completed_new_features + completed_technical_changes
-    ) / days
+    fixes_per_day = (
+        len(completed_bugs + completed_new_features + completed_technical_changes)
+        / days
+    )
 
     config_data = load_config()
     username_to_slug = {
@@ -67,17 +73,11 @@ def index():
         issue_count=len(created_priority_bugs),
         priority_percentage=int(
             len(completed_priority_bugs)
-            / len(
-                completed_bugs
-                + completed_new_features
-                + completed_technical_changes
-            )
+            / len(completed_bugs + completed_new_features + completed_technical_changes)
             * 100
         ),
         completed_issues_by_assignee=by_assignee(
-            completed_bugs
-            + completed_new_features
-            + completed_technical_changes
+            completed_bugs + completed_new_features + completed_technical_changes
         ),
         all_issues=created_priority_bugs + open_priority_bugs,
         issues_by_platform=by_platform(created_priority_bugs),
@@ -127,8 +127,12 @@ def team_slug(slug):
         else:
             projects_by_initiative.setdefault("No Initiative", []).append(project)
     # Sort initiatives alphabetically
-    projects_by_initiative = dict(sorted(projects_by_initiative.items(), key=lambda x: x[0]))
-    current_projects = projects_by_initiative.get(cycle_initiative, []) if cycle_initiative else []
+    projects_by_initiative = dict(
+        sorted(projects_by_initiative.items(), key=lambda x: x[0])
+    )
+    current_projects = (
+        projects_by_initiative.get(cycle_initiative, []) if cycle_initiative else []
+    )
     current_names = [proj.get("name") for proj in current_projects]
 
     if person_cfg.get("on_call_support"):
@@ -154,6 +158,11 @@ def team_slug(slug):
             if proj not in current_names
         }
 
+    github_username = person_cfg.get("github_username")
+    merged_prs = get_merged_pr_count_for_user(github_username, days)
+    approved_prs = get_approved_pr_count_for_user(github_username, days)
+    completed_by_platform = by_platform(completed_items)
+
     return render_template(
         "person.html",
         person_slug=slug,
@@ -162,6 +171,9 @@ def team_slug(slug):
         open_current_cycle=open_current_cycle,
         open_other=open_other,
         completed_by_project=completed_by_project,
+        completed_by_platform=completed_by_platform,
+        merged_prs=merged_prs,
+        approved_prs=approved_prs,
         on_call_support=person_cfg.get("on_call_support"),
     )
 
