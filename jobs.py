@@ -219,6 +219,7 @@ def post_stale():
             else:
                 reviewer_slack_markdown = reviewer
             markdown += f"\n{reviewer_slack_markdown}:\n\n"
+            pr_days = []
             for pr in unique_prs:
                 events = [
                     ev for ev in pr.get("timelineItems", {}).get("nodes", [])
@@ -232,6 +233,9 @@ def post_stale():
                     days_waiting = (datetime.now() - dt).days
                 else:
                     days_waiting = 0
+                pr_days.append((days_waiting, pr))
+
+            for days_waiting, pr in sorted(pr_days, key=lambda x: x[0], reverse=True):
                 markdown += f"- <{pr['url']}|{pr['title']}> (+{days_waiting}d)\n"
         markdown += "\n\n"
 
