@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, abort
-import yaml
+
+from config import load_config
 import re
 
 from linear import (
@@ -53,8 +54,7 @@ def index():
         completed_bugs + completed_new_features + completed_technical_changes
     ) / days
 
-    with open("config.yml", "r") as file:
-        config_data = yaml.safe_load(file)
+    config_data = load_config()
     username_to_slug = {
         info.get("linear_username"): slug
         for slug, info in config_data.get("people", {}).items()
@@ -101,8 +101,7 @@ def index():
 def team_slug(slug):
     """Display open and completed work for a team member."""
     days = request.args.get("days", default=30, type=int)
-    with open("config.yml", "r") as file:
-        config = yaml.safe_load(file)
+    config = load_config()
     person_cfg = config.get("people", {}).get(slug)
     if not person_cfg:
         abort(404)
@@ -169,8 +168,7 @@ def team_slug(slug):
 
 @app.route("/team")
 def team():
-    with open("config.yml", "r") as file:
-        config = yaml.safe_load(file)
+    config = load_config()
 
     def format_name(key):
         data = config["people"].get(key, {})
