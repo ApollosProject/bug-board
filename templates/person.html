@@ -2,13 +2,7 @@
 
 {% block title %}{{ person_name|first_name }}{% endblock %}
 
-{% block header_nav %}
-<ul>
-  <li><a href="{{ url_for('team_slug', slug=person_slug, days=7) }}">7d</a></li>
-  <li><a href="{{ url_for('team_slug', slug=person_slug, days=30) }}">30d</a></li>
-  <li><a href="{{ url_for('team_slug', slug=person_slug, days=90) }}">90d</a></li>
-</ul>
-{% endblock %}
+{% block header_nav %}{% endblock %}
 
 {% block content %}
       <h2>{{ 'Current Support Work' if on_call_support else 'Current Cycle Work' }}</h2>
@@ -42,7 +36,14 @@
       </details>
       {% endfor %}
       <hr />
-      <h2>Completed ({{ days }}d)</h2>
+      <h2>Completed</h2>
+      <form method="get" style="display:inline-block; margin-bottom: 0.5em;">
+        <select name="days" onchange="this.form.submit()">
+          <option value="1"  {{ 'selected' if days == 1 else '' }}>1d</option>
+          <option value="7"  {{ 'selected' if days == 7 else '' }}>7d</option>
+          <option value="30" {{ 'selected' if days == 30 else '' }}>30d</option>
+        </select>
+      </form>
       {% for project, issues in completed_by_project.items() %}
       <details>
         <summary>{{ project }}</summary>
