@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+from functools import lru_cache
 
 from dotenv import load_dotenv
 from gql import Client, gql
@@ -10,6 +11,7 @@ from config import get_platforms
 load_dotenv()
 
 
+@lru_cache(maxsize=1)
 def _get_client():
     headers = {"Authorization": os.getenv("LINEAR_API_KEY")}
     transport = AIOHTTPTransport(
