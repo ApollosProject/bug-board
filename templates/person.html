@@ -14,6 +14,7 @@
         <div class="card">
           <article>
             <a href="{{ issue.url }}">{{ issue.title }}</a>
+            <small style="opacity: 0.6">({{ issue.daysUpdated }}d)</small>
           </article>
         </div>
         {% endfor %}
@@ -30,6 +31,7 @@
         <div class="card">
           <article>
             <a href="{{ issue.url }}">{{ issue.title }}</a>
+            <small style="opacity: 0.6">({{ issue.daysUpdated }}d)</small>
           </article>
         </div>
         {% endfor %}
@@ -51,6 +53,7 @@
         <div class="card">
           <article>
             <a href="{{ issue.url }}">{{ issue.title }}</a>
+            <small style="opacity: 0.6">({{ issue.daysCompleted }}d)</small>
           </article>
         </div>
         {% endfor %}
