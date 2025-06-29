@@ -5,7 +5,7 @@ from datetime import datetime
 
 import requests
 import schedule
-import yaml
+from config import load_config
 from dotenv import load_dotenv
 
 from github import (
@@ -49,8 +49,7 @@ def with_retries(func):
 
 
 def get_slack_markdown_by_linear_username(username):
-    with open("config.yml", "r") as file:
-        config = yaml.safe_load(file)
+    config = load_config()
     for person in config["people"]:
         if config["people"][person]["linear_username"] == username:
             return f"<@{config['people'][person]['slack_id']}>"
@@ -59,8 +58,7 @@ def get_slack_markdown_by_linear_username(username):
 
 # @with_retries
 def post_priority_bugs():
-    with open("config.yml", "r") as file:
-        config = yaml.safe_load(file)
+    config = load_config()
     open_priority_bugs = get_open_issues(2, "Bug")
     unassigned = [bug for bug in open_priority_bugs if bug["assignee"] is None]
     at_risk = [
@@ -179,8 +177,7 @@ def post_leaderboard():
 
 # @with_retries
 def post_stale():
-    with open("config.yml", "r") as file:
-        config = yaml.safe_load(file)
+    config = load_config()
     people_by_github_username = {
         person["github_username"]: person
         for person in config["people"].values()
