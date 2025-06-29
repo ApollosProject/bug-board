@@ -11,7 +11,8 @@
 {% endblock %}
 
 {% block content %}
-      <h2>Current Focus</h2>
+      <h2>{{ 'Current Support Work' if on_call_support else 'Current Cycle Work' }}</h2>
+      {% if open_current_cycle %}
       {% for project, issues in open_current_cycle.items() %}
       <details open>
         <summary>{{ project }}</summary>
@@ -24,6 +25,9 @@
         {% endfor %}
       </details>
       {% endfor %}
+      {% else %}
+        <p>(Empty)</p>
+      {% endif %}
       <h2>Other Work</h2>
       {% for project, issues in open_other.items() %}
       <details>

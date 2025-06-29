@@ -163,6 +163,7 @@ def team_slug(slug):
         open_current_cycle=open_current_cycle,
         open_other=open_other,
         completed_by_project=completed_by_project,
+        on_call_support=person_cfg.get("on_call_support"),
     )
 
 
