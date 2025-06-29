@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, abort
+import asyncio
 
 from config import load_config
 import re
@@ -18,41 +19,51 @@ from linear import (
 
 app = Flask(__name__)
 
-@app.template_filter('first_name')
+
+@app.template_filter("first_name")
 def first_name_filter(name: str) -> str:
-    parts = re.split(r'[.\-\s]+', name)
+    parts = re.split(r"[.\-\s]+", name)
     if parts and parts[0]:
         return parts[0].title()
     return name.title()
+
+
+async def _fetch_index_queries(days: int):
+    """Concurrently fetch data needed for the index view."""
+    return await asyncio.gather(
+        asyncio.to_thread(get_created_issues, 2, "Bug", days),
+        asyncio.to_thread(get_open_issues, 2, "Bug"),
+        asyncio.to_thread(get_completed_issues, 2, "Bug", days),
+        asyncio.to_thread(get_completed_issues, 5, "Bug", days),
+        asyncio.to_thread(get_completed_issues, 5, "New Feature", days),
+        asyncio.to_thread(get_completed_issues, 5, "Technical Change", days),
+        asyncio.to_thread(get_open_issues, 5, "Bug"),
+        asyncio.to_thread(get_open_issues, 5, "New Feature"),
+        asyncio.to_thread(get_open_issues, 5, "Technical Change"),
+    )
 
 
 # use a query string parameter for days on the index route
 @app.route("/")
 def index():
     days = request.args.get("days", default=30, type=int)
-    created_priority_bugs = get_created_issues(2, "Bug", days)
-    open_priority_bugs = get_open_issues(2, "Bug")
-    completed_priority_bugs = get_completed_issues(2, "Bug", days)
-    completed_bugs = get_completed_issues(5, "Bug", days)
-    completed_new_features = get_completed_issues(
-        5,
-        "New Feature",
-        days,
-    )
-    completed_technical_changes = get_completed_issues(
-        5,
-        "Technical Change",
-        days,
-    )
-    open_work = (
-        get_open_issues(5, "Bug")
-        + get_open_issues(5, "New Feature")
-        + get_open_issues(5, "Technical Change")
-    )
+    (
+        created_priority_bugs,
+        open_priority_bugs,
+        completed_priority_bugs,
+        completed_bugs,
+        completed_new_features,
+        completed_technical_changes,
+        open_bugs,
+        open_new_features,
+        open_tech_changes,
+    ) = asyncio.run(_fetch_index_queries(days))
+    open_work = open_bugs + open_new_features + open_tech_changes
     time_data = get_time_data(completed_priority_bugs)
-    fixes_per_day = len(
-        completed_bugs + completed_new_features + completed_technical_changes
-    ) / days
+    fixes_per_day = (
+        len(completed_bugs + completed_new_features + completed_technical_changes)
+        / days
+    )
 
     config_data = load_config()
     username_to_slug = {
@@ -67,17 +78,11 @@ def index():
         issue_count=len(created_priority_bugs),
         priority_percentage=int(
             len(completed_priority_bugs)
-            / len(
-                completed_bugs
-                + completed_new_features
-                + completed_technical_changes
-            )
+            / len(completed_bugs + completed_new_features + completed_technical_changes)
             * 100
         ),
         completed_issues_by_assignee=by_assignee(
-            completed_bugs
-            + completed_new_features
-            + completed_technical_changes
+            completed_bugs + completed_new_features + completed_technical_changes
         ),
         all_issues=created_priority_bugs + open_priority_bugs,
         issues_by_platform=by_platform(created_priority_bugs),
@@ -140,8 +145,12 @@ def team_slug(slug):
         else:
             projects_by_initiative.setdefault("No Initiative", []).append(project)
     # Sort initiatives alphabetically
-    projects_by_initiative = dict(sorted(projects_by_initiative.items(), key=lambda x: x[0]))
-    current_projects = projects_by_initiative.get(cycle_initiative, []) if cycle_initiative else []
+    projects_by_initiative = dict(
+        sorted(projects_by_initiative.items(), key=lambda x: x[0])
+    )
+    current_projects = (
+        projects_by_initiative.get(cycle_initiative, []) if cycle_initiative else []
+    )
     current_names = [proj.get("name") for proj in current_projects]
 
     if person_cfg.get("on_call_support"):
