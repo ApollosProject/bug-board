@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timedelta
+from functools import lru_cache
 
 from dotenv import load_dotenv
 from gql import Client, gql
@@ -17,6 +18,7 @@ transport = AIOHTTPTransport(
 client = Client(transport=transport, fetch_schema_from_transport=True)
 
 
+@lru_cache(maxsize=1)
 def get_repo_ids():
     repos = [
         "apollos-platforms",
@@ -174,6 +176,7 @@ def get_prs_waiting_for_review_by_reviewer():
                     stuck_prs[reviewer] = []
                 stuck_prs[reviewer].append(pr)
     return stuck_prs
+
 
 def get_prs_with_changes_requested_by_reviewer():
     """Return open PRs with change requests, grouped by the reviewer who requested changes."""
