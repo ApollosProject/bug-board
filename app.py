@@ -207,8 +207,20 @@ def team():
         ],
         key=lambda d: d["name"],
     )
+
+    platform_membership = {}
+    for slug, info in config.get("platforms", {}).items():
+        team_name = slug.replace("-", " ").title()
+        lead = info.get("lead")
+        platform_membership.setdefault(lead, []).append(team_name)
+        for dev in info.get("developers", []):
+            platform_membership.setdefault(dev, []).append(team_name)
+
     on_call_support = [
-        format_name(name)
+        {
+            "name": format_name(name),
+            "platform_team": sorted(set(platform_membership.get(name, []))),
+        }
         for name, person in config.get("people", {}).items()
         if person.get("on_call_support")
     ]

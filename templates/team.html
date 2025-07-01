@@ -54,8 +54,8 @@
       <hr />
       <h3>On Call Support</h3>
       <p>
-      {%- for name in on_call_support -%}
-        {{ name|first_name }}{% if not loop.last %}, {% endif %}
+      {%- for person in on_call_support -%}
+        {{ person.name|first_name }}{% if person.platform_team %} ({{ person.platform_team | join(', ') }}){% endif %}{% if not loop.last %}, {% endif %}
       {%- endfor -%}
       </p>
       <hr />
