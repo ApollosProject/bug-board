@@ -19,12 +19,25 @@ from linear import (
 
 app = Flask(__name__)
 
+
 @app.template_filter('first_name')
 def first_name_filter(name: str) -> str:
     parts = re.split(r'[.\-\s]+', name)
     if parts and parts[0]:
         return parts[0].title()
     return name.title()
+
+
+@app.template_filter('mmdd')
+def mmdd_filter(date_str: str) -> str:
+    """Format an ISO date string as MM/DD."""
+    if not date_str:
+        return ""
+    try:
+        dt = datetime.fromisoformat(date_str).date()
+        return dt.strftime("%m/%d")
+    except ValueError:
+        return date_str
 
 
 # use a query string parameter for days on the index route
