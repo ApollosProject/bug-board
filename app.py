@@ -225,6 +225,17 @@ def team():
         if person.get("on_call_support")
     ]
     cycle_projects = get_projects()
+    # attach start/target date info and compute days left
+    for proj in cycle_projects:
+        target = proj.get("targetDate")
+        days_left = None
+        if target:
+            try:
+                target_dt = datetime.fromisoformat(target).date()
+                days_left = (target_dt - datetime.utcnow().date()).days
+            except ValueError:
+                pass
+        proj["days_left"] = days_left
 
     # group cycle projects by initiatives
     projects_by_initiative = {}
