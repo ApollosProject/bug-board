@@ -139,15 +139,17 @@ def prs_by_approver():
     return prs_by_approver
 
 
-def merged_prs_by_author(days=30):
-    """Return merged PRs grouped by author within the given timeframe."""
+@lru_cache(maxsize=4)
+def _get_merged_prs(days: int = 30):
+    """Return merged PRs across all repos within the last ``days`` days."""
     cutoff = datetime.utcnow() - timedelta(days=days)
     repo_ids = get_repo_ids()
     all_prs = []
     for repo_id in repo_ids:
         prs = get_prs(repo_id, pr_states=["MERGED"])
         all_prs.extend(prs)
-    prs_by_author = {}
+
+    filtered = []
     for pr in all_prs:
         closed = pr.get("closedAt")
         if not closed:
@@ -156,6 +158,16 @@ def merged_prs_by_author(days=30):
             closed = closed[:-1]
         if datetime.fromisoformat(closed) < cutoff:
             continue
+        filtered.append(pr)
+
+    return filtered
+
+
+def merged_prs_by_author(days: int = 30):
+    """Return merged PRs grouped by author within the given timeframe."""
+    prs = _get_merged_prs(days)
+    prs_by_author = {}
+    for pr in prs:
         author = pr.get("author", {}).get("login")
         if not author:
             continue
@@ -163,23 +175,11 @@ def merged_prs_by_author(days=30):
     return prs_by_author
 
 
-def merged_prs_by_reviewer(days=30):
+def merged_prs_by_reviewer(days: int = 30):
     """Return merged PRs grouped by reviewer within the given timeframe."""
-    cutoff = datetime.utcnow() - timedelta(days=days)
-    repo_ids = get_repo_ids()
-    all_prs = []
-    for repo_id in repo_ids:
-        prs = get_prs(repo_id, pr_states=["MERGED"])
-        all_prs.extend(prs)
+    prs = _get_merged_prs(days)
     prs_by_reviewer = {}
-    for pr in all_prs:
-        closed = pr.get("closedAt")
-        if not closed:
-            continue
-        if closed.endswith("Z"):
-            closed = closed[:-1]
-        if datetime.fromisoformat(closed) < cutoff:
-            continue
+    for pr in prs:
         for review in pr.get("reviews", {}).get("nodes", []):
             if review.get("author") and review.get("state") == "APPROVED":
                 reviewer = review["author"]["login"]
