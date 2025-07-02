@@ -16,6 +16,7 @@ from linear import (
     get_time_data,
     get_projects,
 )
+from github import merged_prs_by_author, merged_prs_by_reviewer
 
 app = Flask(__name__)
 
@@ -193,6 +194,12 @@ def team_slug(slug):
         }
 
     work_by_platform = by_platform(open_items + completed_items)
+    github_username = person_cfg.get("github_username")
+    prs_merged = 0
+    prs_reviewed = 0
+    if github_username:
+        prs_merged = len(merged_prs_by_author(days).get(github_username, []))
+        prs_reviewed = len(merged_prs_by_reviewer(days).get(github_username, []))
 
     return render_template(
         "person.html",
@@ -204,6 +211,8 @@ def team_slug(slug):
         completed_by_project=completed_by_project,
         on_call_support=person_cfg.get("on_call_support"),
         work_by_platform=work_by_platform,
+        prs_merged=prs_merged,
+        prs_reviewed=prs_reviewed,
     )
 
 

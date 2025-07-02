@@ -57,6 +57,9 @@ def get_prs(repo_id, pr_states):
                         orderBy: {field: UPDATED_AT, direction: DESC}
                     ) {
                         nodes {
+                            author {
+                                login
+                            }
                             title
                             url
                             closedAt
@@ -134,6 +137,54 @@ def prs_by_approver():
                 approver = review["author"]["login"]
                 prs_by_approver.setdefault(approver, []).append(pr)
     return prs_by_approver
+
+
+def merged_prs_by_author(days=30):
+    """Return merged PRs grouped by author within the given timeframe."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    repo_ids = get_repo_ids()
+    all_prs = []
+    for repo_id in repo_ids:
+        prs = get_prs(repo_id, pr_states=["MERGED"])
+        all_prs.extend(prs)
+    prs_by_author = {}
+    for pr in all_prs:
+        closed = pr.get("closedAt")
+        if not closed:
+            continue
+        if closed.endswith("Z"):
+            closed = closed[:-1]
+        if datetime.fromisoformat(closed) < cutoff:
+            continue
+        author = pr.get("author", {}).get("login")
+        if not author:
+            continue
+        prs_by_author.setdefault(author, []).append(pr)
+    return prs_by_author
+
+
+def merged_prs_by_reviewer(days=30):
+    """Return merged PRs grouped by reviewer within the given timeframe."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    repo_ids = get_repo_ids()
+    all_prs = []
+    for repo_id in repo_ids:
+        prs = get_prs(repo_id, pr_states=["MERGED"])
+        all_prs.extend(prs)
+    prs_by_reviewer = {}
+    for pr in all_prs:
+        closed = pr.get("closedAt")
+        if not closed:
+            continue
+        if closed.endswith("Z"):
+            closed = closed[:-1]
+        if datetime.fromisoformat(closed) < cutoff:
+            continue
+        for review in pr.get("reviews", {}).get("nodes", []):
+            if review.get("author") and review.get("state") == "APPROVED":
+                reviewer = review["author"]["login"]
+                prs_by_reviewer.setdefault(reviewer, []).append(pr)
+    return prs_by_reviewer
 
 
 def get_prs_waiting_for_review_by_reviewer():

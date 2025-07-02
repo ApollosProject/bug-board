@@ -48,6 +48,20 @@
           <option value="30" {{ 'selected' if days == 30 else '' }}>30d</option>
         </select>
       </form>
+      <div class="grid">
+        <div>
+          <article>
+            <header>PRs Merged</header>
+            <h1>{{ prs_merged }}</h1>
+          </article>
+        </div>
+        <div>
+          <article>
+            <header>PRs Reviewed</header>
+            <h1>{{ prs_reviewed }}</h1>
+          </article>
+        </div>
+      </div>
         {% for project, issues in completed_by_project.items() %}
         <details>
           <summary>{{ project }}</summary>
