@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, abort
 
 from config import load_config
 import re
+from datetime import datetime
 
 from linear import (
     by_assignee,
@@ -130,6 +131,17 @@ def team_slug(slug):
     # Determine current cycle initiative projects
     cycle_initiative = config.get("cycle_initiative")
     cycle_projects = get_projects()
+    # attach start/target date info and compute days left
+    for proj in cycle_projects:
+        target = proj.get("targetDate")
+        days_left = None
+        if target:
+            try:
+                target_dt = datetime.fromisoformat(target).date()
+                days_left = (target_dt - datetime.utcnow().date()).days
+            except ValueError:
+                pass
+        proj["days_left"] = days_left
     projects_by_initiative = {}
     for project in cycle_projects:
         nodes = project.get("initiatives", {}).get("nodes", [])
@@ -213,6 +225,17 @@ def team():
         if person.get("on_call_support")
     ]
     cycle_projects = get_projects()
+    # attach start/target date info and compute days left
+    for proj in cycle_projects:
+        target = proj.get("targetDate")
+        days_left = None
+        if target:
+            try:
+                target_dt = datetime.fromisoformat(target).date()
+                days_left = (target_dt - datetime.utcnow().date()).days
+            except ValueError:
+                pass
+        proj["days_left"] = days_left
 
     # group cycle projects by initiatives
     projects_by_initiative = {}

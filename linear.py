@@ -485,7 +485,8 @@ def get_projects():
                   name
                   url
                   health
-                  progress
+                  startDate
+                  targetDate
                   lead {
                     displayName
                   }
