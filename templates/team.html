@@ -12,15 +12,15 @@
       <h2>Engineering Teams</h2>
       <h3>Platforms</h3>
       <ul>
-      {% for platform, members in platform_teams|dictsort %}
-        <li>
-          {{ platform.replace('-', ' ').title() }}:
-          {% for member in members %}
-            {{ member.name|first_name }}{% if member.lead %} (Lead){% endif %}{% if not loop.last %}, {% endif %}
-          {% endfor %}
-        </li>
-      {% endfor %}
-      </ul>
+        {% for platform, members in platform_teams|dictsort %}
+          <li>
+            {{ platform.replace('-', ' ').title() }}:
+            {% for member in members %}
+              {{ member.name|first_name }}{% if member.lead %}*{% endif %}{% if not loop.last %}, {% endif %}
+            {% endfor %}
+          </li>
+        {% endfor %}
+        </ul>
       <h3>Cycle Projects</h3>
       <ul>
       {% for initiative, projects in cycle_projects_by_initiative.items() %}
