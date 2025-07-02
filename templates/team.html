@@ -36,14 +36,12 @@
               {% endif %}
               <span class="health-icon" title="{{ project.health }}">{{ icon }}</span>
             {% endif %}
-            <a href="{{ project.url }}">{{ project.name }}{% if project.progress is not none %} ({{ (project.progress * 100) | round(0) | int }}%){% endif %}</a>
+            <a href="{{ project.url }}">{{ project.name }}</a>
             {% if project.startDate or project.targetDate %}
               <small>
-                {% if project.startDate %}{{ project.startDate }}{% endif %}
-                {% if project.targetDate %} → {{ project.targetDate }}{% endif %}
-                {% if project.days_left is not none %} ({{ project.days_left }}d left){% endif %}
+                {% if project.startDate %}{{ project.startDate }}{% endif %}{% if project.targetDate %}→{{ project.targetDate }}{% endif %}{% if project.days_left is not none %} ({{ project.days_left }}d left){% endif %}
               </small>
-            {% endif %}:
+            {% endif %} | 
             {% set members = project.members %}
             {% if project.lead %}
               {% set members = members | reject("equalto", project.lead.displayName) | list %}
@@ -52,7 +50,7 @@
               {% set team_members = members %}
             {% endif %}
             {% for member in team_members %}
-              {{ member|first_name }}{% if project.lead and loop.first %} (Lead){% endif %}{% if not loop.last %}, {% endif %}
+              {{ member|first_name }}{% if project.lead and loop.first %}*{% endif %}{% if not loop.last %}, {% endif %}
             {% endfor %}
           </li>
         {% endfor %}
