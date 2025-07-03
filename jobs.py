@@ -301,7 +301,7 @@ else:
     schedule.every(1).days.at("12:00").do(post_priority_bugs)
     schedule.every().friday.at("20:00").do(post_leaderboard)
     schedule.every(1).days.at("14:00").do(post_stale)
-    schedule.every().wednesday.at("12:00").do(post_upcoming_projects)
+    schedule.every().thursday.at("12:00").do(post_upcoming_projects)
 
     while True:
         schedule.run_pending()
