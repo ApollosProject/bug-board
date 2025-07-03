@@ -148,14 +148,23 @@ def team_slug(slug):
     # attach start/target date info and compute days left
     for proj in cycle_projects:
         target = proj.get("targetDate")
+        start = proj.get("startDate")
         days_left = None
+        starts_in = None
         if target:
             try:
                 target_dt = datetime.fromisoformat(target).date()
                 days_left = (target_dt - datetime.utcnow().date()).days
             except ValueError:
                 pass
+        if start:
+            try:
+                start_dt = datetime.fromisoformat(start).date()
+                starts_in = (start_dt - datetime.utcnow().date()).days
+            except ValueError:
+                pass
         proj["days_left"] = days_left
+        proj["starts_in"] = starts_in
     projects_by_initiative = {}
     for project in cycle_projects:
         nodes = project.get("initiatives", {}).get("nodes", [])
@@ -250,14 +259,23 @@ def team():
     # attach start/target date info and compute days left
     for proj in cycle_projects:
         target = proj.get("targetDate")
+        start = proj.get("startDate")
         days_left = None
+        starts_in = None
         if target:
             try:
                 target_dt = datetime.fromisoformat(target).date()
                 days_left = (target_dt - datetime.utcnow().date()).days
             except ValueError:
                 pass
+        if start:
+            try:
+                start_dt = datetime.fromisoformat(start).date()
+                starts_in = (start_dt - datetime.utcnow().date()).days
+            except ValueError:
+                pass
         proj["days_left"] = days_left
+        proj["starts_in"] = starts_in
 
     # group cycle projects by initiatives
     projects_by_initiative = {}
