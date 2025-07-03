@@ -16,6 +16,7 @@ from linear import (
     get_completed_issues,
     get_open_issues,
     get_stale_issues_by_assignee,
+    get_projects,
 )
 
 load_dotenv()
@@ -260,14 +261,47 @@ def post_stale():
     requests.post(url, json={"text": markdown})
 
 
+# @with_retries
+def post_upcoming_projects():
+    """Notify leads about projects starting on Monday."""
+    projects = get_projects()
+    upcoming = []
+    today = datetime.utcnow().date()
+    for project in projects:
+        start = project.get("startDate")
+        if not start:
+            continue
+        try:
+            start_dt = datetime.fromisoformat(start).date()
+        except ValueError:
+            continue
+        days_until = (start_dt - today).days
+        if start_dt.weekday() == 0 and 0 <= days_until <= 5:
+            lead = project.get("lead", {}).get("displayName")
+            lead_md = (
+                get_slack_markdown_by_linear_username(lead)
+                if lead
+                else "No Lead"
+            )
+            upcoming.append(
+                f"- <{project['url']}|{project['name']}> - Lead: {lead_md}"
+            )
+    if upcoming:
+        markdown = "*Projects Starting Monday*\n\n" + "\n".join(upcoming)
+        url = os.getenv("SLACK_WEBHOOK_URL")
+        requests.post(url, json={"text": markdown})
+
+
 if os.getenv("DEBUG") == "true":
     post_priority_bugs()
     post_leaderboard()
     post_stale()
+    post_upcoming_projects()
 else:
     schedule.every(1).days.at("12:00").do(post_priority_bugs)
     schedule.every().friday.at("20:00").do(post_leaderboard)
     schedule.every(1).days.at("14:00").do(post_stale)
+    schedule.every().wednesday.at("12:00").do(post_upcoming_projects)
 
     while True:
         schedule.run_pending()
