@@ -5,9 +5,9 @@ from datetime import datetime
 
 import requests
 import schedule
-from config import load_config
 from dotenv import load_dotenv
 
+from config import load_config
 from github import (
     get_prs_waiting_for_review_by_reviewer,
     get_prs_with_changes_requested_by_reviewer,
@@ -15,8 +15,8 @@ from github import (
 from linear import (
     get_completed_issues,
     get_open_issues,
-    get_stale_issues_by_assignee,
     get_projects,
+    get_stale_issues_by_assignee,
 )
 
 load_dotenv()
@@ -57,7 +57,7 @@ def get_slack_markdown_by_linear_username(username):
     return "No Assignee"
 
 
-# @with_retries
+@with_retries
 def post_priority_bugs():
     config = load_config()
     open_priority_bugs = get_open_issues(2, "Bug")
@@ -88,11 +88,7 @@ def post_priority_bugs():
             for bug in open_priority_bugs
             if bug["assignee"]
         }
-        platforms = {
-            bug["platform"]
-            for bug in unassigned
-            if bug["platform"]
-        }
+        platforms = {bug["platform"] for bug in unassigned if bug["platform"]}
         notified = set()
         for platform in platforms:
             platform_slug = platform.lower().replace(" ", "-")
@@ -101,9 +97,8 @@ def post_priority_bugs():
             notified.add(f"<@{lead_info['slack_id']}> ({platform} Lead)")
             for developer in config["platforms"][platform_slug]["developers"]:
                 person = config["people"][developer]
-                if (
-                    person["linear_username"] not in assigned
-                    and person.get("on_call_support", False)
+                if person["linear_username"] not in assigned and person.get(
+                    "on_call_support", False
                 ):
                     notified.add(f"<@{person['slack_id']}>")
         if notified:
@@ -141,7 +136,7 @@ def post_priority_bugs():
         requests.post(url, json={"text": markdown})
 
 
-# @with_retries
+@with_retries
 def post_leaderboard():
     items = (
         get_completed_issues(5, "Bug", 7)
@@ -159,9 +154,7 @@ def post_leaderboard():
             leaderboard[assignee_name] = 0
         score = priority_to_score.get(item["priority"], 0)
         leaderboard[assignee_name] += score
-    leaderboard = dict(
-        sorted(leaderboard.items(), key=lambda x: x[1], reverse=True)
-    )
+    leaderboard = dict(sorted(leaderboard.items(), key=lambda x: x[1], reverse=True))
     medals = ["🥇", "🥈", "🥉"]
     markdown = "*Weekly Leaderboard*\n\n"
     for i, (assignee, score) in enumerate(leaderboard.items()):
@@ -176,12 +169,11 @@ def post_leaderboard():
     requests.post(url, json={"text": markdown})
 
 
-# @with_retries
+@with_retries
 def post_stale():
     config = load_config()
     people_by_github_username = {
-        person["github_username"]: person
-        for person in config["people"].values()
+        person["github_username"]: person for person in config["people"].values()
     }
     prs = get_prs_waiting_for_review_by_reviewer()
     cr_prs = get_prs_with_changes_requested_by_reviewer()
@@ -223,7 +215,8 @@ def post_stale():
             pr_days = []
             for pr in unique_prs:
                 events = [
-                    ev for ev in pr.get("timelineItems", {}).get("nodes", [])
+                    ev
+                    for ev in pr.get("timelineItems", {}).get("nodes", [])
                     if ev.get("requestedReviewer", {}).get("login") == reviewer
                 ]
                 if events:
@@ -245,14 +238,11 @@ def post_stale():
         for assignee, issues in stale_issues.items():
             if not issues:
                 continue
-            assignee_slack_markdown = get_slack_markdown_by_linear_username(
-                assignee
-            )
+            assignee_slack_markdown = get_slack_markdown_by_linear_username(assignee)
             markdown += f"\n{assignee_slack_markdown}:\n\n"
             for issue in issues:
                 markdown += (
-                    f"- <{issue['url']}|{issue['title']}>"
-                    f" ({issue['daysStale']}d)\n"
+                    f"- <{issue['url']}|{issue['title']}>" f" ({issue['daysStale']}d)\n"
                 )
         markdown += "\n\n"
     markdown += f"<{os.getenv('APP_URL')}|View Bug Board>"
@@ -261,7 +251,7 @@ def post_stale():
     requests.post(url, json={"text": markdown})
 
 
-# @with_retries
+@with_retries
 def post_upcoming_projects():
     """Notify leads about projects starting on Monday."""
     projects = get_projects()
@@ -278,20 +268,15 @@ def post_upcoming_projects():
         days_until = (start_dt - today).days
         if start_dt.weekday() == 0 and 0 <= days_until <= 5:
             lead = project.get("lead", {}).get("displayName")
-            lead_md = (
-                get_slack_markdown_by_linear_username(lead)
-                if lead
-                else "No Lead"
-            )
-            upcoming.append(
-                f"- <{project['url']}|{project['name']}> - Lead: {lead_md}"
-            )
+            lead_md = get_slack_markdown_by_linear_username(lead) if lead else "No Lead"
+            upcoming.append(f"- <{project['url']}|{project['name']}> - Lead: {lead_md}")
     if upcoming:
         markdown = "*Projects Starting Monday*\n\n" + "\n".join(upcoming)
         url = os.getenv("SLACK_WEBHOOK_URL")
         requests.post(url, json={"text": markdown})
 
 
+@with_retries
 def post_friday_deadlines():
     """Notify leads about projects ending on Friday."""
     projects = get_projects()
@@ -308,14 +293,8 @@ def post_friday_deadlines():
         days_until = (target_dt - today).days
         if target_dt.weekday() == 4 and 0 <= days_until <= 5:
             lead = project.get("lead", {}).get("displayName")
-            lead_md = (
-                get_slack_markdown_by_linear_username(lead)
-                if lead
-                else "No Lead"
-            )
-            upcoming.append(
-                f"- <{project['url']}|{project['name']}> - Lead: {lead_md}"
-            )
+            lead_md = get_slack_markdown_by_linear_username(lead) if lead else "No Lead"
+            upcoming.append(f"- <{project['url']}|{project['name']}> - Lead: {lead_md}")
     if upcoming:
         markdown = "*Projects Due Friday*\n\n" + "\n".join(upcoming)
         url = os.getenv("SLACK_WEBHOOK_URL")
