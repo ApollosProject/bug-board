@@ -292,16 +292,48 @@ def post_upcoming_projects():
         requests.post(url, json={"text": markdown})
 
 
+def post_friday_deadlines():
+    """Notify leads about projects ending on Friday."""
+    projects = get_projects()
+    upcoming = []
+    today = datetime.utcnow().date()
+    for project in projects:
+        target = project.get("targetDate")
+        if not target:
+            continue
+        try:
+            target_dt = datetime.fromisoformat(target).date()
+        except ValueError:
+            continue
+        days_until = (target_dt - today).days
+        if target_dt.weekday() == 4 and 0 <= days_until <= 5:
+            lead = project.get("lead", {}).get("displayName")
+            lead_md = (
+                get_slack_markdown_by_linear_username(lead)
+                if lead
+                else "No Lead"
+            )
+            upcoming.append(
+                f"- <{project['url']}|{project['name']}> - Lead: {lead_md}"
+            )
+    if upcoming:
+        markdown = "*Projects Due Friday*\n\n" + "\n".join(upcoming)
+        url = os.getenv("SLACK_WEBHOOK_URL")
+        requests.post(url, json={"text": markdown})
+
+
 if os.getenv("DEBUG") == "true":
     post_priority_bugs()
     post_leaderboard()
     post_stale()
     post_upcoming_projects()
+    post_friday_deadlines()
 else:
     schedule.every(1).days.at("12:00").do(post_priority_bugs)
     schedule.every().friday.at("20:00").do(post_leaderboard)
     schedule.every(1).days.at("14:00").do(post_stale)
     schedule.every().thursday.at("12:00").do(post_upcoming_projects)
+    schedule.every().monday.at("12:00").do(post_friday_deadlines)
 
     while True:
         schedule.run_pending()
