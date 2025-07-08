@@ -250,12 +250,20 @@ def team():
         ],
         key=lambda d: d["name"],
     )
-    on_call_support = [
-        format_name(name)
-        for name, person in config.get("people", {}).items()
-        if person.get("on_call_support")
-    ]
+
+    open_priority_bugs = get_open_issues(2, "Bug")
+    bugs_by_assignee = by_assignee(open_priority_bugs)
+
     cycle_projects = get_projects()
+    current_init = config.get("cycle_initiative")
+    cycle_project_names = []
+    for project in cycle_projects:
+        nodes = project.get("initiatives", {}).get("nodes", [])
+        if current_init:
+            if any(init.get("name") == current_init for init in nodes):
+                cycle_project_names.append(project.get("name"))
+        else:
+            cycle_project_names.append(project.get("name"))
     # attach start/target date info and compute days left
     for proj in cycle_projects:
         target = proj.get("targetDate")
@@ -292,7 +300,6 @@ def team():
         sorted(projects_by_initiative.items(), key=lambda x: x[0])
     )
     # filter to only the cycle initiative (from config.yml)
-    current_init = config.get("cycle_initiative")
     if current_init:
         projects_by_initiative = {
             name: projects
@@ -300,12 +307,28 @@ def team():
             if name == current_init
         }
 
+    current_focus = []
+    for dev in developers:
+        login = config["people"].get(dev["slug"], {}).get("linear_username", dev["slug"])
+        open_items = get_open_issues_for_person(login)
+        by_proj = by_project(open_items)
+        cycle_for_dev = [proj for proj in by_proj if proj in cycle_project_names]
+        support_raw = bugs_by_assignee.get(dev["name"], {}).get("issues", [])
+        support_list = [{"title": i["title"], "url": i["url"]} for i in support_raw]
+        current_focus.append(
+            {
+                "slug": dev["slug"],
+                "name": dev["name"],
+                "cycle": cycle_for_dev,
+                "support": support_list,
+            }
+        )
+
     return render_template(
         "team.html",
         platform_teams=platform_teams,
-        developers=developers,
         cycle_projects_by_initiative=projects_by_initiative,
-        on_call_support=on_call_support,
+        current_focus=current_focus,
     )
 
 
