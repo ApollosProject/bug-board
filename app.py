@@ -257,6 +257,7 @@ def team():
     cycle_projects = get_projects()
     current_init = config.get("cycle_initiative")
     cycle_project_names = []
+    project_url_map = {}
     for project in cycle_projects:
         nodes = project.get("initiatives", {}).get("nodes", [])
         if current_init:
@@ -264,6 +265,7 @@ def team():
                 cycle_project_names.append(project.get("name"))
         else:
             cycle_project_names.append(project.get("name"))
+        project_url_map[project.get("name")] = project.get("url")
     # attach start/target date info and compute days left
     for proj in cycle_projects:
         target = proj.get("targetDate")
@@ -312,7 +314,11 @@ def team():
         login = config["people"].get(dev["slug"], {}).get("linear_username", dev["slug"])
         open_items = get_open_issues_for_person(login)
         by_proj = by_project(open_items)
-        cycle_for_dev = [proj for proj in by_proj if proj in cycle_project_names]
+        cycle_for_dev = [
+            {"name": proj, "url": project_url_map.get(proj)}
+            for proj in by_proj
+            if proj in cycle_project_names
+        ]
         support_raw = bugs_by_assignee.get(dev["name"], {}).get("issues", [])
         support_list = [{"title": i["title"], "url": i["url"]} for i in support_raw]
         current_focus.append(
