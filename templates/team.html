@@ -67,30 +67,34 @@
       </ul>
       <hr />
       <h3>Current Focus</h3>
-      <h4>Cycle</h4>
-      <ul>
-      {% for dev in cycle_focus %}
-        <li>
-          <a href="{{ url_for('team_slug', slug=dev.slug) }}">{{ dev.name|first_name }}</a>:
-          {% if dev.cycle %}
-            {% for project in dev.cycle %}
-              <a href="{{ project.url }}">{{ project.name }}</a>{% if not loop.last %}, {% endif %}
-            {% endfor %}
-          {% else %}None{% endif %}
-        </li>
-      {% endfor %}
-      </ul>
-      <h4>Support</h4>
-      <ul>
-      {% for dev in support_focus %}
-        <li>
-          <a href="{{ url_for('team_slug', slug=dev.slug) }}">{{ dev.name|first_name }}</a>:
-          {% if dev.support %}
-            {% for bug in dev.support %}
-              <a href="{{ bug.url }}">{{ bug.title }}</a>{% if not loop.last %}, {% endif %}
-            {% endfor %}
-          {% else %}None{% endif %}
-        </li>
-      {% endfor %}
-      </ul>
+      <table>
+        <thead>
+          <tr>
+            <th>Developer</th>
+            <th>Cycle</th>
+            <th>Support</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for dev in current_focus %}
+          <tr>
+            <td><a href="{{ url_for('team_slug', slug=dev.slug) }}">{{ dev.name|first_name }}</a></td>
+            <td>
+              {% if dev.cycle %}
+                {% for project in dev.cycle %}
+                  <a href="{{ project.url }}">{{ project.name }}</a>{% if not loop.last %}, {% endif %}
+                {% endfor %}
+              {% else %}None{% endif %}
+            </td>
+            <td>
+              {% if dev.support %}
+                {% for bug in dev.support %}
+                  <a href="{{ bug.url }}">{{ bug.title }}</a>{% if not loop.last %}, {% endif %}
+                {% endfor %}
+              {% else %}None{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
 {% endblock %}

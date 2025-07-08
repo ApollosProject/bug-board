@@ -317,14 +317,21 @@ def team():
             if name == current_init
         }
 
-    cycle_focus = []
-    support_focus = []
+    current_focus = []
 
-    name_to_slug = {format_name(slug): slug for slug in config.get("people", {})}
+    name_to_slug = {}
+    for slug in config.get("people", {}):
+        display_name = format_name(slug)
+        name_to_slug[display_name] = slug
+        first = display_name.split()[0]
+        name_to_slug[first] = slug
+
     cycle_by_member = {}
     for project in cycle_projects_filtered:
         for member_name in project.get("members", []):
             slug = name_to_slug.get(member_name)
+            if not slug:
+                slug = name_to_slug.get(member_name.split()[0])
             if not slug:
                 continue
             cycle_by_member.setdefault(slug, []).append(
@@ -334,35 +341,27 @@ def team():
     for dev in developers:
         login = config["people"].get(dev["slug"], {}).get("linear_username", dev["slug"])
         cycle_for_dev = cycle_by_member.get(dev["slug"], [])
-        if cycle_for_dev:
-            cycle_focus.append(
-                {
-                    "slug": dev["slug"],
-                    "name": dev["name"],
-                    "cycle": cycle_for_dev,
-                }
-            )
-
+        support_for_dev = []
         if config["people"].get(dev["slug"], {}).get("on_call_support"):
             support_raw = bugs_by_login.get(login, [])
-            support_list = [
+            support_for_dev = [
                 {"title": i["title"], "url": i["url"]}
                 for i in support_raw
             ]
-            support_focus.append(
-                {
-                    "slug": dev["slug"],
-                    "name": dev["name"],
-                    "support": support_list,
-                }
-            )
+        current_focus.append(
+            {
+                "slug": dev["slug"],
+                "name": dev["name"],
+                "cycle": cycle_for_dev,
+                "support": support_for_dev,
+            }
+        )
 
     return render_template(
         "team.html",
         platform_teams=platform_teams,
         cycle_projects_by_initiative=projects_by_initiative,
-        cycle_focus=cycle_focus,
-        support_focus=support_focus,
+        current_focus=current_focus,
     )
 
 
