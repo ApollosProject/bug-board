@@ -352,6 +352,7 @@ def get_open_issues_for_person(login: str):
               id
               title
               url
+              priority
               updatedAt
               createdAt
               project { name }

@@ -250,11 +250,27 @@ def team():
         ],
         key=lambda d: d["name"],
     )
-    on_call_support = [
-        format_name(name)
-        for name, person in config.get("people", {}).items()
-        if person.get("on_call_support")
-    ]
+    username_to_slug = {
+        info.get("linear_username"): slug
+        for slug, info in config.get("people", {}).items()
+    }
+    open_support_bugs = get_open_issues(2, "Bug")
+    support_dict = {}
+    for slug, person in config.get("people", {}).items():
+        if not person.get("on_call_support"):
+            continue
+        support_dict[slug] = {
+            "name": format_name(slug),
+            "issues": [],
+        }
+    for issue in open_support_bugs:
+        assignee = issue.get("assignee")
+        if not assignee:
+            continue
+        slug = username_to_slug.get(assignee.get("name"))
+        if slug in support_dict:
+            support_dict[slug]["issues"].append(issue)
+    on_call_support = list(support_dict.values())
     cycle_projects = get_projects()
     # attach start/target date info and compute days left
     for proj in cycle_projects:

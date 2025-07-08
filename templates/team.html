@@ -67,11 +67,19 @@
       </ul>
       <hr />
       <h3>On Call Support</h3>
-      <p>
-      {%- for name in on_call_support -%}
-        {{ name|first_name }}{% if not loop.last %}, {% endif %}
-      {%- endfor -%}
-      </p>
+      <ul>
+      {% for member in on_call_support %}
+        <li>
+          {{ member.name|first_name }}
+          {% if member.issues %}
+            -
+            {% for issue in member.issues %}
+              <a href="{{ issue.url }}">{{ issue.title }}</a>{% if not loop.last %}, {% endif %}
+            {% endfor %}
+          {% endif %}
+        </li>
+      {% endfor %}
+      </ul>
       <hr />
       <h3>Everyone</h3>
       <p>
