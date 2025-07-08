@@ -252,7 +252,15 @@ def team():
     )
 
     open_priority_bugs = get_open_issues(2, "Bug")
-    bugs_by_assignee = by_assignee(open_priority_bugs)
+    bugs_by_login = {}
+    for bug in open_priority_bugs:
+        assignee = bug.get("assignee")
+        if not assignee:
+            continue
+        login = assignee.get("name")
+        if not login:
+            continue
+        bugs_by_login.setdefault(login, []).append(bug)
 
     cycle_projects = get_projects()
     current_init = config.get("cycle_initiative")
@@ -309,7 +317,8 @@ def team():
             if name == current_init
         }
 
-    current_focus = []
+    cycle_focus = []
+    support_focus = []
     for dev in developers:
         login = config["people"].get(dev["slug"], {}).get("linear_username", dev["slug"])
         open_items = get_open_issues_for_person(login)
@@ -319,22 +328,35 @@ def team():
             for proj in by_proj
             if proj in cycle_project_names
         ]
-        support_raw = bugs_by_assignee.get(dev["name"], {}).get("issues", [])
-        support_list = [{"title": i["title"], "url": i["url"]} for i in support_raw]
-        current_focus.append(
-            {
-                "slug": dev["slug"],
-                "name": dev["name"],
-                "cycle": cycle_for_dev,
-                "support": support_list,
-            }
-        )
+        if cycle_for_dev:
+            cycle_focus.append(
+                {
+                    "slug": dev["slug"],
+                    "name": dev["name"],
+                    "cycle": cycle_for_dev,
+                }
+            )
+
+        if config["people"].get(dev["slug"], {}).get("on_call_support"):
+            support_raw = bugs_by_login.get(login, [])
+            support_list = [
+                {"title": i["title"], "url": i["url"]}
+                for i in support_raw
+            ]
+            support_focus.append(
+                {
+                    "slug": dev["slug"],
+                    "name": dev["name"],
+                    "support": support_list,
+                }
+            )
 
     return render_template(
         "team.html",
         platform_teams=platform_teams,
         cycle_projects_by_initiative=projects_by_initiative,
-        current_focus=current_focus,
+        cycle_focus=cycle_focus,
+        support_focus=support_focus,
     )
 
 

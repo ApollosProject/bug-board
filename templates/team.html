@@ -69,7 +69,7 @@
       <h3>Current Focus</h3>
       <h4>Cycle</h4>
       <ul>
-      {% for dev in current_focus %}
+      {% for dev in cycle_focus %}
         <li>
           <a href="{{ url_for('team_slug', slug=dev.slug) }}">{{ dev.name|first_name }}</a>:
           {% if dev.cycle %}
@@ -82,7 +82,7 @@
       </ul>
       <h4>Support</h4>
       <ul>
-      {% for dev in current_focus %}
+      {% for dev in support_focus %}
         <li>
           <a href="{{ url_for('team_slug', slug=dev.slug) }}">{{ dev.name|first_name }}</a>:
           {% if dev.support %}
