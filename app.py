@@ -264,15 +264,15 @@ def team():
 
     cycle_projects = get_projects()
     current_init = config.get("cycle_initiative")
-    cycle_project_names = []
     project_url_map = {}
+    cycle_projects_filtered = []
     for project in cycle_projects:
         nodes = project.get("initiatives", {}).get("nodes", [])
         if current_init:
             if any(init.get("name") == current_init for init in nodes):
-                cycle_project_names.append(project.get("name"))
+                cycle_projects_filtered.append(project)
         else:
-            cycle_project_names.append(project.get("name"))
+            cycle_projects_filtered.append(project)
         project_url_map[project.get("name")] = project.get("url")
     # attach start/target date info and compute days left
     for proj in cycle_projects:
@@ -319,15 +319,21 @@ def team():
 
     cycle_focus = []
     support_focus = []
+
+    name_to_slug = {format_name(slug): slug for slug in config.get("people", {})}
+    cycle_by_member = {}
+    for project in cycle_projects_filtered:
+        for member_name in project.get("members", []):
+            slug = name_to_slug.get(member_name)
+            if not slug:
+                continue
+            cycle_by_member.setdefault(slug, []).append(
+                {"name": project.get("name"), "url": project.get("url")}
+            )
+
     for dev in developers:
         login = config["people"].get(dev["slug"], {}).get("linear_username", dev["slug"])
-        open_items = get_open_issues_for_person(login)
-        by_proj = by_project(open_items)
-        cycle_for_dev = [
-            {"name": proj, "url": project_url_map.get(proj)}
-            for proj in by_proj
-            if proj in cycle_project_names
-        ]
+        cycle_for_dev = cycle_by_member.get(dev["slug"], [])
         if cycle_for_dev:
             cycle_focus.append(
                 {
