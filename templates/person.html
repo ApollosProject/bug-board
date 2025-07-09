@@ -116,7 +116,6 @@
         {% endfor %}
       ],
       datasets: [{
-        label: 'Work by Platform',
         data: [
           {% for platform in work_by_platform %}
           {{ work_by_platform[platform] | length }},
