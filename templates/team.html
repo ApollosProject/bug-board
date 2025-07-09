@@ -14,7 +14,7 @@
       <ul>
         {% for platform, members in platform_teams|dictsort %}
           <li>
-            {{ platform.replace('-', ' ').title() }}:
+            {{ platform.replace('-', ' ').title() }}&ndash;
             {% for member in members %}
               {{ member.name|first_name }}{% if member.lead %}*{% endif %}{% if not loop.last %}, {% endif %}
             {% endfor %}
@@ -50,7 +50,7 @@
                   {% endif %}
                 {% endif %}
               </small>
-            {% endif %} |
+            {% endif %} &ndash;
             {% set members = project.members %}
             {% if project.lead %}
               {% set members = members | reject("equalto", project.lead.displayName) | list %}
