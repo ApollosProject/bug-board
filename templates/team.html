@@ -67,11 +67,11 @@
       </ul>
       <hr />
       <h3>On Call Support</h3>
-      <p>
+      <ul>
       {%- for name in on_call_support -%}
-        {{ name|first_name }}{% if not loop.last %}, {% endif %}
+        <li>{{ name|first_name }}</li>
       {%- endfor -%}
-      </p>
+      </ul>
       <hr />
       <h3>Everyone</h3>
       <p>
