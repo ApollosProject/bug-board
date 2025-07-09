@@ -317,7 +317,7 @@ def team():
 
     cycle_member_slugs = set()
     for project in cycle_projects_filtered:
-        lead = project.get("lead", {}).get("displayName")
+        lead = (project.get("lead") or {}).get("displayName")
         if lead and lead in name_to_slug:
             cycle_member_slugs.add(name_to_slug[lead])
         for member in project.get("members", []):
