@@ -269,11 +269,13 @@ def team():
         ],
         key=lambda d: d["name"],
     )
-    on_call_support = [
-        format_name(name)
-        for name, person in config.get("people", {}).items()
-        if person.get("on_call_support")
-    ]
+    on_call_support = sorted(
+        [
+            format_name(name)
+            for name, person in config.get("people", {}).items()
+            if person.get("on_call_support")
+        ]
+    )
     cycle_projects = get_projects()
     # attach start/target date info and compute days left
     for proj in cycle_projects:
