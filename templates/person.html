@@ -116,7 +116,7 @@
         {% endfor %}
       ],
       datasets: [{
-        label: 'Work by Platform',
+        label: '',
         data: [
           {% for platform in work_by_platform %}
           {{ work_by_platform[platform] | length }},
@@ -126,6 +126,11 @@
       }]
     },
     options: {
+      plugins: {
+        legend: {
+          display: false
+        }
+      },
       scales: {
         y: {
           beginAtZero: true,
