@@ -325,20 +325,31 @@ def team():
         name_to_slug.setdefault(first, slug)
 
     cycle_member_slugs = set()
+    member_projects = {}
     for project in cycle_projects_filtered:
         lead = (project.get("lead") or {}).get("displayName")
+        participants = []
         if lead:
-            key = name_to_slug.get(normalize(lead)) or name_to_slug.get(
-                normalize(lead).split()[0]
-            )
-            if key:
-                cycle_member_slugs.add(key)
-        for member in project.get("members", []):
-            slug = name_to_slug.get(normalize(member)) or name_to_slug.get(
-                normalize(member).split()[0]
+            participants.append(lead)
+        participants.extend(project.get("members", []))
+        for name in participants:
+            slug = name_to_slug.get(normalize(name)) or name_to_slug.get(
+                normalize(name).split()[0]
             )
             if slug:
                 cycle_member_slugs.add(slug)
+                member_projects.setdefault(slug, set()).add(
+                    (project.get("name"), project.get("url"))
+                )
+
+    # Convert sets back to sorted lists of dicts
+    member_projects = {
+        slug: [
+            {"name": name, "url": url}
+            for name, url in sorted(projects, key=lambda x: x[0])
+        ]
+        for slug, projects in member_projects.items()
+    }
 
     developers = sorted(
         [{"slug": slug, "name": format_name(slug)} for slug in cycle_member_slugs],
@@ -358,6 +369,7 @@ def team():
         "team.html",
         platform_teams=platform_teams,
         developers=developers,
+        developer_projects=member_projects,
         cycle_projects_by_initiative=projects_by_initiative,
         on_call_support=on_call_support,
     )
