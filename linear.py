@@ -11,6 +11,32 @@ from config import get_platforms
 load_dotenv()
 
 
+def _compute_assignee_time_to_fix(issue, assignee_name):
+    """Return days between last assignment to `assignee_name` and completion."""
+    history = issue.get("history", {}).get("edges", [])
+    last_assigned = None
+    for edge in history:
+        node = edge.get("node", {})
+        to_assignee = node.get("toAssignee")
+        if not to_assignee:
+            continue
+        if to_assignee.get("displayName") == assignee_name:
+            updated = node.get("updatedAt")
+            if updated and (last_assigned is None or updated > last_assigned):
+                last_assigned = updated
+    if not last_assigned:
+        return None
+    completed_at = issue.get("completedAt")
+    if not completed_at:
+        return None
+    try:
+        completed_dt = datetime.strptime(completed_at, "%Y-%m-%dT%H:%M:%S.%fZ")
+        assigned_dt = datetime.strptime(last_assigned, "%Y-%m-%dT%H:%M:%S.%fZ")
+        return (completed_dt - assigned_dt).days
+    except ValueError:
+        return None
+
+
 @lru_cache(maxsize=1)
 def _get_client():
     headers = {"Authorization": os.getenv("LINEAR_API_KEY")}
@@ -122,6 +148,16 @@ def get_completed_issues(priority, label, days=30):
                   metadata
                 }
               }
+              history {
+                edges {
+                  node {
+                    toAssignee {
+                      displayName
+                    }
+                    updatedAt
+                  }
+                }
+              }
             }
             pageInfo {
               hasNextPage
@@ -211,6 +247,11 @@ def get_created_issues(priority, label, days=30):
             and tag["name"].lower().replace(" ", "-") in get_platforms()
         ]
         issue["platform"] = platforms[0] if platforms else None
+        assignee = issue.get("assignee", {}).get("displayName") if issue.get("assignee") else None
+        if assignee:
+            issue["assignee_time_to_fix"] = _compute_assignee_time_to_fix(issue, assignee)
+        else:
+            issue["assignee_time_to_fix"] = None
     return issues
 
 
@@ -425,6 +466,16 @@ def get_completed_issues_for_person(login: str, days=30):
                   name
                 }
               }
+              history {
+                edges {
+                  node {
+                    toAssignee {
+                      displayName
+                    }
+                    updatedAt
+                  }
+                }
+              }
             }
             pageInfo {
               hasNextPage
@@ -455,6 +506,7 @@ def get_completed_issues_for_person(login: str, days=30):
             datetime.utcnow()
             - datetime.strptime(issue["completedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
         ).days
+        issue["assignee_time_to_fix"] = _compute_assignee_time_to_fix(issue, login)
     return issues
 
 

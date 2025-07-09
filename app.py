@@ -132,6 +132,8 @@ def team_slug(slug):
         key=lambda x: x["completedAt"],
         reverse=True,
     )
+    for item in completed_items:
+        print(item)
 
     # Group open and completed items by project
     open_by_project = by_project(open_items)
