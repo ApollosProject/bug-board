@@ -68,15 +68,15 @@
       <hr />
       <h3>On Call Support</h3>
       <ul>
-      {%- for name in on_call_support -%}
-        <li>{{ name|first_name }}</li>
+      {%- for person in on_call_support -%}
+        <li><a href="{{ url_for('team_slug', slug=person.slug) }}">{{ person.name|first_name }}</a></li>
       {%- endfor -%}
       </ul>
       <hr />
-      <h3>Everyone</h3>
-      <p>
+      <h3>Cycle</h3>
+      <ul>
       {% for dev in developers %}
-        <a href="{{ url_for('team_slug', slug=dev.slug) }}">{{ dev.name|first_name }}</a>{% if not loop.last %}, {% endif %}
+        <li><a href="{{ url_for('team_slug', slug=dev.slug) }}">{{ dev.name|first_name }}</a></li>
       {% endfor %}
-      </p>
+      </ul>
 {% endblock %}

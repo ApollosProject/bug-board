@@ -265,16 +265,18 @@ def team():
     developers = sorted(
         [
             {"slug": slug, "name": format_name(slug)}
-            for slug in config.get("people", {})
+            for slug, person in config.get("people", {}).items()
+            if not person.get("on_call_support")
         ],
         key=lambda d: d["name"],
     )
     on_call_support = sorted(
         [
-            format_name(name)
+            {"slug": name, "name": format_name(name)}
             for name, person in config.get("people", {}).items()
             if person.get("on_call_support")
-        ]
+        ],
+        key=lambda d: d["name"],
     )
     cycle_projects = get_projects()
     # attach start/target date info and compute days left
