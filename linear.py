@@ -466,6 +466,7 @@ def get_completed_issues_for_person(login: str, days=30):
                   name
                 }
               }
+              priority
               history {
                 edges {
                   node {
