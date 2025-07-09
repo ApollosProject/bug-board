@@ -262,22 +262,6 @@ def team():
             {"name": format_name(dev), "lead": False} for dev in developers
         ]
         platform_teams[slug] = members
-    developers = sorted(
-        [
-            {"slug": slug, "name": format_name(slug)}
-            for slug, person in config.get("people", {}).items()
-            if not person.get("on_call_support")
-        ],
-        key=lambda d: d["name"],
-    )
-    on_call_support = sorted(
-        [
-            {"slug": name, "name": format_name(name)}
-            for name, person in config.get("people", {}).items()
-            if person.get("on_call_support")
-        ],
-        key=lambda d: d["name"],
-    )
     cycle_projects = get_projects()
     # attach start/target date info and compute days left
     for proj in cycle_projects:
@@ -322,6 +306,53 @@ def team():
             for name, projects in projects_by_initiative.items()
             if name == current_init
         }
+
+    # Determine which team members are participating in cycle projects
+    cycle_projects_filtered = [p for projs in projects_by_initiative.values() for p in projs]
+
+    def normalize(name: str) -> str:
+        """Normalize a Linear display name or username for comparison."""
+        return name.replace(".", " ").replace("-", " ").title()
+
+    name_to_slug = {}
+    for slug, info in config.get("people", {}).items():
+        username = info.get("linear_username", slug)
+        full = normalize(username)
+        # Map the full normalized name to the slug
+        name_to_slug[full] = slug
+        first = full.split()[0]
+        # Also map first name if unique (don't overwrite existing mapping)
+        name_to_slug.setdefault(first, slug)
+
+    cycle_member_slugs = set()
+    for project in cycle_projects_filtered:
+        lead = (project.get("lead") or {}).get("displayName")
+        if lead:
+            key = name_to_slug.get(normalize(lead)) or name_to_slug.get(
+                normalize(lead).split()[0]
+            )
+            if key:
+                cycle_member_slugs.add(key)
+        for member in project.get("members", []):
+            slug = name_to_slug.get(normalize(member)) or name_to_slug.get(
+                normalize(member).split()[0]
+            )
+            if slug:
+                cycle_member_slugs.add(slug)
+
+    developers = sorted(
+        [{"slug": slug, "name": format_name(slug)} for slug in cycle_member_slugs],
+        key=lambda d: d["name"],
+    )
+
+    on_call_support = sorted(
+        [
+            {"slug": name, "name": format_name(name)}
+            for name, person in config.get("people", {}).items()
+            if person.get("on_call_support")
+        ],
+        key=lambda d: d["name"],
+    )
 
     return render_template(
         "team.html",
