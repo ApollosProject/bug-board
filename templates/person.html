@@ -64,7 +64,11 @@
         <div>
           <article>
             <header>Priority Bug Time to Fix</header>
+            {% if priority_bug_avg_time_to_fix is not none %}
             <h1>{{ priority_bug_avg_time_to_fix }}d</h1>
+            {% else %}
+            <h1>n/a</h1>
+            {% endif %}
           </article>
         </div>
       </div>

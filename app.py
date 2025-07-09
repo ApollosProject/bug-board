@@ -128,9 +128,6 @@ def team_slug(slug):
         reverse=True,
     )
 
-    for item in completed_items:
-        print("COMPLETED ITEM", item)
-
     priority_fix_times = []
     for issue in completed_items:
         if issue.get("assignee_time_to_fix") is None:
@@ -139,14 +136,12 @@ def team_slug(slug):
             lbl.get("name") == "Bug" for lbl in issue.get("labels", {}).get("nodes", [])
         ):
             fix_time = issue["assignee_time_to_fix"]
-            print(f"Priority bug '{issue['title']}' fix time: {fix_time}d")
             priority_fix_times.append(fix_time)
 
-    avg_priority_bug_fix = (
-        int(sum(priority_fix_times) / len(priority_fix_times))
-        if priority_fix_times
-        else 0
-    )
+    if priority_fix_times:
+        avg_priority_bug_fix = int(sum(priority_fix_times) / len(priority_fix_times))
+    else:
+        avg_priority_bug_fix = None
 
     # Group open and completed items by project
     open_by_project = by_project(open_items)
