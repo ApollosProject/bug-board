@@ -129,12 +129,15 @@ def team_slug(slug):
     )
 
     priority_fix_times = []
+    priority_bugs_fixed = 0
     for issue in completed_items:
-        if issue.get("assignee_time_to_fix") is None:
-            continue
-        if issue.get("priority", 5) <= 2 and any(
+        is_priority_bug = issue.get("priority", 5) <= 2 and any(
             lbl.get("name") == "Bug" for lbl in issue.get("labels", {}).get("nodes", [])
-        ):
+        )
+        if not is_priority_bug:
+            continue
+        priority_bugs_fixed += 1
+        if issue.get("assignee_time_to_fix") is not None:
             fix_time = issue["assignee_time_to_fix"]
             priority_fix_times.append(fix_time)
 
@@ -237,6 +240,7 @@ def team_slug(slug):
         prs_merged=prs_merged,
         prs_reviewed=prs_reviewed,
         priority_bug_avg_time_to_fix=avg_priority_bug_fix,
+        priority_bugs_fixed=priority_bugs_fixed,
     )
 
 
