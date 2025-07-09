@@ -61,6 +61,12 @@
             <h1>{{ prs_reviewed }}</h1>
           </article>
         </div>
+        <div>
+          <article>
+            <header>Priority Bug Time to Fix</header>
+            <h1>{{ priority_bug_avg_time_to_fix }}d</h1>
+          </article>
+        </div>
       </div>
         {% for project, issues in completed_by_project.items() %}
         <details>
