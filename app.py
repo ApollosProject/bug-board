@@ -262,22 +262,6 @@ def team():
             {"name": format_name(dev), "lead": False} for dev in developers
         ]
         platform_teams[slug] = members
-    developers = sorted(
-        [
-            {"slug": slug, "name": format_name(slug)}
-            for slug, person in config.get("people", {}).items()
-            if not person.get("on_call_support")
-        ],
-        key=lambda d: d["name"],
-    )
-    on_call_support = sorted(
-        [
-            {"slug": name, "name": format_name(name)}
-            for name, person in config.get("people", {}).items()
-            if person.get("on_call_support")
-        ],
-        key=lambda d: d["name"],
-    )
     cycle_projects = get_projects()
     # attach start/target date info and compute days left
     for proj in cycle_projects:
@@ -322,6 +306,37 @@ def team():
             for name, projects in projects_by_initiative.items()
             if name == current_init
         }
+
+    # Determine which team members are participating in cycle projects
+    cycle_projects_filtered = [p for projs in projects_by_initiative.values() for p in projs]
+
+    name_to_slug = {
+        info.get("linear_username", slug).replace(".", " ").replace("-", " ").title(): slug
+        for slug, info in config.get("people", {}).items()
+    }
+
+    cycle_member_slugs = set()
+    for project in cycle_projects_filtered:
+        lead = project.get("lead", {}).get("displayName")
+        if lead and lead in name_to_slug:
+            cycle_member_slugs.add(name_to_slug[lead])
+        for member in project.get("members", []):
+            if member in name_to_slug:
+                cycle_member_slugs.add(name_to_slug[member])
+
+    developers = sorted(
+        [{"slug": slug, "name": format_name(slug)} for slug in cycle_member_slugs],
+        key=lambda d: d["name"],
+    )
+
+    on_call_support = sorted(
+        [
+            {"slug": name, "name": format_name(name)}
+            for name, person in config.get("people", {}).items()
+            if person.get("on_call_support")
+        ],
+        key=lambda d: d["name"],
+    )
 
     return render_template(
         "team.html",
