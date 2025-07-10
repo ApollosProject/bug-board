@@ -23,6 +23,7 @@ def get_repo_ids():
     repos = [
         "apollos-platforms",
         "apollos-cluster",
+        "apollos-admin",
         "admin-transcriptions",
         "apollos-shovel",
         "apollos-embeds",
