@@ -65,7 +65,7 @@
       {% endfor %}
       </ul>
       <hr />
-      <h3>On Call Support</h3>
+      <h3>Support</h3>
       <ul>
       {%- for person in on_call_support -%}
         <li><a href="{{ url_for('team_slug', slug=person.slug) }}">{{ person.name|first_name }}</a></li>
