@@ -369,6 +369,20 @@ def team():
         key=lambda d: d["name"],
     )
 
+    # Map open priority bug issues to on-call support members
+    priority_bugs = get_open_issues(2, "Bug")
+    bugs_by_assignee = by_assignee(priority_bugs)
+    support_issues = {}
+    for assignee, data in bugs_by_assignee.items():
+        slug = name_to_slug.get(normalize(assignee)) or name_to_slug.get(
+            normalize(assignee).split()[0]
+        )
+        if slug:
+            support_issues[slug] = [
+                {"title": issue["title"], "url": issue["url"]}
+                for issue in data["issues"]
+            ]
+
     return render_template(
         "team.html",
         platform_teams=platform_teams,
@@ -376,6 +390,7 @@ def team():
         developer_projects=member_projects,
         cycle_projects_by_initiative=projects_by_initiative,
         on_call_support=on_call_support,
+        support_issues=support_issues,
     )
 
 
