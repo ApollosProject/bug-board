@@ -68,7 +68,13 @@
       <h3>Support</h3>
       <ul>
       {%- for person in on_call_support -%}
-        <li><a href="{{ url_for('team_slug', slug=person.slug) }}">{{ person.name|first_name }}</a></li>
+        <li>
+          <a href="{{ url_for('team_slug', slug=person.slug) }}">{{ person.name|first_name }}</a>
+          {% set issues = support_issues.get(person.slug) %}
+          {% if issues %}&ndash;{% for issue in issues %}
+            <a href="{{ issue.url }}">{{ issue.title }}</a>{% if not loop.last %}, {% endif %}
+          {% endfor %}{% endif %}
+        </li>
       {%- endfor -%}
       </ul>
       <hr />
