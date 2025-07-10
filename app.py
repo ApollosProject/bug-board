@@ -327,6 +327,10 @@ def team():
     cycle_member_slugs = set()
     member_projects = {}
     for project in cycle_projects_filtered:
+        # Only include projects that have started (start date today or earlier)
+        starts_in = project.get("starts_in")
+        if starts_in is not None and starts_in > 0:
+            continue
         lead = (project.get("lead") or {}).get("displayName")
         participants = []
         if lead:
