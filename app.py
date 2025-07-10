@@ -21,15 +21,15 @@ from github import merged_prs_by_author, merged_prs_by_reviewer
 app = Flask(__name__)
 
 
-@app.template_filter('first_name')
+@app.template_filter("first_name")
 def first_name_filter(name: str) -> str:
-    parts = re.split(r'[.\-\s]+', name)
+    parts = re.split(r"[.\-\s]+", name)
     if parts and parts[0]:
         return parts[0].title()
     return name.title()
 
 
-@app.template_filter('mmdd')
+@app.template_filter("mmdd")
 def mmdd_filter(date_str: str) -> str:
     """Format an ISO date string as MM/DD."""
     if not date_str:
@@ -65,9 +65,10 @@ def index():
         + get_open_issues(5, "Technical Change")
     )
     time_data = get_time_data(completed_priority_bugs)
-    fixes_per_day = len(
-        completed_bugs + completed_new_features + completed_technical_changes
-    ) / days
+    fixes_per_day = (
+        len(completed_bugs + completed_new_features + completed_technical_changes)
+        / days
+    )
 
     config_data = load_config()
     username_to_slug = {
@@ -82,17 +83,11 @@ def index():
         issue_count=len(created_priority_bugs),
         priority_percentage=int(
             len(completed_priority_bugs)
-            / len(
-                completed_bugs
-                + completed_new_features
-                + completed_technical_changes
-            )
+            / len(completed_bugs + completed_new_features + completed_technical_changes)
             * 100
         ),
         completed_issues_by_assignee=by_assignee(
-            completed_bugs
-            + completed_new_features
-            + completed_technical_changes
+            completed_bugs + completed_new_features + completed_technical_changes
         ),
         all_issues=created_priority_bugs + open_priority_bugs,
         issues_by_platform=by_platform(created_priority_bugs),
@@ -132,6 +127,24 @@ def team_slug(slug):
         key=lambda x: x["completedAt"],
         reverse=True,
     )
+
+    priority_fix_times = []
+    priority_bugs_fixed = 0
+    for issue in completed_items:
+        is_priority_bug = issue.get("priority", 5) <= 2 and any(
+            lbl.get("name") == "Bug" for lbl in issue.get("labels", {}).get("nodes", [])
+        )
+        if not is_priority_bug:
+            continue
+        priority_bugs_fixed += 1
+        if issue.get("assignee_time_to_fix") is not None:
+            fix_time = issue["assignee_time_to_fix"]
+            priority_fix_times.append(fix_time)
+
+    if priority_fix_times:
+        avg_priority_bug_fix = int(sum(priority_fix_times) / len(priority_fix_times))
+    else:
+        avg_priority_bug_fix = None
 
     # Group open and completed items by project
     open_by_project = by_project(open_items)
@@ -175,8 +188,12 @@ def team_slug(slug):
         else:
             projects_by_initiative.setdefault("No Initiative", []).append(project)
     # Sort initiatives alphabetically
-    projects_by_initiative = dict(sorted(projects_by_initiative.items(), key=lambda x: x[0]))
-    current_projects = projects_by_initiative.get(cycle_initiative, []) if cycle_initiative else []
+    projects_by_initiative = dict(
+        sorted(projects_by_initiative.items(), key=lambda x: x[0])
+    )
+    current_projects = (
+        projects_by_initiative.get(cycle_initiative, []) if cycle_initiative else []
+    )
     current_names = [proj.get("name") for proj in current_projects]
 
     if person_cfg.get("on_call_support"):
@@ -222,6 +239,8 @@ def team_slug(slug):
         work_by_platform=work_by_platform,
         prs_merged=prs_merged,
         prs_reviewed=prs_reviewed,
+        priority_bug_avg_time_to_fix=avg_priority_bug_fix,
+        priority_bugs_fixed=priority_bugs_fixed,
     )
 
 
@@ -243,18 +262,6 @@ def team():
             {"name": format_name(dev), "lead": False} for dev in developers
         ]
         platform_teams[slug] = members
-    developers = sorted(
-        [
-            {"slug": slug, "name": format_name(slug)}
-            for slug in config.get("people", {})
-        ],
-        key=lambda d: d["name"],
-    )
-    on_call_support = [
-        format_name(name)
-        for name, person in config.get("people", {}).items()
-        if person.get("on_call_support")
-    ]
     cycle_projects = get_projects()
     # attach start/target date info and compute days left
     for proj in cycle_projects:
@@ -300,12 +307,90 @@ def team():
             if name == current_init
         }
 
+    # Determine which team members are participating in cycle projects
+    cycle_projects_filtered = [p for projs in projects_by_initiative.values() for p in projs]
+
+    def normalize(name: str) -> str:
+        """Normalize a Linear display name or username for comparison."""
+        return name.replace(".", " ").replace("-", " ").title()
+
+    name_to_slug = {}
+    for slug, info in config.get("people", {}).items():
+        username = info.get("linear_username", slug)
+        full = normalize(username)
+        # Map the full normalized name to the slug
+        name_to_slug[full] = slug
+        first = full.split()[0]
+        # Also map first name if unique (don't overwrite existing mapping)
+        name_to_slug.setdefault(first, slug)
+
+    cycle_member_slugs = set()
+    member_projects = {}
+    for project in cycle_projects_filtered:
+        # Only include projects that have started (start date today or earlier)
+        starts_in = project.get("starts_in")
+        if starts_in is not None and starts_in > 0:
+            continue
+        lead = (project.get("lead") or {}).get("displayName")
+        participants = []
+        if lead:
+            participants.append(lead)
+        participants.extend(project.get("members", []))
+        for name in participants:
+            slug = name_to_slug.get(normalize(name)) or name_to_slug.get(
+                normalize(name).split()[0]
+            )
+            if slug:
+                cycle_member_slugs.add(slug)
+                member_projects.setdefault(slug, set()).add(
+                    (project.get("name"), project.get("url"))
+                )
+
+    # Convert sets back to sorted lists of dicts
+    member_projects = {
+        slug: [
+            {"name": name, "url": url}
+            for name, url in sorted(projects, key=lambda x: x[0])
+        ]
+        for slug, projects in member_projects.items()
+    }
+
+    developers = sorted(
+        [{"slug": slug, "name": format_name(slug)} for slug in cycle_member_slugs],
+        key=lambda d: d["name"],
+    )
+
+    on_call_support = sorted(
+        [
+            {"slug": name, "name": format_name(name)}
+            for name, person in config.get("people", {}).items()
+            if person.get("on_call_support")
+        ],
+        key=lambda d: d["name"],
+    )
+
+    # Map open priority bug issues to on-call support members
+    priority_bugs = get_open_issues(2, "Bug")
+    bugs_by_assignee = by_assignee(priority_bugs)
+    support_issues = {}
+    for assignee, data in bugs_by_assignee.items():
+        slug = name_to_slug.get(normalize(assignee)) or name_to_slug.get(
+            normalize(assignee).split()[0]
+        )
+        if slug:
+            support_issues[slug] = [
+                {"title": issue["title"], "url": issue["url"]}
+                for issue in data["issues"]
+            ]
+
     return render_template(
         "team.html",
         platform_teams=platform_teams,
         developers=developers,
+        developer_projects=member_projects,
         cycle_projects_by_initiative=projects_by_initiative,
         on_call_support=on_call_support,
+        support_issues=support_issues,
     )
 
 
