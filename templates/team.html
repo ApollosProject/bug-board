@@ -10,16 +10,33 @@
 
 {% block content %}
       <h2>Engineering Teams</h2>
-      <h3>Platforms</h3>
+      <h2>Current Focus</h2>
+      <h4>Support</h4>
       <ul>
-        {% for platform, members in platform_teams|dictsort %}
-          <li>
-            {{ platform.replace('-', ' ').title() }} &ndash; {% for member in members %}
-              {{ member.name|first_name }}{% if member.lead %}*{% endif %}{% if not loop.last %}, {% endif %}
-            {% endfor %}
-          </li>
-        {% endfor %}
-        </ul>
+      {%- for person in on_call_support -%}
+        <li>
+          <a href="{{ url_for('team_slug', slug=person.slug) }}">{{ person.name|first_name }}</a>
+          {% set issues = support_issues.get(person.slug) %}
+          {% if issues %}&ndash;{% for issue in issues %}
+            <a href="{{ issue.url }}">{{ issue.title }}</a>{% if not loop.last %}, {% endif %}
+          {% endfor %}{% endif %}
+        </li>
+      {%- endfor -%}
+      </ul>
+      <hr />
+      <h4>Cycle</h4>
+      <ul>
+    {% for dev in developers %}
+      <li>
+        <a href="{{ url_for('team_slug', slug=dev.slug) }}">{{ dev.name|first_name }}</a>
+        {% set projs = developer_projects.get(dev.slug, []) %}
+        {% if projs %}&ndash;{% for proj in projs %}
+          <a href="{{ proj.url }}">{{ proj.name }}</a>{% if not loop.last %}, {% endif %}
+        {% endfor %}{% endif %}
+      </li>
+    {% endfor %}
+      </ul>
+      <hr />
       <h3>Cycle Projects</h3>
       <ul>
       {% for initiative, projects in cycle_projects_by_initiative.items() %}
@@ -64,31 +81,14 @@
         {% endfor %}
       {% endfor %}
       </ul>
-      <hr />
-      <h2>Current Focus</h2>
-      <h4>Support</h4>
+      <h3>Platforms</h3>
       <ul>
-      {%- for person in on_call_support -%}
-        <li>
-          <a href="{{ url_for('team_slug', slug=person.slug) }}">{{ person.name|first_name }}</a>
-          {% set issues = support_issues.get(person.slug) %}
-          {% if issues %}&ndash;{% for issue in issues %}
-            <a href="{{ issue.url }}">{{ issue.title }}</a>{% if not loop.last %}, {% endif %}
-          {% endfor %}{% endif %}
-        </li>
-      {%- endfor -%}
-      </ul>
-      <hr />
-      <h4>Cycle</h4>
-      <ul>
-    {% for dev in developers %}
-      <li>
-        <a href="{{ url_for('team_slug', slug=dev.slug) }}">{{ dev.name|first_name }}</a>
-        {% set projs = developer_projects.get(dev.slug, []) %}
-        {% if projs %}&ndash;{% for proj in projs %}
-          <a href="{{ proj.url }}">{{ proj.name }}</a>{% if not loop.last %}, {% endif %}
-        {% endfor %}{% endif %}
-      </li>
-    {% endfor %}
-      </ul>
+        {% for platform, members in platform_teams|dictsort %}
+          <li>
+            {{ platform.replace('-', ' ').title() }} &ndash; {% for member in members %}
+              {{ member.name|first_name }}{% if member.lead %}*{% endif %}{% if not loop.last %}, {% endif %}
+            {% endfor %}
+          </li>
+        {% endfor %}
+        </ul>
 {% endblock %}
