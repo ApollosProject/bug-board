@@ -12,6 +12,20 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+### Development Setup
+
+For development, also install the development dependencies which include linting tools:
+
+```bash
+pip install -r dev-requirements.txt
+```
+
+To lint your code before committing:
+
+```bash
+flake8 *.py
+```
+
 2. Provide the required environment variables. The application expects the following values:
 
 - `LINEAR_API_KEY` – API token for Linear

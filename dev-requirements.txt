@@ -1,0 +1,2 @@
+# Development dependencies
+flake8==7.1.1
