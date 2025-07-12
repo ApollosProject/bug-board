@@ -17,7 +17,7 @@ pip install -r requirements.txt
 For development, also install the development dependencies which include linting tools:
 
 ```bash
-pip install -r dev-requirements.txt
+pip install -r requirements.dev.txt
 ```
 
 To lint your code before committing:
