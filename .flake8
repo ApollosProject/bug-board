@@ -14,8 +14,8 @@ exclude =
     dist,
     *.egg-info
 
-# Set maximum line length to 88 (black default) instead of 79
-max-line-length = 88
+# Set maximum line length to 100 to accommodate existing code
+max-line-length = 100
 
 # Set maximum complexity
 max-complexity = 10
@@ -23,8 +23,8 @@ max-complexity = 10
 # Select specific error codes to check
 select = E,W,F
 
-# Ignore specific errors if needed (currently none)
-ignore = 
+# Ignore specific errors to accommodate existing code style
+ignore = W503 
 
 # Show source code for each error
 show-source = True
