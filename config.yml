@@ -48,7 +48,7 @@ people:
   bruno:
     slack_id: U07MLGM93D0
     linear_username: bruno.arndt
-    github_username:
+    github_username: bfarndt
     on_call_support: false
   vitor:
     slack_id: U07KCR739QR
