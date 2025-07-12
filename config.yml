@@ -115,6 +115,11 @@ people:
     linear_username: john
     github_username: jcanver
     on_call_support: false
+  gerry:
+    slack_id: U025403GG
+    linear_username: gerry
+    github_username: hellogerard
+    on_call_support: false
 
 
 platforms:
