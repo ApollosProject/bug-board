@@ -1,0 +1,36 @@
+[flake8]
+# Exclude directories
+exclude = 
+    venv,
+    .venv,
+    env,
+    .env,
+    __pycache__,
+    .git,
+    static,
+    templates,
+    .tox,
+    build,
+    dist,
+    *.egg-info
+
+# Set maximum line length to 100 to accommodate existing code
+max-line-length = 100
+
+# Set maximum complexity
+max-complexity = 10
+
+# Select specific error codes to check
+select = E,W,F
+
+# Ignore specific errors to accommodate existing code style
+ignore = W503 
+
+# Show source code for each error
+show-source = True
+
+# Count errors and warnings
+count = True
+
+# Display statistics
+statistics = True
