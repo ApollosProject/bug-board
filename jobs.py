@@ -18,6 +18,7 @@ from linear import (
     get_projects,
     get_stale_issues_by_assignee,
 )
+from openai_client import get_chat_completion
 
 load_dotenv()
 
@@ -301,15 +302,71 @@ def post_friday_deadlines():
         requests.post(url, json={"text": markdown})
 
 
+@with_retries
+def post_weekly_changelog():
+    """Generate a customer changelog from completed issues."""
+
+    issues = (
+        get_completed_issues(5, "Bug", 7)
+        + get_completed_issues(5, "New Feature", 7)
+        + get_completed_issues(5, "Technical Change", 7)
+    )
+    if not issues:
+        return
+
+    # remove any duplicate issues by id to avoid repeated entries in changelog
+    seen_ids = set()
+    unique = []
+    for issue in issues:
+        if issue.get("id") and issue["id"] not in seen_ids:
+            seen_ids.add(issue["id"])
+            unique.append(issue)
+    issues = unique
+
+    chunks = []
+    for issue in issues:
+        desc = issue.get("description") or ""
+        comments = " ".join(
+            c.get("body", "") for c in issue.get("comments", {}).get("nodes", [])
+        )
+        chunks.append(
+            f"Title: {issue['title']}\n"
+            f"Platform: {issue.get('platform', '')}\n"
+            f"Description: {desc}\n"
+            f"Comments: {comments}"
+        )
+
+    instructions = (
+        "Create a short customer-facing changelog from the provided issues. "
+        "Group items under 'New Features', 'Bug Fixes', and 'Improvements'. "
+        "List each change as a single bullet point statement without separate title "
+        "or description labels. "
+        "Use single * for bold text (e.g., *bold text*), and do not use '#' characters "
+        "(e.g., for headings or elsewhere). "
+        "Ignore technical tasks, internal changes, and unfinished work. "
+        "Ensure each change appears only once in the changelog."
+    )
+    input_text = "\n\n".join(chunks)
+
+    changelog = get_chat_completion(instructions, input_text)
+    changelog = (
+        f"*Changelog (Experimental)*\n\n{changelog}\n\n"
+        f"<{os.getenv('APP_URL')}|View Bug Board>"
+    )
+    requests.post(os.getenv("SLACK_WEBHOOK_URL"), json={"text": changelog})
+
+
 if os.getenv("DEBUG") == "true":
     post_priority_bugs()
     post_leaderboard()
+    post_weekly_changelog()
     post_stale()
     post_upcoming_projects()
     post_friday_deadlines()
 else:
     schedule.every(1).days.at("12:00").do(post_priority_bugs)
     schedule.every().friday.at("20:00").do(post_leaderboard)
+    schedule.every().thursday.at("19:00").do(post_weekly_changelog)
     schedule.every(1).days.at("14:00").do(post_stale)
     schedule.every().thursday.at("12:00").do(post_upcoming_projects)
     schedule.every().monday.at("12:00").do(post_friday_deadlines)

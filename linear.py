@@ -128,6 +128,12 @@ def get_completed_issues(priority, label, days=30):
             nodes {
               id
               title
+              description
+              comments {
+                nodes {
+                  body
+                }
+              }
               assignee {
                 name
                 displayName

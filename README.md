@@ -33,6 +33,7 @@ flake8 *.py
 - `SLACK_WEBHOOK_URL` – Webhook URL used by the worker to post messages
 - `APP_URL` – Public URL where the app is hosted
 - `DEBUG` – set to `true` to run the scheduled jobs immediately
+- `OPENAI_API_KEY` – API key used to generate weekly changelogs
 
 These can be placed in a `.env` file or exported in your shell.
 
