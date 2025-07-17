@@ -3,8 +3,6 @@ import os
 import time
 from datetime import datetime
 
-from openai_client import get_chat_completion
-
 import requests
 import schedule
 from dotenv import load_dotenv
@@ -20,6 +18,7 @@ from linear import (
     get_projects,
     get_stale_issues_by_assignee,
 )
+from openai_client import get_chat_completion
 
 load_dotenv()
 
@@ -319,8 +318,8 @@ def post_weekly_changelog():
     seen_ids = set()
     unique = []
     for issue in issues:
-        if issue.get('id') and issue['id'] not in seen_ids:
-            seen_ids.add(issue['id'])
+        if issue.get("id") and issue["id"] not in seen_ids:
+            seen_ids.add(issue["id"])
             unique.append(issue)
     issues = unique
 
