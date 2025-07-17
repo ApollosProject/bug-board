@@ -339,15 +339,20 @@ def post_weekly_changelog():
     instructions = (
         "Create a short customer-facing changelog from the provided issues. "
         "Group items under 'New Features', 'Bug Fixes', and 'Improvements'. "
-        "List each change as a single bullet point statement without separate title or description labels. "
-        "Use single * for bold text (e.g., *bold text*), and do not use '#' characters (e.g., for headings or elsewhere). "
+        "List each change as a single bullet point statement without separate title "
+        "or description labels. "
+        "Use single * for bold text (e.g., *bold text*), and do not use '#' characters "
+        "(e.g., for headings or elsewhere). "
         "Ignore technical tasks, internal changes, and unfinished work. "
         "Ensure each change appears only once in the changelog."
     )
     input_text = "\n\n".join(chunks)
 
     changelog = get_chat_completion(instructions, input_text)
-    changelog = f"*Changelog (Experimental)*\n\n{changelog}\n\n<{os.getenv('APP_URL')}|View Bug Board>"
+    changelog = (
+        f"*Changelog (Experimental)*\n\n{changelog}\n\n"
+        f"<{os.getenv('APP_URL')}|View Bug Board>"
+    )
     requests.post(os.getenv("SLACK_WEBHOOK_URL"), json={"text": changelog})
 
 
