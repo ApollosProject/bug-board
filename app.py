@@ -200,12 +200,12 @@ def team_slug(slug):
         open_current_cycle = {
             proj: issues
             for proj, issues in open_by_project.items()
-            if proj == "Customer Success"
+            if proj in ["Customer Success", "No Project"]
         }
         open_other = {
             proj: issues
             for proj, issues in open_by_project.items()
-            if proj != "Customer Success"
+            if proj not in ["Customer Success", "No Project"]
         }
     else:
         open_current_cycle = {

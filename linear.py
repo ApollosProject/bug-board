@@ -56,9 +56,12 @@ def get_open_issues(priority, label):
           issues(
             filter: {
               labels: { name: { eq: $label } }
-              project: { name: { eq: "Customer Success" } }
               priority: { lte: $priority }
               state: { name: { nin: ["Done", "Canceled", "Duplicate"] } }
+              or: [
+                { project: { name: { eq: "Customer Success" } } },
+                { project: null }
+              ]
             }
             orderBy: createdAt
           ) {
@@ -118,10 +121,13 @@ def get_completed_issues(priority, label, days=30):
             after: $cursor
             filter: {
               labels: { name: { eq: $label } }
-              project: { name: { eq: "Customer Success" } }
               priority: { lte: $priority }
               state: { name: { in: ["Done"] } }
               completedAt:{gt: $days}
+              or: [
+                { project: { name: { eq: "Customer Success" } } },
+                { project: null }
+              ]
             }
             orderBy: updatedAt
           ) {
@@ -206,9 +212,12 @@ def get_created_issues(priority, label, days=30):
                 after: $cursor
                 filter: {
                     labels: { name: { eq: $label } }
-                    project: { name: { eq: "Customer Success" } }
                     priority: { lte: $priority }
                     createdAt:{gt: $days}
+                    or: [
+                        { project: { name: { eq: "Customer Success" } } },
+                        { project: null }
+                    ]
                 }
                 orderBy: createdAt
             ) {
