@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+import json
 from datetime import datetime
 
 import requests
@@ -339,21 +340,31 @@ def post_weekly_changelog():
     instructions = (
         "Create a short customer-facing changelog from the provided issues. "
         "Group items under 'New Features', 'Bug Fixes', and 'Improvements'. "
-        "List each change as a single bullet point statement without separate title "
-        "or description labels. "
-        "Use single * for bold text (e.g., *bold text*), and do not use '#' characters "
-        "(e.g., for headings or elsewhere). "
+        "List each change as a short sentence with no markdown or bullet characters. "
         "Ignore technical tasks, internal changes, and unfinished work. "
-        "Ensure each change appears only once in the changelog."
+        "Ensure each change appears only once in the changelog. "
+        "Return a JSON object with keys 'New Features', 'Bug Fixes', and 'Improvements', "
+        "where each key maps to an array of strings."
     )
     input_text = "\n\n".join(chunks)
 
-    changelog = get_chat_completion(instructions, input_text)
-    changelog = (
-        f"*Changelog (Experimental)*\n\n{changelog}\n\n"
-        f"<{os.getenv('APP_URL')}|View Bug Board>"
-    )
-    requests.post(os.getenv("SLACK_WEBHOOK_URL"), json={"text": changelog})
+    changelog_json = get_chat_completion(instructions, input_text)
+    try:
+        changelog_data = json.loads(changelog_json)
+    except json.JSONDecodeError:
+        changelog_data = {}
+
+    sections = []
+    for heading in ["New Features", "Bug Fixes", "Improvements"]:
+        items = changelog_data.get(heading, [])
+        if items:
+            sections.append(f"*{heading}*")
+            sections.extend(f"- {item}" for item in items)
+            sections.append("")
+
+    changelog_text = "*Changelog (Experimental)*\n\n" + "\n".join(sections).rstrip()
+    changelog_text += f"\n\n<{os.getenv('APP_URL')}|View Bug Board>"
+    requests.post(os.getenv("SLACK_WEBHOOK_URL"), json={"text": changelog_text})
 
 
 if os.getenv("DEBUG") == "true":
