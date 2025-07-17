@@ -361,7 +361,7 @@ if os.getenv("DEBUG") == "true":
 else:
     schedule.every(1).days.at("12:00").do(post_priority_bugs)
     schedule.every().friday.at("20:00").do(post_leaderboard)
-    schedule.every().friday.at("20:00").do(post_weekly_changelog)
+    schedule.every().thursday.at("19:00").do(post_weekly_changelog)
     schedule.every(1).days.at("14:00").do(post_stale)
     schedule.every().thursday.at("12:00").do(post_upcoming_projects)
     schedule.every().monday.at("12:00").do(post_friday_deadlines)
