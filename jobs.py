@@ -3,6 +3,8 @@ import os
 import time
 from datetime import datetime
 
+import openai
+
 import requests
 import schedule
 from dotenv import load_dotenv
@@ -20,6 +22,7 @@ from linear import (
 )
 
 load_dotenv()
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 
 def format_bug_line(bug):
@@ -301,15 +304,61 @@ def post_friday_deadlines():
         requests.post(url, json={"text": markdown})
 
 
+@with_retries
+def post_weekly_changelog():
+    """Generate a customer changelog from completed issues."""
+
+    issues = (
+        get_completed_issues(5, "Bug", 7)
+        + get_completed_issues(5, "New Feature", 7)
+        + get_completed_issues(5, "Technical Change", 7)
+    )
+    if not issues:
+        return
+
+    chunks = []
+    for issue in issues:
+        desc = issue.get("description") or ""
+        comments = " ".join(
+            c.get("body", "") for c in issue.get("comments", {}).get("nodes", [])
+        )
+        chunks.append(
+            f"Title: {issue['title']}\nDescription: {desc}\nComments: {comments}"
+        )
+
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "Create a short customer-facing changelog from the provided issues. "
+                "Group items under 'New Features', 'Bug Fixes', and 'Improvements'. "
+                "Ignore technical tasks, internal changes, and unfinished work."
+            ),
+        },
+        {"role": "user", "content": "\n\n".join(chunks)},
+    ]
+
+    resp = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=messages,
+        temperature=0.2,
+    )
+    changelog = resp.choices[0].message["content"].strip()
+    changelog += f"\n\n<{os.getenv('APP_URL')}|View Bug Board>"
+    requests.post(os.getenv("SLACK_WEBHOOK_URL"), json={"text": changelog})
+
+
 if os.getenv("DEBUG") == "true":
     post_priority_bugs()
     post_leaderboard()
+    post_weekly_changelog()
     post_stale()
     post_upcoming_projects()
     post_friday_deadlines()
 else:
     schedule.every(1).days.at("12:00").do(post_priority_bugs)
     schedule.every().friday.at("20:00").do(post_leaderboard)
+    schedule.every().friday.at("20:00").do(post_weekly_changelog)
     schedule.every(1).days.at("14:00").do(post_stale)
     schedule.every().thursday.at("12:00").do(post_upcoming_projects)
     schedule.every().monday.at("12:00").do(post_friday_deadlines)
