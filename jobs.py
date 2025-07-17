@@ -3,7 +3,7 @@ import os
 import time
 from datetime import datetime
 
-import openai
+from openai_client import get_chat_completion
 
 import requests
 import schedule
@@ -22,7 +22,6 @@ from linear import (
 )
 
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
 
 
 def format_bug_line(bug):
@@ -338,12 +337,7 @@ def post_weekly_changelog():
         {"role": "user", "content": "\n\n".join(chunks)},
     ]
 
-    resp = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=messages,
-        temperature=0.2,
-    )
-    changelog = resp.choices[0].message["content"].strip()
+    changelog = get_chat_completion(messages)
     changelog += f"\n\n<{os.getenv('APP_URL')}|View Bug Board>"
     requests.post(os.getenv("SLACK_WEBHOOK_URL"), json={"text": changelog})
 
