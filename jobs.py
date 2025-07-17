@@ -315,6 +315,15 @@ def post_weekly_changelog():
     if not issues:
         return
 
+    # remove any duplicate issues by id to avoid repeated entries in changelog
+    seen_ids = set()
+    unique = []
+    for issue in issues:
+        if issue.get('id') and issue['id'] not in seen_ids:
+            seen_ids.add(issue['id'])
+            unique.append(issue)
+    issues = unique
+
     chunks = []
     for issue in issues:
         desc = issue.get("description") or ""
@@ -322,7 +331,10 @@ def post_weekly_changelog():
             c.get("body", "") for c in issue.get("comments", {}).get("nodes", [])
         )
         chunks.append(
-            f"Title: {issue['title']}\nDescription: {desc}\nComments: {comments}"
+            f"Title: {issue['title']}\n"
+            f"Platform: {issue.get('platform', '')}\n"
+            f"Description: {desc}\n"
+            f"Comments: {comments}"
         )
 
     messages = [
@@ -331,14 +343,17 @@ def post_weekly_changelog():
             "content": (
                 "Create a short customer-facing changelog from the provided issues. "
                 "Group items under 'New Features', 'Bug Fixes', and 'Improvements'. "
-                "Ignore technical tasks, internal changes, and unfinished work."
+                "List each change as a single bullet point statement without separate title or description labels. "
+                "Use single * for bold text (e.g., *bold text*), and do not use '#' characters (e.g., for headings or elsewhere). "
+                "Ignore technical tasks, internal changes, and unfinished work. "
+                "Ensure each change appears only once in the changelog."
             ),
         },
         {"role": "user", "content": "\n\n".join(chunks)},
     ]
 
     changelog = get_chat_completion(messages)
-    changelog += f"\n\n<{os.getenv('APP_URL')}|View Bug Board>"
+    changelog = f"*Changelog (Experimental)*\n\n{changelog}\n\n<{os.getenv('APP_URL')}|View Bug Board>"
     requests.post(os.getenv("SLACK_WEBHOOK_URL"), json={"text": changelog})
 
 
