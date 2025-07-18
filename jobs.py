@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import time
@@ -19,7 +18,7 @@ from linear import (
     get_projects,
     get_stale_issues_by_assignee,
 )
-from openai_client import get_chat_completion
+from openai_client import get_chat_function_call
 
 load_dotenv()
 
@@ -348,19 +347,31 @@ def post_weekly_changelog():
     )
     input_text = "\n\n".join(chunks)
 
-    changelog_json = get_chat_completion(instructions, input_text)
-    # Extract JSON object from model response, removing any surrounding text or code fences
-    raw = changelog_json
-    import re
-    match = re.search(r'\{(?:[^{}]|(?R))*\}', raw)  # Match the first valid JSON object
-    body = match.group(0) if match else "{}"
+    # Use OpenAI function calling to generate a structured changelog
+    function_spec = {
+        "name": "generate_changelog",
+        "description": "Generate a customer-facing changelog.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "New Features": {"type": "array", "items": {"type": "string"}},
+                "Bug Fixes": {"type": "array", "items": {"type": "string"}},
+                "Improvements": {"type": "array", "items": {"type": "string"}}
+            },
+            "required": ["New Features", "Bug Fixes", "Improvements"]
+        }
+    }
     try:
-        changelog_data = json.loads(body)
-    except json.JSONDecodeError as e:
+        changelog_data = get_chat_function_call(
+            instructions,
+            input_text,
+            function_spec,
+            "generate_changelog",
+        )
+    except Exception as e:
         logging.error(
-            "Failed to parse JSON from changelog response. Error: %s. Raw response: %s",
+            "Failed to generate or parse changelog via function call. Error: %s",
             e,
-            body[:500]  # Truncate to avoid logging excessively large responses
         )
         changelog_data = {}
 
