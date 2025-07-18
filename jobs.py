@@ -1,7 +1,7 @@
+import json
 import logging
 import os
 import time
-import json
 from datetime import datetime
 
 import requests
@@ -349,8 +349,13 @@ def post_weekly_changelog():
     input_text = "\n\n".join(chunks)
 
     changelog_json = get_chat_completion(instructions, input_text)
+    # Extract JSON object from model response, removing any surrounding text or code fences
+    raw = changelog_json
+    start = raw.find("{")
+    end = raw.rfind("}")
+    body = raw[start : end + 1] if start != -1 and end != -1 else raw
     try:
-        changelog_data = json.loads(changelog_json)
+        changelog_data = json.loads(body)
     except json.JSONDecodeError:
         changelog_data = {}
 
