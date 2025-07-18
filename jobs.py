@@ -353,7 +353,7 @@ def post_weekly_changelog():
     raw = changelog_json
     start = raw.find("{")
     end = raw.rfind("}")
-    body = raw[start : end + 1] if start != -1 and end != -1 else raw
+    body = raw[start:end + 1] if start != -1 and end != -1 else raw
     try:
         changelog_data = json.loads(body)
     except json.JSONDecodeError:
