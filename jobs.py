@@ -351,9 +351,9 @@ def post_weekly_changelog():
     changelog_json = get_chat_completion(instructions, input_text)
     # Extract JSON object from model response, removing any surrounding text or code fences
     raw = changelog_json
-    start = raw.find("{")
-    end = raw.rfind("}")
-    body = raw[start:end + 1] if start != -1 and end != -1 else raw
+    import re
+    match = re.search(r'\{(?:[^{}]|(?R))*\}', raw)  # Match the first valid JSON object
+    body = match.group(0) if match else "{}"
     try:
         changelog_data = json.loads(body)
     except json.JSONDecodeError:
