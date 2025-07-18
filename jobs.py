@@ -356,7 +356,12 @@ def post_weekly_changelog():
     body = match.group(0) if match else "{}"
     try:
         changelog_data = json.loads(body)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        logging.error(
+            "Failed to parse JSON from changelog response. Error: %s. Raw response: %s",
+            e,
+            body[:500]  # Truncate to avoid logging excessively large responses
+        )
         changelog_data = {}
 
     sections = []
