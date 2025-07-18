@@ -18,7 +18,7 @@ from linear import (
     get_projects,
     get_stale_issues_by_assignee,
 )
-from openai_client import get_chat_completion
+from openai_client import get_chat_function_call
 
 load_dotenv()
 
@@ -339,21 +339,53 @@ def post_weekly_changelog():
     instructions = (
         "Create a short customer-facing changelog from the provided issues. "
         "Group items under 'New Features', 'Bug Fixes', and 'Improvements'. "
-        "List each change as a single bullet point statement without separate title "
-        "or description labels. "
-        "Use single * for bold text (e.g., *bold text*), and do not use '#' characters "
-        "(e.g., for headings or elsewhere). "
+        "List each change as a short sentence with no markdown or bullet characters. "
         "Ignore technical tasks, internal changes, and unfinished work. "
-        "Ensure each change appears only once in the changelog."
+        "Ensure each change appears only once in the changelog. "
+        "Return a JSON object with keys 'New Features', 'Bug Fixes', and 'Improvements', "
+        "where each key maps to an array of strings."
     )
     input_text = "\n\n".join(chunks)
 
-    changelog = get_chat_completion(instructions, input_text)
-    changelog = (
-        f"*Changelog (Experimental)*\n\n{changelog}\n\n"
-        f"<{os.getenv('APP_URL')}|View Bug Board>"
-    )
-    requests.post(os.getenv("SLACK_WEBHOOK_URL"), json={"text": changelog})
+    # Use OpenAI function calling to generate a structured changelog
+    function_spec = {
+        "name": "generate_changelog",
+        "description": "Generate a customer-facing changelog.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "New Features": {"type": "array", "items": {"type": "string"}},
+                "Bug Fixes": {"type": "array", "items": {"type": "string"}},
+                "Improvements": {"type": "array", "items": {"type": "string"}}
+            },
+            "required": ["New Features", "Bug Fixes", "Improvements"]
+        }
+    }
+    try:
+        changelog_data = get_chat_function_call(
+            instructions,
+            input_text,
+            function_spec,
+            "generate_changelog",
+        )
+    except Exception as e:
+        logging.error(
+            "Failed to generate or parse changelog via function call. Error: %s",
+            e,
+        )
+        changelog_data = {}
+
+    sections = []
+    for heading in ["New Features", "Bug Fixes", "Improvements"]:
+        items = changelog_data.get(heading, [])
+        if items:
+            sections.append(f"*{heading}*")
+            sections.extend(f"- {item}" for item in items)
+            sections.append("")
+
+    changelog_text = "*Changelog (Experimental)*\n\n" + "\n".join(sections).rstrip()
+    changelog_text += f"\n\n<{os.getenv('APP_URL')}|View Bug Board>"
+    requests.post(os.getenv("SLACK_WEBHOOK_URL"), json={"text": changelog_text})
 
 
 if os.getenv("DEBUG") == "true":
