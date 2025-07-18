@@ -60,7 +60,7 @@ def get_open_issues(priority, label):
               state: { name: { nin: ["Done", "Canceled", "Duplicate"] } }
               or: [
                 { project: { name: { eq: "Customer Success" } } },
-                { project: null }
+                { project: { null: true } }
               ]
             }
             orderBy: createdAt
@@ -126,7 +126,7 @@ def get_completed_issues(priority, label, days=30):
               completedAt:{gt: $days}
               or: [
                 { project: { name: { eq: "Customer Success" } } },
-                { project: null }
+                { project: { null: true } }
               ]
             }
             orderBy: updatedAt
@@ -216,7 +216,7 @@ def get_created_issues(priority, label, days=30):
                     createdAt:{gt: $days}
                     or: [
                         { project: { name: { eq: "Customer Success" } } },
-                        { project: null }
+                        { project: { null: true } }
                     ]
                 }
                 orderBy: createdAt
