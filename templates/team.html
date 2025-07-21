@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% from "macros.html" import date_range %}
 
 {% block title %}Engineering Teams{% endblock %}
 
@@ -62,7 +61,7 @@
             <a href="{{ project.url }}" class="{% if is_completed %}completed-project{% endif %}">{{ project.name }}</a>
             {% if project.startDate or project.targetDate %}
               <small>
-                {{ date_range(project) }}
+                {% if project.startDate %}{{ project.startDate|mmdd }}{% endif %}{% if project.targetDate %} → {{ project.targetDate|mmdd }}{% endif %}
                 {% if not is_completed %}
                   {% if project.starts_in is not none and project.starts_in > 0 %}
                     (starts in {{ project.starts_in }}d)
@@ -91,17 +90,12 @@
       {% endfor %}
       </ul>
       {% if completed_cycle_projects %}
-      <details>
+      <details open>
         <summary>Completed Projects</summary>
         <ul>
         {% for project in completed_cycle_projects %}
           <li>
             <a href="{{ project.url }}" class="completed-project">{{ project.name }}</a>
-            {% if project.startDate or project.targetDate %}
-              <small>
-                {{ date_range(project) }}
-              </small>
-            {% endif %}
           </li>
         {% endfor %}
         </ul>
