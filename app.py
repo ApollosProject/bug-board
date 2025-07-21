@@ -298,6 +298,7 @@ def team():
     projects_by_initiative = dict(
         sorted(projects_by_initiative.items(), key=lambda x: x[0])
     )
+
     # filter to only the cycle initiative (from config.yml)
     current_init = config.get("cycle_initiative")
     if current_init:
@@ -306,6 +307,20 @@ def team():
             for name, projects in projects_by_initiative.items()
             if name == current_init
         }
+
+    # Separate completed projects from the cycle initiatives
+    completed_projects = []
+    for name, projects in list(projects_by_initiative.items()):
+        remaining = []
+        for project in projects:
+            if project.get("status", {}).get("name") == "Completed":
+                completed_projects.append(project)
+            else:
+                remaining.append(project)
+        if remaining:
+            projects_by_initiative[name] = remaining
+        else:
+            del projects_by_initiative[name]
 
     # Determine which team members are participating in cycle projects
     cycle_projects_filtered = [p for projs in projects_by_initiative.values() for p in projs]
@@ -389,6 +404,7 @@ def team():
         developers=developers,
         developer_projects=member_projects,
         cycle_projects_by_initiative=projects_by_initiative,
+        completed_cycle_projects=completed_projects,
         on_call_support=on_call_support,
         support_issues=support_issues,
     )
