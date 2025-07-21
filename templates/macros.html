@@ -1,0 +1,4 @@
+{% macro date_range(project) -%}
+  {%- if project.startDate %}{{ project.startDate|mmdd }}{% endif -%}
+  {%- if project.targetDate %} → {{ project.targetDate|mmdd }}{% endif -%}
+{%- endmacro %}
