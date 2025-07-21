@@ -94,7 +94,6 @@
         <summary>Completed Projects</summary>
         <ul>
         {% for project in completed_cycle_projects %}
-          {% set is_completed = True %}
           <li>
             <a href="{{ project.url }}" class="completed-project">{{ project.name }}</a>
             {% if project.startDate or project.targetDate %}
