@@ -553,6 +553,9 @@ def get_projects():
                   name
                   url
                   health
+                  status {
+                    name
+                  }
                   startDate
                   targetDate
                   lead {
