@@ -7,6 +7,7 @@ from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 
 from config import get_platforms
+from constants import PRIORITY_TO_SCORE
 
 load_dotenv()
 
@@ -279,9 +280,8 @@ def by_assignee(issues):
         if assignee not in assignee_issues:
             assignee_issues[assignee] = {"score": 0, "issues": []}
         assignee_issues[assignee]["issues"].append(issue)
-        # high - 4, medium - 2, everything else - 1
-        priority_to_score = {1: 4, 2: 4, 3: 2, 4: 1, 5: 1}
-        score = priority_to_score.get(issue["priority"], 1)
+        # high - 10, medium - 5, everything else - 1
+        score = PRIORITY_TO_SCORE.get(issue["priority"], 1)
         assignee_issues[assignee]["score"] += score
     # sort by the score
     return dict(
