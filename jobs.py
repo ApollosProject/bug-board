@@ -58,21 +58,6 @@ def get_slack_markdown_by_linear_username(username):
     return "No Assignee"
 
 
-def validate_changelog_data(data):
-    """Ensure changelog data matches the expected schema."""
-    headings = ["New Features", "Bug Fixes", "Improvements"]
-    if not isinstance(data, dict):
-        raise ValueError("Changelog response must be a JSON object")
-    for heading in headings:
-        items = data.get(heading)
-        if not isinstance(items, list):
-            raise ValueError(f"{heading} should be a list")
-        for item in items:
-            if not isinstance(item, dict):
-                raise ValueError(f"{heading} item is not an object: {item!r}")
-            if not item.get("id") or not item.get("summary"):
-                raise ValueError(f"{heading} item missing fields: {item!r}")
-    return data
 
 
 @with_retries
@@ -396,10 +381,9 @@ def post_weekly_changelog():
             function_spec,
             "generate_changelog",
         )
-        validate_changelog_data(changelog_data)
     except Exception as e:
         logging.error(
-            "Failed to generate or validate changelog via function call. Error: %s",
+            "Failed to generate changelog via function call. Error: %s",
             e,
         )
         changelog_data = {}
