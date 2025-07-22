@@ -350,48 +350,27 @@ def post_weekly_changelog():
     input_text = "\n\n".join(chunks)
 
     # Use OpenAI function calling to generate a structured changelog
+    item_schema = {
+        "type": "object",
+        "properties": {
+            "id": {"type": "string"},
+            "summary": {"type": "string"},
+        },
+        "required": ["id", "summary"],
+    }
+
     function_spec = {
         "name": "generate_changelog",
         "description": "Generate a customer-facing changelog.",
         "parameters": {
             "type": "object",
             "properties": {
-                "New Features": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id": {"type": "string"},
-                            "summary": {"type": "string"}
-                        },
-                        "required": ["id", "summary"]
-                    }
-                },
-                "Bug Fixes": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id": {"type": "string"},
-                            "summary": {"type": "string"}
-                        },
-                        "required": ["id", "summary"]
-                    }
-                },
-                "Improvements": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id": {"type": "string"},
-                            "summary": {"type": "string"}
-                        },
-                        "required": ["id", "summary"]
-                    }
-                }
+                "New Features": {"type": "array", "items": item_schema},
+                "Bug Fixes": {"type": "array", "items": item_schema},
+                "Improvements": {"type": "array", "items": item_schema},
             },
-            "required": ["New Features", "Bug Fixes", "Improvements"]
-        }
+            "required": ["New Features", "Bug Fixes", "Improvements"],
+        },
     }
     try:
         changelog_data = get_chat_function_call(
