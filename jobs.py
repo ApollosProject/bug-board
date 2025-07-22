@@ -144,7 +144,7 @@ def post_leaderboard():
         + get_completed_issues(5, "New Feature", 7)
         + get_completed_issues(5, "Technical Change", 7)
     )
-    priority_to_score = {1: 4, 2: 4, 3: 2, 4: 1, 5: 1}
+    priority_to_score = {1: 10, 2: 10, 3: 5, 4: 1, 5: 1}
     leaderboard = {}
     for item in items:
         assignee = item["assignee"]
@@ -164,7 +164,7 @@ def post_leaderboard():
         slack_markdown = get_slack_markdown_by_linear_username(assignee)
         markdown += f"{medals[i]} {slack_markdown}: {score}\n"
     markdown += "\n\n"
-    markdown += "_scores - 4pts for high, 2pts for medium, 1pt for low_\n\n"
+    markdown += "_scores - 10pts for high, 5pts for medium, 1pt for low_\n\n"
     markdown += f"<{os.getenv('APP_URL')}?days=7|View Bug Board>"
     url = os.getenv("SLACK_WEBHOOK_URL")
     requests.post(url, json={"text": markdown})
