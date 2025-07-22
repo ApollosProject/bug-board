@@ -330,6 +330,7 @@ def post_weekly_changelog():
             c.get("body", "") for c in issue.get("comments", {}).get("nodes", [])
         )
         chunks.append(
+            f"ID: {issue['id']}\n"
             f"Title: {issue['title']}\n"
             f"Platform: {issue.get('platform', '')}\n"
             f"Description: {desc}\n"
@@ -338,12 +339,13 @@ def post_weekly_changelog():
 
     instructions = (
         "Create a short customer-facing changelog from the provided issues. "
+        "Each issue chunk begins with 'ID: <issue id>'. "
         "Group items under 'New Features', 'Bug Fixes', and 'Improvements'. "
         "List each change as a short sentence with no markdown or bullet characters. "
         "Ignore technical tasks, internal changes, and unfinished work. "
         "Ensure each change appears only once in the changelog. "
-        "Return a JSON object with keys 'New Features', 'Bug Fixes', and 'Improvements', "
-        "where each key maps to an array of strings."
+        "Return a JSON object with keys 'New Features', 'Bug Fixes', and 'Improvements'. "
+        "Each item should be an object with fields 'id' (the issue id) and 'summary' (the changelog text)."
     )
     input_text = "\n\n".join(chunks)
 
@@ -354,9 +356,39 @@ def post_weekly_changelog():
         "parameters": {
             "type": "object",
             "properties": {
-                "New Features": {"type": "array", "items": {"type": "string"}},
-                "Bug Fixes": {"type": "array", "items": {"type": "string"}},
-                "Improvements": {"type": "array", "items": {"type": "string"}}
+                "New Features": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "summary": {"type": "string"}
+                        },
+                        "required": ["id", "summary"]
+                    }
+                },
+                "Bug Fixes": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "summary": {"type": "string"}
+                        },
+                        "required": ["id", "summary"]
+                    }
+                },
+                "Improvements": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "summary": {"type": "string"}
+                        },
+                        "required": ["id", "summary"]
+                    }
+                }
             },
             "required": ["New Features", "Bug Fixes", "Improvements"]
         }
@@ -375,12 +407,25 @@ def post_weekly_changelog():
         )
         changelog_data = {}
 
+    url_by_id = {issue["id"]: issue["url"] for issue in issues}
+
     sections = []
     for heading in ["New Features", "Bug Fixes", "Improvements"]:
         items = changelog_data.get(heading, [])
         if items:
             sections.append(f"*{heading}*")
-            sections.extend(f"- {item}" for item in items)
+            for item in items:
+                if isinstance(item, dict):
+                    summary = item.get("summary", "")
+                    issue_id = item.get("id")
+                else:
+                    summary = str(item)
+                    issue_id = None
+                url = url_by_id.get(issue_id)
+                if url:
+                    sections.append(f"- <{url}|{summary}>")
+                else:
+                    sections.append(f"- {summary}")
             sections.append("")
 
     changelog_text = "*Changelog (Experimental)*\n\n" + "\n".join(sections).rstrip()
