@@ -19,6 +19,7 @@ from linear import (
     get_stale_issues_by_assignee,
 )
 from openai_client import get_chat_function_call
+from constants import PRIORITY_TO_SCORE
 
 load_dotenv()
 
@@ -144,7 +145,7 @@ def post_leaderboard():
         + get_completed_issues(5, "New Feature", 7)
         + get_completed_issues(5, "Technical Change", 7)
     )
-    priority_to_score = {1: 10, 2: 10, 3: 5, 4: 1, 5: 1}
+    priority_to_score = PRIORITY_TO_SCORE
     leaderboard = {}
     for item in items:
         assignee = item["assignee"]
