@@ -103,7 +103,7 @@ people:
   dylan:
     slack_id: U03LD9MJLNP
     linear_username: dylan
-    github_username:
+    github_username: dylan-manchester
     on_call_support: false
   dennis:
     slack_id: U03KDSLUW7L
