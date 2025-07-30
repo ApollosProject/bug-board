@@ -10,7 +10,7 @@ client = OpenAI()
 
 
 def get_chat_function_call(
-    instructions, input, functions, function_call_name, model="gpt-4o", temperature=0.2
+    instructions, user_input, functions, function_call_name, model="gpt-4o", temperature=0.2
 ):
     """Call OpenAI chat completion with function calling and return the parsed JSON arguments."""
     # Ensure functions is a list of function specifications
@@ -20,7 +20,7 @@ def get_chat_function_call(
         model=model,
         messages=[
             {"role": "system", "content": instructions},
-            {"role": "user", "content": input},
+            {"role": "user", "content": user_input},
         ],
         functions=functions,
         function_call={"name": function_call_name},
