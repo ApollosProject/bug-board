@@ -46,6 +46,8 @@ def with_retries(func):
                 return func(*args, **kwargs)
             except Exception as e:
                 logging.error(f"Function {func.__name__} failed: {e}")
+                if i == 2:
+                    raise
                 time.sleep(5)
 
     return wrapper
