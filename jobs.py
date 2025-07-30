@@ -58,8 +58,6 @@ def get_slack_markdown_by_linear_username(username):
     return "No Assignee"
 
 
-
-
 @with_retries
 def post_priority_bugs():
     config = load_config()
@@ -347,7 +345,8 @@ def post_weekly_changelog():
         "Ignore technical tasks, internal changes, and unfinished work. "
         "Ensure each change appears only once in the changelog. "
         "Return a JSON object with keys 'New Features', 'Bug Fixes', and 'Improvements'. "
-        "Each item should be an object with fields 'id' (the issue id) and 'summary' (the changelog text)."
+        "Each item should be an object with fields 'id' (the issue id)"
+        "and 'summary' (the changelog text)."
     )
     input_text = "\n\n".join(chunks)
 
