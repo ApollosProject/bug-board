@@ -20,27 +20,35 @@ client = Client(transport=transport, fetch_schema_from_transport=True)
 
 @lru_cache(maxsize=1)
 def get_repo_ids():
+    # List of repositories to track in the format "owner/name".
     repos = [
-        "apollos-platforms",
-        "apollos-cluster",
-        "apollos-admin",
-        "admin-transcriptions",
-        "apollos-shovel",
-        "apollos-embeds",
+        "apollosproject/apollos-platforms",
+        "apollosproject/apollos-cluster",
+        "apollosproject/apollos-admin",
+        "apollosproject/admin-transcriptions",
+        "apollosproject/apollos-shovel",
+        "apollosproject/apollos-embeds",
+        "differential/crossroads-anywhere",
     ]
     ids = []
-    for repo in repos:
-        params = {"name": repo}
-        query = gql(
-            """
-            query RepoId ($name: String!) {
-                repository(owner: "apollosproject", name: $name) {
-                    id
-                }
-            }
+    # GraphQL query for fetching a repository ID by owner and name.
+    repo_id_query = gql(
         """
-        )
-        data = client.execute(query, variable_values=params)
+        query RepoId($owner: String!, $name: String!) {
+            repository(owner: $owner, name: $name) {
+                id
+            }
+        }
+        """
+    )
+    for full_name in repos:
+        try:
+            owner, name = full_name.split("/", 1)
+        except ValueError:
+            # Skip invalid entries.
+            continue
+        params = {"owner": owner, "name": name}
+        data = client.execute(repo_id_query, variable_values=params)
         ids.append(data["repository"]["id"])
     return ids
 
