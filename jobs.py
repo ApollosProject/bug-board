@@ -8,6 +8,7 @@ import schedule
 from dotenv import load_dotenv
 
 from config import load_config
+from constants import PRIORITY_TO_SCORE
 from github import (
     get_prs_waiting_for_review_by_reviewer,
     get_prs_with_changes_requested_by_reviewer,
@@ -19,7 +20,6 @@ from linear import (
     get_stale_issues_by_assignee,
 )
 from openai_client import get_chat_function_call
-from constants import PRIORITY_TO_SCORE
 
 load_dotenv()
 
@@ -323,6 +323,30 @@ def post_weekly_changelog():
             seen_ids.add(issue["id"])
             unique.append(issue)
     issues = unique
+
+    # Include only issues without a project or from the configured cycle initiative projects
+    config = load_config()
+    cycle_init = config.get("cycle_initiative")
+    if cycle_init:
+        projects = get_projects()
+        cycle_projects = [
+            p["name"]
+            for p in projects
+            if any(
+                node.get("name") == cycle_init
+                for node in p.get("initiatives", {}).get("nodes", [])
+            )
+        ]
+        issues = [
+            issue
+            for issue in issues
+            if not issue.get("project") or issue.get("project") in cycle_projects
+        ]
+    else:
+        issues = [issue for issue in issues if not issue.get("project")]
+
+    if not issues:
+        return
 
     chunks = []
     for issue in issues:
