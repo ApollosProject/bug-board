@@ -331,6 +331,7 @@ def post_weekly_changelog():
             c.get("body", "") for c in issue.get("comments", {}).get("nodes", [])
         )
         chunks.append(
+            f"ID: {issue['id']}\n"
             f"Title: {issue['title']}\n"
             f"Platform: {issue.get('platform', '')}\n"
             f"Description: {desc}\n"
@@ -339,28 +340,39 @@ def post_weekly_changelog():
 
     instructions = (
         "Create a short customer-facing changelog from the provided issues. "
+        "Each issue chunk begins with 'ID: <issue id>'. "
         "Group items under 'New Features', 'Bug Fixes', and 'Improvements'. "
         "List each change as a short sentence with no markdown or bullet characters. "
         "Ignore technical tasks, internal changes, and unfinished work. "
         "Ensure each change appears only once in the changelog. "
-        "Return a JSON object with keys 'New Features', 'Bug Fixes', and 'Improvements', "
-        "where each key maps to an array of strings."
+        "Return a JSON object with keys 'New Features', 'Bug Fixes', and 'Improvements'. "
+        "Each item should be an object with fields 'id' (the issue id)"
+        "and 'summary' (the changelog text)."
     )
     input_text = "\n\n".join(chunks)
 
     # Use OpenAI function calling to generate a structured changelog
+    item_schema = {
+        "type": "object",
+        "properties": {
+            "id": {"type": "string"},
+            "summary": {"type": "string"},
+        },
+        "required": ["id", "summary"],
+    }
+
     function_spec = {
         "name": "generate_changelog",
         "description": "Generate a customer-facing changelog.",
         "parameters": {
             "type": "object",
             "properties": {
-                "New Features": {"type": "array", "items": {"type": "string"}},
-                "Bug Fixes": {"type": "array", "items": {"type": "string"}},
-                "Improvements": {"type": "array", "items": {"type": "string"}}
+                "New Features": {"type": "array", "items": item_schema},
+                "Bug Fixes": {"type": "array", "items": item_schema},
+                "Improvements": {"type": "array", "items": item_schema},
             },
-            "required": ["New Features", "Bug Fixes", "Improvements"]
-        }
+            "required": ["New Features", "Bug Fixes", "Improvements"],
+        },
     }
     try:
         changelog_data = get_chat_function_call(
@@ -371,17 +383,26 @@ def post_weekly_changelog():
         )
     except Exception as e:
         logging.error(
-            "Failed to generate or parse changelog via function call. Error: %s",
+            "Failed to generate changelog via function call. Error: %s",
             e,
         )
         changelog_data = {}
+
+    url_by_id = {issue["id"]: issue["url"] for issue in issues}
 
     sections = []
     for heading in ["New Features", "Bug Fixes", "Improvements"]:
         items = changelog_data.get(heading, [])
         if items:
             sections.append(f"*{heading}*")
-            sections.extend(f"- {item}" for item in items)
+            for item in items:
+                summary = item.get("summary", "")
+                issue_id = item.get("id")
+                url = url_by_id.get(issue_id)
+                if url:
+                    sections.append(f"- <{url}|{summary}>")
+                else:
+                    sections.append(f"- {summary}")
             sections.append("")
 
     changelog_text = "*Changelog (Experimental)*\n\n" + "\n".join(sections).rstrip()
