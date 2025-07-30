@@ -401,9 +401,9 @@ def post_weekly_changelog():
     try:
         changelog_data = get_chat_function_call(
             instructions,
-            input_text,
-            function_spec,
-            "generate_changelog",
+            user_input=input_text,
+            functions=function_spec,
+            function_call_name="generate_changelog",
         )
     except Exception as e:
         logging.error(
