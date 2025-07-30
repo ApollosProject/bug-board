@@ -47,18 +47,31 @@ def index():
     days = request.args.get("days", default=30, type=int)
     created_priority_bugs = get_created_issues(2, "Bug", days)
     open_priority_bugs = get_open_issues(2, "Bug")
-    completed_priority_bugs = get_completed_issues(2, "Bug", days)
-    completed_bugs = get_completed_issues(5, "Bug", days)
-    completed_new_features = get_completed_issues(
-        5,
-        "New Feature",
-        days,
-    )
-    completed_technical_changes = get_completed_issues(
-        5,
-        "Technical Change",
-        days,
-    )
+    # Only include non-project issues in the index summary
+    completed_priority_bugs = [
+        issue for issue in get_completed_issues(2, "Bug", days)
+        if not issue.get("project")
+    ]
+    completed_bugs = [
+        issue for issue in get_completed_issues(5, "Bug", days)
+        if not issue.get("project")
+    ]
+    completed_new_features = [
+        issue for issue in get_completed_issues(
+            5,
+            "New Feature",
+            days,
+        )
+        if not issue.get("project")
+    ]
+    completed_technical_changes = [
+        issue for issue in get_completed_issues(
+            5,
+            "Technical Change",
+            days,
+        )
+        if not issue.get("project")
+    ]
     open_work = (
         get_open_issues(5, "Bug")
         + get_open_issues(5, "New Feature")

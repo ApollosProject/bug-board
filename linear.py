@@ -118,19 +118,21 @@ def get_completed_issues(priority, label, days=30):
           issues(
             first: 50
             after: $cursor
-            filter: {
+        filter: {
               team: { name: { eq: "Apollos" } }
               labels: { name: { eq: $label } }
               priority: { lte: $priority }
               state: { name: { in: ["Done"] } }
-              completedAt:{gt: $days}
-              project: { null: true }
+              completedAt: { gt: $days }
             }
             orderBy: updatedAt
           ) {
             nodes {
               id
               title
+              project {
+                name
+              }
               description
               comments {
                 nodes {
@@ -191,6 +193,11 @@ def get_completed_issues(priority, label, days=30):
         if not data["issues"]["pageInfo"]["hasNextPage"]:
             break
         cursor = data["issues"]["pageInfo"]["endCursor"]
+
+    # Normalize project to simple name or None
+    for issue in issues:
+        proj = issue.get("project", {}).get("name") if issue.get("project") else None
+        issue["project"] = proj
     return issues
 
 
