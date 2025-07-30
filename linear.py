@@ -56,6 +56,7 @@ def get_open_issues(priority, label):
         query PriorityIssues ($priority: Float, $label: String) {
           issues(
             filter: {
+              team: { name: { eq: "Apollos" } }
               labels: { name: { eq: $label } }
               priority: { lte: $priority }
               state: { name: { nin: ["Done", "Canceled", "Duplicate"] } }
@@ -121,6 +122,7 @@ def get_completed_issues(priority, label, days=30):
             first: 50
             after: $cursor
             filter: {
+              team: { name: { eq: "Apollos" } }
               labels: { name: { eq: $label } }
               priority: { lte: $priority }
               state: { name: { in: ["Done"] } }
@@ -212,6 +214,7 @@ def get_created_issues(priority, label, days=30):
                 first: 50
                 after: $cursor
                 filter: {
+                    team: { name: { eq: "Apollos" } }
                     labels: { name: { eq: $label } }
                     priority: { lte: $priority }
                     createdAt:{gt: $days}
@@ -399,6 +402,7 @@ def get_open_issues_for_person(login: str):
             first: 50
             after: $cursor
             filter: {
+              team: { name: { eq: "Apollos" } }
               assignee: { displayName: { eq: $login } }
               state: { name: { nin: ["Done", "Canceled", "Duplicate"] } }
             }
@@ -464,6 +468,7 @@ def get_completed_issues_for_person(login: str, days=30):
             first: 50
             after: $cursor
             filter: {
+              team: { name: { eq: "Apollos" } }
               assignee: { displayName: { eq: $login } }
               state: { name: { in: ["Done"] } }
               completedAt: { gt: $days }
