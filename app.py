@@ -4,7 +4,7 @@ from config import load_config
 import re
 from datetime import datetime
 
-from linear import (
+from linear.issues import (
     by_assignee,
     by_platform,
     by_project,
@@ -14,8 +14,8 @@ from linear import (
     get_open_issues,
     get_open_issues_for_person,
     get_time_data,
-    get_projects,
 )
+from linear.projects import get_projects
 from github import merged_prs_by_author, merged_prs_by_reviewer
 
 app = Flask(__name__)

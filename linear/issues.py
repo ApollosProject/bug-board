@@ -1,51 +1,10 @@
-import os
 from datetime import datetime
-from functools import lru_cache
 
-from dotenv import load_dotenv
-from gql import Client, gql
-from gql.transport.aiohttp import AIOHTTPTransport
+from gql import gql
 
 from config import get_platforms
 from constants import PRIORITY_TO_SCORE
-
-load_dotenv()
-
-
-def _compute_assignee_time_to_fix(issue, assignee_name):
-    """Return days between last assignment to `assignee_name` and completion."""
-    history = issue.get("history", {}).get("edges", [])
-    last_assigned = None
-    for edge in history:
-        node = edge.get("node", {})
-        to_assignee = node.get("toAssignee")
-        if not to_assignee:
-            continue
-        if to_assignee.get("displayName") == assignee_name:
-            updated = node.get("updatedAt")
-            if updated and (last_assigned is None or updated > last_assigned):
-                last_assigned = updated
-    if not last_assigned:
-        return None
-    completed_at = issue.get("completedAt")
-    if not completed_at:
-        return None
-    try:
-        completed_dt = datetime.strptime(completed_at, "%Y-%m-%dT%H:%M:%S.%fZ")
-        assigned_dt = datetime.strptime(last_assigned, "%Y-%m-%dT%H:%M:%S.%fZ")
-        return (completed_dt - assigned_dt).days
-    except ValueError:
-        return None
-
-
-@lru_cache(maxsize=1)
-def _get_client():
-    headers = {"Authorization": os.getenv("LINEAR_API_KEY")}
-    transport = AIOHTTPTransport(
-        url="https://api.linear.app/graphql",
-        headers=headers,
-    )
-    return Client(transport=transport, fetch_schema_from_transport=True)
+from .client import _get_client, _compute_assignee_time_to_fix
 
 
 def get_open_issues(priority, label):
@@ -83,13 +42,11 @@ def get_open_issues(priority, label):
             }
           }
         }
-    """
+    """,
     )
 
-    # Execute the query on the transport
     data = _get_client().execute(query, variable_values=params)
     issues = data["issues"]["nodes"]
-    # add in platform (its the labels minus the label param above)
     for issue in issues:
         platforms = [
             tag["name"]
@@ -176,7 +133,7 @@ def get_completed_issues(priority, label, days=30):
             }
           }
         }
-        """
+        """,
     )
 
     cursor = None
@@ -194,7 +151,6 @@ def get_completed_issues(priority, label, days=30):
             break
         cursor = data["issues"]["pageInfo"]["endCursor"]
 
-    # Normalize project to simple name or None
     for issue in issues:
         proj = issue.get("project", {}).get("name") if issue.get("project") else None
         issue["project"] = proj
@@ -239,7 +195,7 @@ def get_created_issues(priority, label, days=30):
                 }
             }
         }
-        """
+        """,
     )
 
     cursor = None
@@ -281,10 +237,8 @@ def by_assignee(issues):
         if assignee not in assignee_issues:
             assignee_issues[assignee] = {"score": 0, "issues": []}
         assignee_issues[assignee]["issues"].append(issue)
-        # high - 10, medium - 5, everything else - 1
         score = PRIORITY_TO_SCORE.get(issue["priority"], 1)
         assignee_issues[assignee]["score"] += score
-    # sort by the score
     return dict(
         sorted(
             assignee_issues.items(),
@@ -294,7 +248,6 @@ def by_assignee(issues):
     )
 
 
-# TODO maybe use this one day for adding PR reviews to the leaderboard
 def by_reviewer(issues):
     issues_by_approver = {}
     for issue in issues:
@@ -425,7 +378,7 @@ def get_open_issues_for_person(login: str):
             }
           }
         }
-        """
+        """,
     )
 
     cursor = None
@@ -502,7 +455,7 @@ def get_completed_issues_for_person(login: str, days=30):
             }
           }
         }
-        """
+        """,
     )
 
     cursor = None
@@ -541,55 +494,3 @@ def by_project(issues):
             project_issues[project] = []
         project_issues[project].append(issue)
     return project_issues
-
-
-def get_projects():
-    """Return all Linear projects under the Apollos team, ordered by name."""
-    query = gql(
-        """
-        query {
-          teams(filter: { name: { eq: "Apollos" } }, first: 1) {
-            nodes {
-              projects(first: 50) {
-                nodes {
-                  id
-                  name
-                  url
-                  health
-                  status {
-                    name
-                  }
-                  startDate
-                  targetDate
-                  lead {
-                    displayName
-                  }
-                  initiatives(first: 50) {
-                    nodes {
-                      id
-                      name
-                    }
-                  }
-                  members(first: 50) {
-                    nodes {
-                      displayName
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-        """
-    )
-    data = _get_client().execute(query)
-    teams = data.get("teams", {}).get("nodes", []) or []
-    if not teams:
-        return []
-    projects = teams[0].get("projects", {}).get("nodes", []) or []
-    sorted_projects = sorted(projects, key=lambda project: project.get("name", ""))
-    # flatten built-in members
-    for project in sorted_projects:
-        nodes = project.get("members", {}).get("nodes", [])
-        project["members"] = [m["displayName"] for m in nodes if m.get("displayName")]
-    return sorted_projects
