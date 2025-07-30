@@ -13,12 +13,12 @@ from github import (
     get_prs_waiting_for_review_by_reviewer,
     get_prs_with_changes_requested_by_reviewer,
 )
-from linear import (
+from linear.issues import (
     get_completed_issues,
     get_open_issues,
-    get_projects,
     get_stale_issues_by_assignee,
 )
+from linear.projects import get_projects
 from openai_client import get_chat_function_call
 
 load_dotenv()
