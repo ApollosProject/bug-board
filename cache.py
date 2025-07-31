@@ -13,10 +13,17 @@ def ttl_cache(ttl_seconds: int) -> Callable[[Callable[..., Any]], Callable[..., 
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             key = (args, tuple(sorted(kwargs.items())))
             now = time.monotonic()
+
+            # purge expired entries to avoid unbounded growth
+            expired = [k for k, (expires, _) in cache.items() if now >= expires]
+            for k in expired:
+                cache.pop(k, None)
+
             if key in cache:
                 expires, value = cache[key]
                 if now < expires:
                     return value
+
             result = func(*args, **kwargs)
             cache[key] = (now + ttl_seconds, result)
             return result
