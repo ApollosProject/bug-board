@@ -24,6 +24,17 @@ from openai_client import get_chat_function_call
 load_dotenv()
 
 
+def post_to_slack(markdown: str):
+    """Send a message to Slack and raise or log on failure."""
+    url = os.getenv("SLACK_WEBHOOK_URL")
+    response = requests.post(url, json={"text": markdown})
+    if response.status_code != 200:
+        logging.error(
+            "Slack API returned %s: %s", response.status_code, response.text
+        )
+    response.raise_for_status()
+
+
 def format_bug_line(bug):
     """Return a formatted Slack message line for a bug."""
     reviewer = (
@@ -136,8 +147,7 @@ def post_priority_bugs():
         markdown += "\n\n"
     if markdown:
         markdown += f"\n\n<{os.getenv('APP_URL')}|View Bug Board>"
-        url = os.getenv("SLACK_WEBHOOK_URL")
-        requests.post(url, json={"text": markdown})
+        post_to_slack(markdown)
 
 
 @with_retries
@@ -169,8 +179,7 @@ def post_leaderboard():
     markdown += "\n\n"
     markdown += "_scores - 10pts for high, 5pts for medium, 1pt for low_\n\n"
     markdown += f"<{os.getenv('APP_URL')}?days=7|View Bug Board>"
-    url = os.getenv("SLACK_WEBHOOK_URL")
-    requests.post(url, json={"text": markdown})
+    post_to_slack(markdown)
 
 
 @with_retries
@@ -251,8 +260,7 @@ def post_stale():
         markdown += "\n\n"
     markdown += f"<{os.getenv('APP_URL')}|View Bug Board>"
 
-    url = os.getenv("SLACK_WEBHOOK_URL")
-    requests.post(url, json={"text": markdown})
+    post_to_slack(markdown)
 
 
 @with_retries
@@ -276,8 +284,7 @@ def post_upcoming_projects():
             upcoming.append(f"- <{project['url']}|{project['name']}> - Lead: {lead_md}")
     if upcoming:
         markdown = "*Projects Starting Monday*\n\n" + "\n".join(upcoming)
-        url = os.getenv("SLACK_WEBHOOK_URL")
-        requests.post(url, json={"text": markdown})
+        post_to_slack(markdown)
 
 
 @with_retries
@@ -301,8 +308,7 @@ def post_friday_deadlines():
             upcoming.append(f"- <{project['url']}|{project['name']}> - Lead: {lead_md}")
     if upcoming:
         markdown = "*Projects Due Friday*\n\n" + "\n".join(upcoming)
-        url = os.getenv("SLACK_WEBHOOK_URL")
-        requests.post(url, json={"text": markdown})
+        post_to_slack(markdown)
 
 
 @with_retries
@@ -433,7 +439,7 @@ def post_weekly_changelog():
 
     changelog_text = "*Changelog (Experimental)*\n\n" + "\n".join(sections).rstrip()
     changelog_text += f"\n\n<{os.getenv('APP_URL')}|View Bug Board>"
-    requests.post(os.getenv("SLACK_WEBHOOK_URL"), json={"text": changelog_text})
+    post_to_slack(changelog_text)
 
 
 if os.getenv("DEBUG") == "true":
