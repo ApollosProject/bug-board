@@ -4,6 +4,7 @@ import time
 from datetime import datetime
 
 import requests
+import re
 import schedule
 from dotenv import load_dotenv
 
@@ -12,6 +13,7 @@ from constants import PRIORITY_TO_SCORE
 from github import (
     get_prs_waiting_for_review_by_reviewer,
     get_prs_with_changes_requested_by_reviewer,
+    get_pr_diff,
 )
 from linear.issues import (
     get_completed_issues,
@@ -59,6 +61,28 @@ def get_slack_markdown_by_linear_username(username):
         if config["people"][person]["linear_username"] == username:
             return f"<@{config['people'][person]['slack_id']}>"
     return "No Assignee"
+
+
+def _get_pr_diffs(issue):
+    """Return a list of diffs for PRs linked in the issue attachments."""
+    diffs = []
+    for attachment in issue.get("attachments", {}).get("nodes", []):
+        metadata = attachment.get("metadata", {})
+        url = metadata.get("url")
+        if not url:
+            continue
+        match = re.search(r"github.com/([^/]+)/([^/]+)/pull/(\d+)", url)
+        if not match:
+            continue
+        owner, repo, number = match.groups()
+        try:
+            diff = get_pr_diff(owner, repo, int(number))
+            diffs.append(diff)
+        except Exception as e:  # pragma: no cover - network errors are ignored
+            logging.error(
+                "Failed to fetch diff for %s/%s#%s: %s", owner, repo, number, e
+            )
+    return diffs
 
 
 @with_retries
@@ -356,13 +380,17 @@ def post_weekly_changelog():
         comments = " ".join(
             c.get("body", "") for c in issue.get("comments", {}).get("nodes", [])
         )
-        chunks.append(
-            f"ID: {issue['id']}\n"
-            f"Title: {issue['title']}\n"
-            f"Platform: {issue.get('platform', '')}\n"
-            f"Description: {desc}\n"
-            f"Comments: {comments}"
-        )
+        diffs = _get_pr_diffs(issue)
+        chunk_parts = [
+            f"ID: {issue['id']}",
+            f"Title: {issue['title']}",
+            f"Platform: {issue.get('platform', '')}",
+            f"Description: {desc}",
+            f"Comments: {comments}",
+        ]
+        if diffs:
+            chunk_parts.append("Diff:\n" + "\n".join(diffs))
+        chunks.append("\n".join(chunk_parts))
 
     instructions = (
         "Create a short customer-facing changelog from the provided issues. "
@@ -371,6 +399,7 @@ def post_weekly_changelog():
         "List each change as a short sentence with no markdown or bullet characters. "
         "Ignore technical tasks, internal changes, and unfinished work. "
         "Ensure each change appears only once in the changelog. "
+        "When a chunk includes a 'Diff:' section, use that diff as additional context. "
         "Return a JSON object with keys 'New Features', 'Bug Fixes', and 'Improvements'. "
         "Each item should be an object with fields 'id' (the issue id)"
         "and 'summary' (the changelog text)."
