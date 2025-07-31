@@ -17,8 +17,6 @@ def ttl_cache(ttl_seconds: int) -> Callable[[Callable[..., Any]], Callable[..., 
                 expires, value = cache[key]
                 if now < expires:
                     return value
-                if hasattr(func, "cache_clear"):
-                    func.cache_clear()  # type: ignore[attr-defined]
             result = func(*args, **kwargs)
             cache[key] = (now + ttl_seconds, result)
             return result
