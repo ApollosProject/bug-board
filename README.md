@@ -9,15 +9,7 @@ A small Flask application that displays Linear issues and GitHub pull request st
 ```bash
 python -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
-```
-
-### Development Setup
-
-For development, also install the development dependencies which include linting tools:
-
-```bash
-pip install -r requirements.dev.txt
+pip install -r requirements.txt  # includes flake8 for linting
 ```
 
 To lint your code before committing:
