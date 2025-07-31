@@ -12,10 +12,11 @@ source venv/bin/activate
 pip install -r requirements.txt  # includes flake8 for linting
 ```
 
-To lint your code before committing:
+To lint and type check your code before committing:
 
 ```bash
 flake8 *.py
+mypy .
 ```
 
 2. Provide the required environment variables. The application expects the following values:
