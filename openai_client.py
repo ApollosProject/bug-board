@@ -1,9 +1,5 @@
 import json
-
-from dotenv import load_dotenv
 from openai import OpenAI
-
-load_dotenv()
 
 # Initialize OpenAI client for chat-based function calling
 client = OpenAI()

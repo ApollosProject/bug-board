@@ -2,12 +2,8 @@ import os
 from datetime import datetime, timedelta
 from functools import lru_cache
 
-from dotenv import load_dotenv
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
-
-load_dotenv()
-
 
 token = os.getenv("GITHUB_TOKEN")
 headers = {"Authorization": f"bearer {token}"}

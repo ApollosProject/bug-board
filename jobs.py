@@ -7,6 +7,8 @@ import requests
 import schedule
 from dotenv import load_dotenv
 
+load_dotenv()
+
 from config import load_config
 from constants import PRIORITY_TO_SCORE
 from github import (
@@ -20,8 +22,6 @@ from linear.issues import (
 )
 from linear.projects import get_projects
 from openai_client import get_chat_function_call
-
-load_dotenv()
 
 
 def format_bug_line(bug):

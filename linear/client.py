@@ -2,11 +2,9 @@ import os
 from datetime import datetime
 from functools import lru_cache
 
-from dotenv import load_dotenv
 from gql import Client
 from gql.transport.aiohttp import AIOHTTPTransport
 
-load_dotenv()
 
 
 def _compute_assignee_time_to_fix(issue, assignee_name):
