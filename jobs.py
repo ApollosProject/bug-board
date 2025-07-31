@@ -12,6 +12,7 @@ from constants import PRIORITY_TO_SCORE
 from github import (
     get_prs_waiting_for_review_by_reviewer,
     get_prs_with_changes_requested_by_reviewer,
+    get_pr_diff,
 )
 from linear.issues import (
     get_completed_issues,
@@ -59,6 +60,23 @@ def get_slack_markdown_by_linear_username(username):
         if config["people"][person]["linear_username"] == username:
             return f"<@{config['people'][person]['slack_id']}>"
     return "No Assignee"
+
+
+def _extract_pr_urls(issue):
+    """Return a list of GitHub pull request URLs attached to the Linear issue."""
+
+    urls = []
+    for attachment in issue.get("attachments", {}).get("nodes", []):
+        meta = attachment.get("metadata", {})
+        url = (
+            meta.get("url")
+            or meta.get("htmlUrl")
+            or meta.get("link")
+            or meta.get("htmlURL")
+        )
+        if url and "github.com" in url and "/pull/" in url:
+            urls.append(url)
+    return urls
 
 
 @with_retries
@@ -356,12 +374,20 @@ def post_weekly_changelog():
         comments = " ".join(
             c.get("body", "") for c in issue.get("comments", {}).get("nodes", [])
         )
+        diffs = []
+        for pr_url in _extract_pr_urls(issue):
+            try:
+                diffs.append(get_pr_diff(pr_url))
+            except Exception as e:
+                logging.error("Failed to fetch diff for %s: %s", pr_url, e)
+        diff_text = "\n".join(diffs)
         chunks.append(
             f"ID: {issue['id']}\n"
             f"Title: {issue['title']}\n"
             f"Platform: {issue.get('platform', '')}\n"
             f"Description: {desc}\n"
-            f"Comments: {comments}"
+            f"Comments: {comments}\n"
+            f"Diff: {diff_text}"
         )
 
     instructions = (

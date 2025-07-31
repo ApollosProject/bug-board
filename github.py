@@ -1,10 +1,12 @@
 import os
 from datetime import datetime, timedelta
 from functools import lru_cache
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
+import requests
 
 load_dotenv()
 
@@ -252,3 +254,18 @@ def get_prs_with_changes_requested_by_reviewer():
                 reviewer = review["author"]["login"]
                 cr_prs.setdefault(reviewer, []).append(pr)
     return cr_prs
+
+
+def get_pr_diff(pr_url: str, limit: int = 2000) -> str:
+    """Return the first ``limit`` characters of the diff for the given pull request URL."""
+
+    token = os.getenv("GITHUB_TOKEN")
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3.diff",
+    }
+    if not pr_url.endswith(".diff"):
+        pr_url = pr_url.rstrip("/") + ".diff"
+    response = requests.get(pr_url, headers=headers)
+    response.raise_for_status()
+    return response.text[:limit]
