@@ -2,11 +2,14 @@ from datetime import datetime
 
 from gql import gql
 
+from cache import ttl_cache
+
 from config import get_platforms
 from constants import PRIORITY_TO_SCORE
 from .client import _get_client, _compute_assignee_time_to_fix
 
 
+@ttl_cache(300)
 def get_open_issues(priority, label):
 
     params = {"priority": priority, "label": label}
@@ -62,6 +65,7 @@ def get_open_issues(priority, label):
     return issues
 
 
+@ttl_cache(300)
 def get_completed_issues(priority, label, days=30):
 
     query = gql(
@@ -157,6 +161,7 @@ def get_completed_issues(priority, label, days=30):
     return issues
 
 
+@ttl_cache(300)
 def get_created_issues(priority, label, days=30):
 
     query = gql(
@@ -343,6 +348,7 @@ def get_time_data(issues):
     return data
 
 
+@ttl_cache(300)
 def get_open_issues_for_person(login: str):
     """Return open issues assigned to a given Linear username across all projects."""
 
@@ -409,6 +415,7 @@ def get_open_issues_for_person(login: str):
     return issues
 
 
+@ttl_cache(300)
 def get_completed_issues_for_person(login: str, days=30):
     """Return completed issues for a user over the last `days` days, filtered by Linear username."""
 
