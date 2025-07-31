@@ -1,8 +1,10 @@
 from gql import gql
 
+from cache import ttl_cache
 from .client import _get_client
 
 
+@ttl_cache(300)
 def get_projects():
     """Return all Linear projects under the Apollos team, ordered by name."""
     query = gql(

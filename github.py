@@ -2,6 +2,8 @@ import os
 from datetime import datetime, timedelta
 from functools import lru_cache
 
+from cache import ttl_cache
+
 from dotenv import load_dotenv
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
@@ -148,6 +150,7 @@ def prs_by_approver():
     return prs_by_approver
 
 
+@ttl_cache(300)
 @lru_cache(maxsize=4)
 def _get_merged_prs(days: int = 30):
     """Return merged PRs across all repos within the last ``days`` days."""
