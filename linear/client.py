@@ -43,4 +43,3 @@ def _get_client():
         headers=headers,
     )
     return Client(transport=transport, fetch_schema_from_transport=True)
-

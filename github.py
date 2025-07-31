@@ -1,6 +1,7 @@
 import os
 from datetime import datetime, timedelta
 from functools import lru_cache
+from typing import Any, Dict, List
 
 from dotenv import load_dotenv
 from gql import Client, gql
@@ -172,10 +173,10 @@ def _get_merged_prs(days: int = 30):
     return filtered
 
 
-def merged_prs_by_author(days: int = 30):
+def merged_prs_by_author(days: int = 30) -> Dict[str, List[Dict[str, Any]]]:
     """Return merged PRs grouped by author within the given timeframe."""
     prs = _get_merged_prs(days)
-    prs_by_author = {}
+    prs_by_author: Dict[str, List[Dict[str, Any]]] = {}
     for pr in prs:
         author = pr.get("author", {}).get("login")
         if not author:
@@ -184,10 +185,10 @@ def merged_prs_by_author(days: int = 30):
     return prs_by_author
 
 
-def merged_prs_by_reviewer(days: int = 30):
+def merged_prs_by_reviewer(days: int = 30) -> Dict[str, List[Dict[str, Any]]]:
     """Return merged PRs grouped by reviewer within the given timeframe."""
     prs = _get_merged_prs(days)
-    prs_by_reviewer = {}
+    prs_by_reviewer: Dict[str, List[Dict[str, Any]]] = {}
     for pr in prs:
         for review in pr.get("reviews", {}).get("nodes", []):
             if review.get("author") and review.get("state") == "APPROVED":
