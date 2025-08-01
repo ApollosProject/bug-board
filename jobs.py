@@ -29,7 +29,7 @@ load_dotenv()
 
 def post_to_slack(markdown: str):
     """Send a message to Slack and raise or log on failure."""
-    url = os.getenv("SLACK_WEBHOOK_URL")
+    url = os.environ["SLACK_WEBHOOK_URL"]
     response = requests.post(url, json={"text": markdown})
     if response.status_code != 200:
         logging.error(

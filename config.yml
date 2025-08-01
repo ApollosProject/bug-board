@@ -120,6 +120,11 @@ people:
     linear_username: gerry
     github_username: hellogerard
     on_call_support: false
+  rumesh:
+    slack_id: U054D068S4W
+    linear_username: rumesh.lahiru
+    github_username:
+    on_call_support: true
 
 
 platforms:
