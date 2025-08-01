@@ -52,4 +52,3 @@ def get_projects():
         nodes = project.get("members", {}).get("nodes", [])
         project["members"] = [m["displayName"] for m in nodes if m.get("displayName")]
     return sorted_projects
-

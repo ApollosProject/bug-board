@@ -1,10 +1,11 @@
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import wraps
 
 import requests
+import re
 import schedule
 from dotenv import load_dotenv
 
@@ -13,6 +14,7 @@ from constants import PRIORITY_TO_SCORE
 from github import (
     get_prs_waiting_for_review_by_reviewer,
     get_prs_with_changes_requested_by_reviewer,
+    get_pr_diff,
 )
 from linear.issues import (
     get_completed_issues,
@@ -25,6 +27,17 @@ from openai_client import get_chat_function_call
 load_dotenv()
 
 
+def post_to_slack(markdown: str):
+    """Send a message to Slack and raise or log on failure."""
+    url = os.getenv("SLACK_WEBHOOK_URL")
+    response = requests.post(url, json={"text": markdown})
+    if response.status_code != 200:
+        logging.error(
+            "Slack API returned %s: %s", response.status_code, response.text
+        )
+    response.raise_for_status()
+
+
 def format_bug_line(bug):
     """Return a formatted Slack message line for a bug."""
     reviewer = (
@@ -34,10 +47,13 @@ def format_bug_line(bug):
     )
     platform_text = f", {bug['platform']}" if bug["platform"] else ""
     reviewer_text = f", {reviewer}" if reviewer else ""
-    return (
-        f"- <{bug['url']}|{bug['title']}> "
+    content = (
+        f"<{bug['url']}|{bug['title']}> "
         f"(+{bug['daysOpen']}d{platform_text}{reviewer_text})"
     )
+    if bug.get("priority") == 1:
+        return f"- \U0001F6A8 {content} \U0001F6A8"
+    return f"- {content}"
 
 
 def with_retries(func):
@@ -63,17 +79,51 @@ def get_slack_markdown_by_linear_username(username):
     return "No Assignee"
 
 
+def _get_pr_diffs(issue):
+    """Return a list of diffs for PRs linked in the issue attachments."""
+    diffs = []
+    for attachment in issue.get("attachments", {}).get("nodes", []):
+        metadata = attachment.get("metadata", {})
+        url = metadata.get("url")
+        if not url:
+            continue
+        match = re.search(r"github.com/([^/]+)/([^/]+)/pull/(\d+)", url)
+        if not match:
+            continue
+        owner, repo, number = match.groups()
+        try:
+            diff = get_pr_diff(owner, repo, int(number))
+            diffs.append(diff)
+        except Exception as e:  # pragma: no cover - network errors are ignored
+            logging.error(
+                "Failed to fetch diff for %s/%s#%s: %s", owner, repo, number, e
+            )
+    return diffs
+
+
 @with_retries
 def post_priority_bugs():
     config = load_config()
     open_priority_bugs = get_open_issues(2, "Bug")
     unassigned = [bug for bug in open_priority_bugs if bug["assignee"] is None]
+    urgent_bugs = [bug for bug in open_priority_bugs if bug["priority"] == 1]
+    high_bugs = [bug for bug in open_priority_bugs if bug["priority"] == 2]
+
+    # Urgent bugs are due after one day. Mark them at risk immediately and
+    # overdue if not fixed within a day. High priority bugs retain the
+    # existing week-long window.
     at_risk = [
         bug
-        for bug in open_priority_bugs
+        for bug in urgent_bugs
+        if bug["daysOpen"] <= 1
+    ] + [
+        bug
+        for bug in high_bugs
         if bug["daysOpen"] > 4 and bug["daysOpen"] <= 7
     ]
-    overdue = [bug for bug in open_priority_bugs if bug["daysOpen"] > 7]
+    overdue = [bug for bug in urgent_bugs if bug["daysOpen"] > 1] + [
+        bug for bug in high_bugs if bug["daysOpen"] > 7
+    ]
 
     markdown = ""
     if unassigned:
@@ -138,8 +188,7 @@ def post_priority_bugs():
         markdown += "\n\n"
     if markdown:
         markdown += f"\n\n<{os.getenv('APP_URL')}|View Bug Board>"
-        url = os.getenv("SLACK_WEBHOOK_URL")
-        requests.post(url, json={"text": markdown})
+        post_to_slack(markdown)
 
 
 @with_retries
@@ -169,10 +218,9 @@ def post_leaderboard():
         slack_markdown = get_slack_markdown_by_linear_username(assignee)
         markdown += f"{medals[i]} {slack_markdown}: {score}\n"
     markdown += "\n\n"
-    markdown += "_scores - 10pts for high, 5pts for medium, 1pt for low_\n\n"
+    markdown += "_scores - 20pts for urgent, 10pts for high, 5pts for medium, 1pt for low_\n\n"
     markdown += f"<{os.getenv('APP_URL')}?days=7|View Bug Board>"
-    url = os.getenv("SLACK_WEBHOOK_URL")
-    requests.post(url, json={"text": markdown})
+    post_to_slack(markdown)
 
 
 @with_retries
@@ -253,8 +301,7 @@ def post_stale():
         markdown += "\n\n"
     markdown += f"<{os.getenv('APP_URL')}|View Bug Board>"
 
-    url = os.getenv("SLACK_WEBHOOK_URL")
-    requests.post(url, json={"text": markdown})
+    post_to_slack(markdown)
 
 
 @with_retries
@@ -262,7 +309,7 @@ def post_upcoming_projects():
     """Notify leads about projects starting on Monday."""
     projects = get_projects()
     upcoming = []
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     for project in projects:
         start = project.get("startDate")
         if not start:
@@ -278,8 +325,7 @@ def post_upcoming_projects():
             upcoming.append(f"- <{project['url']}|{project['name']}> - Lead: {lead_md}")
     if upcoming:
         markdown = "*Projects Starting Monday*\n\n" + "\n".join(upcoming)
-        url = os.getenv("SLACK_WEBHOOK_URL")
-        requests.post(url, json={"text": markdown})
+        post_to_slack(markdown)
 
 
 @with_retries
@@ -287,7 +333,7 @@ def post_friday_deadlines():
     """Notify leads about projects ending on Friday."""
     projects = get_projects()
     upcoming = []
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     for project in projects:
         target = project.get("targetDate")
         if not target:
@@ -303,8 +349,7 @@ def post_friday_deadlines():
             upcoming.append(f"- <{project['url']}|{project['name']}> - Lead: {lead_md}")
     if upcoming:
         markdown = "*Projects Due Friday*\n\n" + "\n".join(upcoming)
-        url = os.getenv("SLACK_WEBHOOK_URL")
-        requests.post(url, json={"text": markdown})
+        post_to_slack(markdown)
 
 
 @with_retries
@@ -358,13 +403,17 @@ def post_weekly_changelog():
         comments = " ".join(
             c.get("body", "") for c in issue.get("comments", {}).get("nodes", [])
         )
-        chunks.append(
-            f"ID: {issue['id']}\n"
-            f"Title: {issue['title']}\n"
-            f"Platform: {issue.get('platform', '')}\n"
-            f"Description: {desc}\n"
-            f"Comments: {comments}"
-        )
+        diffs = _get_pr_diffs(issue)
+        chunk_parts = [
+            f"ID: {issue['id']}",
+            f"Title: {issue['title']}",
+            f"Platform: {issue.get('platform', '')}",
+            f"Description: {desc}",
+            f"Comments: {comments}",
+        ]
+        if diffs:
+            chunk_parts.append("Diff:\n" + "\n".join(diffs))
+        chunks.append("\n".join(chunk_parts))
 
     instructions = (
         "Create a short customer-facing changelog from the provided issues. "
@@ -373,6 +422,7 @@ def post_weekly_changelog():
         "List each change as a short sentence with no markdown or bullet characters. "
         "Ignore technical tasks, internal changes, and unfinished work. "
         "Ensure each change appears only once in the changelog. "
+        "When a chunk includes a 'Diff:' section, use that diff as additional context. "
         "Return a JSON object with keys 'New Features', 'Bug Fixes', and 'Improvements'. "
         "Each item should be an object with fields 'id' (the issue id)"
         "and 'summary' (the changelog text)."
@@ -435,7 +485,7 @@ def post_weekly_changelog():
 
     changelog_text = "*Changelog (Experimental)*\n\n" + "\n".join(sections).rstrip()
     changelog_text += f"\n\n<{os.getenv('APP_URL')}|View Bug Board>"
-    requests.post(os.getenv("SLACK_WEBHOOK_URL"), json={"text": changelog_text})
+    post_to_slack(changelog_text)
 
 
 if os.getenv("DEBUG") == "true":
