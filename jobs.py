@@ -75,7 +75,7 @@ def post_priority_bugs():
     at_risk = [
         bug
         for bug in urgent_bugs
-        if bug["daysOpen"] > 0 and bug["daysOpen"] <= 1
+        if bug["daysOpen"] >= 0 and bug["daysOpen"] <= 1
     ] + [
         bug
         for bug in high_bugs
