@@ -2,6 +2,7 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
+from functools import wraps
 
 import requests
 import re
@@ -56,6 +57,7 @@ def format_bug_line(bug):
 
 
 def with_retries(func):
+    @wraps(func)
     def wrapper(*args, **kwargs):
         for i in range(3):
             try:
