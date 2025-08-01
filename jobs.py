@@ -33,13 +33,13 @@ def format_bug_line(bug):
     )
     platform_text = f", {bug['platform']}" if bug["platform"] else ""
     reviewer_text = f", {reviewer}" if reviewer else ""
-    line = (
-        f"- <{bug['url']}|{bug['title']}> "
+    content = (
+        f"<{bug['url']}|{bug['title']}> "
         f"(+{bug['daysOpen']}d{platform_text}{reviewer_text})"
     )
     if bug.get("priority") == 1:
-        line = f"\U0001F6A8 {line} \U0001F6A8"
-    return line
+        return f"- \U0001F6A8 {content} \U0001F6A8"
+    return f"- {content}"
 
 
 def with_retries(func):
