@@ -1,12 +1,11 @@
-from dotenv import load_dotenv
-load_dotenv()
-
-from flask import Flask, render_template, request, abort
-
-from config import load_config
 import re
 from datetime import datetime
 
+from dotenv import load_dotenv
+from flask import Flask, abort, render_template, request
+
+from config import load_config
+from github import merged_prs_by_author, merged_prs_by_reviewer
 from linear.issues import (
     by_assignee,
     by_platform,
@@ -19,7 +18,8 @@ from linear.issues import (
     get_time_data,
 )
 from linear.projects import get_projects
-from github import merged_prs_by_author, merged_prs_by_reviewer
+
+load_dotenv()
 
 app = Flask(__name__)
 
@@ -52,15 +52,18 @@ def index():
     open_priority_bugs = get_open_issues(2, "Bug")
     # Only include non-project issues in the index summary
     completed_priority_bugs = [
-        issue for issue in get_completed_issues(2, "Bug", days)
+        issue
+        for issue in get_completed_issues(2, "Bug", days)
         if not issue.get("project")
     ]
     completed_bugs = [
-        issue for issue in get_completed_issues(5, "Bug", days)
+        issue
+        for issue in get_completed_issues(5, "Bug", days)
         if not issue.get("project")
     ]
     completed_new_features = [
-        issue for issue in get_completed_issues(
+        issue
+        for issue in get_completed_issues(
             5,
             "New Feature",
             days,
@@ -68,7 +71,8 @@ def index():
         if not issue.get("project")
     ]
     completed_technical_changes = [
-        issue for issue in get_completed_issues(
+        issue
+        for issue in get_completed_issues(
             5,
             "Technical Change",
             days,
@@ -339,7 +343,9 @@ def team():
             del projects_by_initiative[name]
 
     # Determine which team members are participating in cycle projects
-    cycle_projects_filtered = [p for projs in projects_by_initiative.values() for p in projs]
+    cycle_projects_filtered = [
+        p for projs in projects_by_initiative.values() for p in projs
+    ]
 
     def normalize(name: str) -> str:
         """Normalize a Linear display name or username for comparison."""
