@@ -8,4 +8,5 @@
 # 3 = Medium
 # 4 = Low
 # 5 = Very Low
-PRIORITY_TO_SCORE = {1: 10, 2: 10, 3: 5, 4: 1, 5: 1}
+# Urgent bugs (priority 1) are worth double
+PRIORITY_TO_SCORE = {1: 20, 2: 10, 3: 5, 4: 1, 5: 1}
