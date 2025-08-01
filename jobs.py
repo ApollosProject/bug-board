@@ -33,10 +33,13 @@ def format_bug_line(bug):
     )
     platform_text = f", {bug['platform']}" if bug["platform"] else ""
     reviewer_text = f", {reviewer}" if reviewer else ""
-    return (
+    line = (
         f"- <{bug['url']}|{bug['title']}> "
         f"(+{bug['daysOpen']}d{platform_text}{reviewer_text})"
     )
+    if bug.get("priority") == 1:
+        line = f"\U0001F6A8 {line} \U0001F6A8"
+    return line
 
 
 def with_retries(func):
@@ -66,12 +69,24 @@ def post_priority_bugs():
     config = load_config()
     open_priority_bugs = get_open_issues(2, "Bug")
     unassigned = [bug for bug in open_priority_bugs if bug["assignee"] is None]
+    urgent_bugs = [bug for bug in open_priority_bugs if bug["priority"] == 1]
+    high_bugs = [bug for bug in open_priority_bugs if bug["priority"] == 2]
+
+    # Urgent bugs are due after one day. Mark them at risk immediately and
+    # overdue if not fixed within a day. High priority bugs retain the
+    # existing week-long window.
     at_risk = [
         bug
-        for bug in open_priority_bugs
+        for bug in urgent_bugs
+        if bug["daysOpen"] <= 1
+    ] + [
+        bug
+        for bug in high_bugs
         if bug["daysOpen"] > 4 and bug["daysOpen"] <= 7
     ]
-    overdue = [bug for bug in open_priority_bugs if bug["daysOpen"] > 7]
+    overdue = [bug for bug in urgent_bugs if bug["daysOpen"] > 1] + [
+        bug for bug in high_bugs if bug["daysOpen"] > 7
+    ]
 
     markdown = ""
     if unassigned:
@@ -167,7 +182,7 @@ def post_leaderboard():
         slack_markdown = get_slack_markdown_by_linear_username(assignee)
         markdown += f"{medals[i]} {slack_markdown}: {score}\n"
     markdown += "\n\n"
-    markdown += "_scores - 10pts for high, 5pts for medium, 1pt for low_\n\n"
+    markdown += "_scores - 20pts for urgent, 10pts for high, 5pts for medium, 1pt for low_\n\n"
     markdown += f"<{os.getenv('APP_URL')}?days=7|View Bug Board>"
     url = os.getenv("SLACK_WEBHOOK_URL")
     requests.post(url, json={"text": markdown})
