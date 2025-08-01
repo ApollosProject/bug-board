@@ -2,6 +2,7 @@ import os
 from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Any, Dict, List
+import requests
 
 from dotenv import load_dotenv
 from gql import Client, gql
@@ -17,6 +18,14 @@ transport = AIOHTTPTransport(
     headers=headers,
 )
 client = Client(transport=transport, fetch_schema_from_transport=True)
+
+# headers used for REST API requests
+rest_headers = {
+    "Authorization": f"bearer {token}",
+    "Accept": "application/vnd.github.v3.diff",
+    # Use the latest stable REST API version
+    "X-GitHub-Api-Version": "2022-11-28",
+}
 
 
 @lru_cache(maxsize=1)
@@ -253,3 +262,11 @@ def get_prs_with_changes_requested_by_reviewer():
                 reviewer = review["author"]["login"]
                 cr_prs.setdefault(reviewer, []).append(pr)
     return cr_prs
+
+
+def get_pr_diff(owner: str, repo: str, number: int) -> str:
+    """Return the diff for a pull request."""
+    url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}"
+    resp = requests.get(url, headers=rest_headers)
+    resp.raise_for_status()
+    return resp.text
