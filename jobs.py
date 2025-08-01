@@ -1,7 +1,7 @@
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 import requests
 import schedule
@@ -275,7 +275,7 @@ def post_upcoming_projects():
     """Notify leads about projects starting on Monday."""
     projects = get_projects()
     upcoming = []
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     for project in projects:
         start = project.get("startDate")
         if not start:
@@ -300,7 +300,7 @@ def post_friday_deadlines():
     """Notify leads about projects ending on Friday."""
     projects = get_projects()
     upcoming = []
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     for project in projects:
         target = project.get("targetDate")
         if not target:
