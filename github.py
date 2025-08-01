@@ -23,6 +23,8 @@ client = Client(transport=transport, fetch_schema_from_transport=True)
 rest_headers = {
     "Authorization": f"bearer {token}",
     "Accept": "application/vnd.github.v3.diff",
+    # Use the latest stable REST API version
+    "X-GitHub-Api-Version": "2022-11-28",
 }
 
 
