@@ -198,6 +198,7 @@ def post_leaderboard():
         + get_completed_issues(5, "New Feature", 7)
         + get_completed_issues(5, "Technical Change", 7)
     )
+    items = [item for item in items if not item.get("project")]
     priority_to_score = PRIORITY_TO_SCORE
     leaderboard = {}
     for item in items:
