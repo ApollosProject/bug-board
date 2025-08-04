@@ -46,7 +46,7 @@
       <ul>
       {% for initiative, projects in cycle_projects_by_initiative.items() %}
         {% for project in projects %}
-          {% set is_completed = project.status and project.status.name == 'Completed' %}
+          {% set is_completed = project.status and project.status.name in ['Completed', 'Incomplete'] %}
           <li>
             {% if project.health and not is_completed %}
               {% if project.health == 'onTrack' %}
