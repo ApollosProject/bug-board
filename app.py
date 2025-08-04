@@ -321,12 +321,12 @@ def team():
             if name == current_init
         }
 
-    # Separate completed projects from the cycle initiatives
+    # Separate completed or incomplete projects from the cycle initiatives
     completed_projects = []
     for name, projects in list(projects_by_initiative.items()):
         remaining = []
         for project in projects:
-            if project.get("status", {}).get("name") == "Completed":
+            if project.get("status", {}).get("name") in {"Completed", "Incomplete"}:
                 completed_projects.append(project)
             else:
                 remaining.append(project)
