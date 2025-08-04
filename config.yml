@@ -44,12 +44,12 @@ people:
     slack_id: U083XRVKMHN
     linear_username: aleksandar.trujic
     github_username: trujic1000
-    on_call_support: false
+    on_call_support: true
   bruno:
     slack_id: U07MLGM93D0
     linear_username: bruno.arndt
     github_username: bfarndt
-    on_call_support: false
+    on_call_support: true
   vitor:
     slack_id: U07KCR739QR
     linear_username: vitor.lelis
@@ -64,12 +64,12 @@ people:
     slack_id: U034L9QHG4C
     linear_username: cameron.llewellyn
     github_username: camrun91
-    on_call_support: false
+    on_call_support: true
   austin:
     slack_id: U082ES6NT52
     linear_username: austin.witherow
     github_username:
-    on_call_support: false
+    on_call_support: true
   nick:
     slack_id: U02GJG77A
     linear_username: nick
@@ -99,7 +99,7 @@ people:
     slack_id: U06N28DLL0Z
     linear_username: tharindu.perera
     github_username:
-    on_call_support: false
+    on_call_support: true
   dylan:
     slack_id: U03LD9MJLNP
     linear_username: dylan
