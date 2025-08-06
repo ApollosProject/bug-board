@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, abort
 
 from config import load_config
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 from linear.issues import (
@@ -130,16 +131,21 @@ def team_slug(slug):
         abort(404)
     login = person_cfg.get("linear_username", slug)
     person_name = login.replace(".", " ").replace("-", " ").title()
-    open_items = sorted(
-        get_open_issues_for_person(login),
-        key=lambda x: x["updatedAt"],
-        reverse=True,
-    )
-    completed_items = sorted(
-        get_completed_issues_for_person(login, days),
-        key=lambda x: x["completedAt"],
-        reverse=True,
-    )
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        open_future = executor.submit(get_open_issues_for_person, login)
+        completed_future = executor.submit(
+            get_completed_issues_for_person, login, days
+        )
+        open_items = sorted(
+            open_future.result(),
+            key=lambda x: x["updatedAt"],
+            reverse=True,
+        )
+        completed_items = sorted(
+            completed_future.result(),
+            key=lambda x: x["completedAt"],
+            reverse=True,
+        )
 
     priority_fix_times = []
     priority_bugs_fixed = 0
