@@ -137,12 +137,12 @@ def team_slug(slug):
             get_completed_issues_for_person, login, days
         )
         open_items = sorted(
-            open_future.result(),
+            open_future.result(timeout=30),
             key=lambda x: x["updatedAt"],
             reverse=True,
         )
         completed_items = sorted(
-            completed_future.result(),
+            completed_future.result(timeout=30),
             key=lambda x: x["completedAt"],
             reverse=True,
         )
