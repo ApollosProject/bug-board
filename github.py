@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Any, Dict, List
 import requests
+import threading
 
 from dotenv import load_dotenv
 from gql import Client, gql
@@ -13,11 +14,22 @@ load_dotenv()
 
 token = os.getenv("GITHUB_TOKEN")
 headers = {"Authorization": f"bearer {token}"}
-transport = AIOHTTPTransport(
-    url="https://api.github.com/graphql",
-    headers=headers,
-)
-client = Client(transport=transport, fetch_schema_from_transport=True)
+
+
+_thread_local = threading.local()
+
+
+def _get_client():
+    client = getattr(_thread_local, "client", None)
+    if client is None:
+        transport = AIOHTTPTransport(
+            url="https://api.github.com/graphql",
+            headers=headers,
+        )
+        client = Client(transport=transport, fetch_schema_from_transport=True)
+        _thread_local.client = client
+    return client
+
 
 # headers used for REST API requests
 rest_headers = {
@@ -58,7 +70,7 @@ def get_repo_ids():
             # Skip invalid entries.
             continue
         params = {"owner": owner, "name": name}
-        data = client.execute(repo_id_query, variable_values=params)
+        data = _get_client().execute(repo_id_query, variable_values=params)
         ids.append(data["repository"]["id"])
     return ids
 
@@ -130,7 +142,7 @@ def get_prs(repo_id, pr_states):
         }
     """
     )
-    data = client.execute(query, variable_values=params)
+    data = _get_client().execute(query, variable_values=params)
     prs = data["node"]["pullRequests"]["nodes"]
     non_draft_prs = [pr for pr in prs if not pr.get("isDraft", False)]
     return non_draft_prs

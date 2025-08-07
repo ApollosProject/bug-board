@@ -131,11 +131,20 @@ def team_slug(slug):
         abort(404)
     login = person_cfg.get("linear_username", slug)
     person_name = login.replace(".", " ").replace("-", " ").title()
-    with ThreadPoolExecutor(max_workers=2) as executor:
+    github_username = person_cfg.get("github_username")
+    with ThreadPoolExecutor(max_workers=3) as executor:
         open_future = executor.submit(get_open_issues_for_person, login)
         completed_future = executor.submit(
             get_completed_issues_for_person, login, days
         )
+        github_future = None
+        if github_username:
+            github_future = executor.submit(
+                lambda: (
+                    merged_prs_by_author(days),
+                    merged_prs_by_reviewer(days),
+                )
+            )
         open_items = sorted(
             open_future.result(timeout=30),
             key=lambda x: x["updatedAt"],
@@ -146,6 +155,12 @@ def team_slug(slug):
             key=lambda x: x["completedAt"],
             reverse=True,
         )
+        if github_future:
+            author_map, reviewer_map = github_future.result(timeout=30)
+            prs_merged = len(author_map.get(github_username, []))
+            prs_reviewed = len(reviewer_map.get(github_username, []))
+        else:
+            prs_merged = prs_reviewed = 0
 
     priority_fix_times = []
     priority_bugs_fixed = 0
@@ -239,12 +254,6 @@ def team_slug(slug):
         }
 
     work_by_platform = by_platform(open_items + completed_items)
-    github_username = person_cfg.get("github_username")
-    prs_merged = 0
-    prs_reviewed = 0
-    if github_username:
-        prs_merged = len(merged_prs_by_author(days).get(github_username, []))
-        prs_reviewed = len(merged_prs_by_reviewer(days).get(github_username, []))
 
     return render_template(
         "person.html",
