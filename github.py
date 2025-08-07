@@ -3,6 +3,8 @@ from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Any, Dict, List
 import requests
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from dotenv import load_dotenv
 from gql import Client, gql
@@ -13,11 +15,22 @@ load_dotenv()
 
 token = os.getenv("GITHUB_TOKEN")
 headers = {"Authorization": f"bearer {token}"}
-transport = AIOHTTPTransport(
-    url="https://api.github.com/graphql",
-    headers=headers,
-)
-client = Client(transport=transport, fetch_schema_from_transport=True)
+
+
+_thread_local = threading.local()
+
+
+def _get_client():
+    client = getattr(_thread_local, "client", None)
+    if client is None:
+        transport = AIOHTTPTransport(
+            url="https://api.github.com/graphql",
+            headers=headers,
+        )
+        client = Client(transport=transport, fetch_schema_from_transport=True)
+        _thread_local.client = client
+    return client
+
 
 # headers used for REST API requests
 rest_headers = {
@@ -58,7 +71,7 @@ def get_repo_ids():
             # Skip invalid entries.
             continue
         params = {"owner": owner, "name": name}
-        data = client.execute(repo_id_query, variable_values=params)
+        data = _get_client().execute(repo_id_query, variable_values=params)
         ids.append(data["repository"]["id"])
     return ids
 
@@ -130,7 +143,7 @@ def get_prs(repo_id, pr_states):
         }
     """
     )
-    data = client.execute(query, variable_values=params)
+    data = _get_client().execute(query, variable_values=params)
     prs = data["node"]["pullRequests"]["nodes"]
     non_draft_prs = [pr for pr in prs if not pr.get("isDraft", False)]
     return non_draft_prs
@@ -143,12 +156,21 @@ def has_failing_required_checks(pr):
     return rollup.get("state") != "SUCCESS"
 
 
-def prs_by_approver():
+def _get_all_prs(pr_states: List[str]) -> List[Dict[str, Any]]:
+    """Fetch PRs for all tracked repositories concurrently."""
     repo_ids = get_repo_ids()
-    all_prs = []
-    for repo_id in repo_ids:
-        prs = get_prs(repo_id, pr_states=["MERGED"])
-        all_prs.extend(prs)
+    with ThreadPoolExecutor(max_workers=len(repo_ids)) as executor:
+        futures = [
+            executor.submit(get_prs, repo_id, pr_states) for repo_id in repo_ids
+        ]
+        all_prs: List[Dict[str, Any]] = []
+        for future in futures:
+            all_prs.extend(future.result())
+    return all_prs
+
+
+def prs_by_approver():
+    all_prs = _get_all_prs(["MERGED"])
     prs_by_approver = {}
     for pr in all_prs:
         for review in pr["reviews"]["nodes"]:
@@ -162,11 +184,7 @@ def prs_by_approver():
 def _get_merged_prs(days: int = 30):
     """Return merged PRs across all repos within the last ``days`` days."""
     cutoff = datetime.utcnow() - timedelta(days=days)
-    repo_ids = get_repo_ids()
-    all_prs = []
-    for repo_id in repo_ids:
-        prs = get_prs(repo_id, pr_states=["MERGED"])
-        all_prs.extend(prs)
+    all_prs = _get_all_prs(["MERGED"])
 
     filtered = []
     for pr in all_prs:
@@ -212,11 +230,7 @@ def get_prs_waiting_for_review_by_reviewer():
     Includes pull requests with an open review request that was made more
     than 12 hours ago, even if the PR has previously been reviewed.
     """
-    repo_ids = get_repo_ids()
-    all_prs = []
-    for repo_id in repo_ids:
-        prs = get_prs(repo_id, pr_states=["OPEN"])
-        all_prs.extend(prs)
+    all_prs = _get_all_prs(["OPEN"])
     stuck_prs = {}
     for pr in all_prs:
         # only consider pull requests that are mergeable
@@ -250,11 +264,7 @@ def get_prs_waiting_for_review_by_reviewer():
 
 def get_prs_with_changes_requested_by_reviewer():
     """Return open PRs with change requests, grouped by the reviewer who requested changes."""
-    repo_ids = get_repo_ids()
-    all_prs = []
-    for repo_id in repo_ids:
-        prs = get_prs(repo_id, pr_states=["OPEN"])
-        all_prs.extend(prs)
+    all_prs = _get_all_prs(["OPEN"])
     cr_prs = {}
     for pr in all_prs:
         for review in pr.get("reviews", {}).get("nodes", []):

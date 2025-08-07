@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from functools import lru_cache
+import threading
 
 from dotenv import load_dotenv
 from gql import Client
@@ -35,11 +35,17 @@ def _compute_assignee_time_to_fix(issue, assignee_name):
         return None
 
 
-@lru_cache(maxsize=1)
+_thread_local = threading.local()
+
+
 def _get_client():
-    headers = {"Authorization": os.getenv("LINEAR_API_KEY")}
-    transport = AIOHTTPTransport(
-        url="https://api.linear.app/graphql",
-        headers=headers,
-    )
-    return Client(transport=transport, fetch_schema_from_transport=True)
+    client = getattr(_thread_local, "client", None)
+    if client is None:
+        headers = {"Authorization": os.getenv("LINEAR_API_KEY")}
+        transport = AIOHTTPTransport(
+            url="https://api.linear.app/graphql",
+            headers=headers,
+        )
+        client = Client(transport=transport, fetch_schema_from_transport=True)
+        _thread_local.client = client
+    return client
