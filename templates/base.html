@@ -4,7 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='pico.min.css') }}" />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='pico.min.css') }}"
+    />
     <title>{% block title %}{% endblock %}</title>
     {% block extra_head %}{% endblock %}
   </head>
@@ -20,10 +23,21 @@
         {% block header_nav %}{% endblock %}
       </nav>
     </header>
-    <main class="container">
-      {% block content %}{% endblock %}
-    </main>
-    <footer class="container"></footer>
+    <main class="container">{% block content %}{% endblock %}</main>
+    <footer class="container">
+      <p>
+      <h6>SRE</h6>
+      <ul style="list-style: none; padding-left: 0;">
+
+      <li>
+      <a
+      href="https://cloud.astronomer.io/cljsvo8d800yz01giqt70a7e7/dags?status=failed&state=active"
+     >Failing DAGs</a
+    >
+     	      </li>
+      </ul>
+      </p>
+    </footer>
     {% block extra_scripts %}{% endblock %}
   </body>
 </html>
