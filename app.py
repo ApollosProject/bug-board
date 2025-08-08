@@ -111,7 +111,9 @@ def index():
             [
                 issue
                 for issue in open_work
-                if issue["assignee"] is not None and issue["priority"] > 2
+                if (issue["assignee"] is not None
+                    and issue.get("priority") is not None
+                    and issue["priority"] > 2)
             ],
             key=lambda x: x["createdAt"],
             reverse=True,
@@ -165,9 +167,10 @@ def team_slug(slug):
     priority_fix_times = []
     priority_bugs_fixed = 0
     for issue in completed_items:
-        is_priority_bug = issue.get("priority", 5) <= 2 and any(
+        priority = issue.get("priority")
+        is_priority_bug = (priority is not None and priority <= 2 and any(
             lbl.get("name") == "Bug" for lbl in issue.get("labels", {}).get("nodes", [])
-        )
+        ))
         if not is_priority_bug:
             continue
         priority_bugs_fixed += 1

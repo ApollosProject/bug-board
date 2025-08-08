@@ -17,7 +17,7 @@ def get_open_issues(priority, label):
             filter: {
               team: { name: { eq: "Apollos" } }
               labels: { name: { eq: $label } }
-              priority: { lte: $priority }
+              priority: { lte: $priority, null: false }
               state: { name: { nin: ["Done", "Canceled", "Duplicate"] } }
               project: { null: true }
             }
@@ -78,7 +78,7 @@ def get_completed_issues(priority, label, days=30):
         filter: {
               team: { name: { eq: "Apollos" } }
               labels: { name: { eq: $label } }
-              priority: { lte: $priority }
+              priority: { lte: $priority, null: false }
               state: { name: { in: ["Done"] } }
               completedAt: { gt: $days }
             }
@@ -173,7 +173,7 @@ def get_created_issues(priority, label, days=30):
                 filter: {
                     team: { name: { eq: "Apollos" } }
                     labels: { name: { eq: $label } }
-                    priority: { lte: $priority }
+                    priority: { lte: $priority, null: false }
                     createdAt:{gt: $days}
                     project: { null: true }
                 }
@@ -232,6 +232,9 @@ def by_assignee(issues):
     assignee_issues = {}
     for issue in issues:
         if not issue["assignee"]:
+            continue
+        # Skip issues without priority (null/None priority)
+        if issue.get("priority") is None:
             continue
         assignee = issue["assignee"]["displayName"]
         if assignee not in assignee_issues:
