@@ -8,6 +8,10 @@
       rel="stylesheet"
       href="{{ url_for('static', filename='pico.min.css') }}"
     />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='styles.css') }}"
+    />
     <title>{% block title %}{% endblock %}</title>
     {% block extra_head %}{% endblock %}
   </head>
@@ -25,18 +29,15 @@
     </header>
     <main class="container">{% block content %}{% endblock %}</main>
     <footer class="container">
-      <p>
       <h6>SRE</h6>
-      <ul style="list-style: none; padding-left: 0;">
-
-      <li>
-      <a
-      href="https://cloud.astronomer.io/cljsvo8d800yz01giqt70a7e7/dags?status=failed&state=active"
-     >Failing DAGs</a
-    >
-     	      </li>
+      <ul>
+        <li>
+          <a
+            href="https://cloud.astronomer.io/cljsvo8d800yz01giqt70a7e7/dags?status=failed&state=active"
+            >Failing DAGs</a
+          >
+        </li>
       </ul>
-      </p>
     </footer>
     {% block extra_scripts %}{% endblock %}
   </body>

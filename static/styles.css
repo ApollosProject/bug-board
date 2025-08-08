@@ -1,0 +1,10 @@
+footer ul,
+footer ol {
+  list-style: none;
+  padding-left: 0;
+  margin-left: 0;
+}
+
+footer li {
+  list-style: none;
+}
