@@ -170,6 +170,7 @@ platforms:
     lead: andy
     developers:
       - dennis
+      - jimmy
   web:
     lead: nathan
     developers:
