@@ -339,7 +339,11 @@ def post_friday_deadlines():
         projects = [
             p
             for p in projects
-            if cycle_init in {node.get("name") for node in p.get("initiatives", {}).get("nodes", [])}
+            if cycle_init
+            in {
+                node.get("name")
+                for node in p.get("initiatives", {}).get("nodes", [])
+            }
         ]
 
     upcoming = []
