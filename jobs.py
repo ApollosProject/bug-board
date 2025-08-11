@@ -333,6 +333,18 @@ def post_upcoming_projects():
 def post_friday_deadlines():
     """Notify leads about projects ending on Friday."""
     projects = get_projects()
+    config = load_config()
+    cycle_init = config.get("cycle_initiative")
+    if cycle_init:
+        projects = [
+            p
+            for p in projects
+            if any(
+                node.get("name") == cycle_init
+                for node in p.get("initiatives", {}).get("nodes", [])
+            )
+        ]
+
     upcoming = []
     today = datetime.now(timezone.utc).date()
     for project in projects:
