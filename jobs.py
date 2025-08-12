@@ -1,23 +1,24 @@
 import logging
 import os
+import re
 import time
 from datetime import datetime, timezone
 from functools import wraps
 
 import requests
-import re
 import schedule
 from dotenv import load_dotenv
 
 from config import load_config
 from constants import PRIORITY_TO_SCORE
 from github import (
+    get_pr_diff,
     get_prs_waiting_for_review_by_reviewer,
     get_prs_with_changes_requested_by_reviewer,
-    get_pr_diff,
 )
 from linear.issues import (
     get_completed_issues,
+    get_completed_issues_for_person,
     get_open_issues,
     get_stale_issues_by_assignee,
 )
@@ -32,8 +33,17 @@ def post_to_slack(markdown: str):
     url = os.environ["SLACK_WEBHOOK_URL"]
     response = requests.post(url, json={"text": markdown})
     if response.status_code != 200:
+        logging.error("Slack API returned %s: %s", response.status_code, response.text)
+    response.raise_for_status()
+
+
+def post_to_manager_slack(markdown: str):
+    """Send a message to the manager Slack webhook and raise or log on failure."""
+    url = os.environ["MANAGER_SLACK_WEBHOOK_URL"]
+    response = requests.post(url, json={"text": markdown})
+    if response.status_code != 200:
         logging.error(
-            "Slack API returned %s: %s", response.status_code, response.text
+            "Manager Slack API returned %s: %s", response.status_code, response.text
         )
     response.raise_for_status()
 
@@ -52,7 +62,7 @@ def format_bug_line(bug):
         f"(+{bug['daysOpen']}d{platform_text}{reviewer_text})"
     )
     if bug.get("priority") == 1:
-        return f"- \U0001F6A8 {content} \U0001F6A8"
+        return f"- \U0001f6a8 {content} \U0001f6a8"
     return f"- {content}"
 
 
@@ -112,14 +122,8 @@ def post_priority_bugs():
     # Urgent bugs are due after one day. Mark them at risk immediately and
     # overdue if not fixed within a day. High priority bugs retain the
     # existing week-long window.
-    at_risk = [
-        bug
-        for bug in urgent_bugs
-        if bug["daysOpen"] <= 1
-    ] + [
-        bug
-        for bug in high_bugs
-        if bug["daysOpen"] > 4 and bug["daysOpen"] <= 7
+    at_risk = [bug for bug in urgent_bugs if bug["daysOpen"] <= 1] + [
+        bug for bug in high_bugs if bug["daysOpen"] > 4 and bug["daysOpen"] <= 7
     ]
     overdue = [bug for bug in urgent_bugs if bug["daysOpen"] > 1] + [
         bug for bug in high_bugs if bug["daysOpen"] > 7
@@ -219,7 +223,9 @@ def post_leaderboard():
         slack_markdown = get_slack_markdown_by_linear_username(assignee)
         markdown += f"{medals[i]} {slack_markdown}: {score}\n"
     markdown += "\n\n"
-    markdown += "_scores - 20pts for urgent, 10pts for high, 5pts for medium, 1pt for low_\n\n"
+    markdown += (
+        "_scores - 20pts for urgent, 10pts for high, 5pts for medium, 1pt for low_\n\n"
+    )
     markdown += f"<{os.getenv('APP_URL')}?days=7|View Bug Board>"
     post_to_slack(markdown)
 
@@ -306,6 +312,32 @@ def post_stale():
 
 
 @with_retries
+def post_inactive_engineers():
+    """Send list of engineers with no completed Linear issues in the last 7 days."""
+    config = load_config()
+    inactive = []
+    base_url = os.getenv("APP_URL", "")
+    for person_key, person in config.get("people", {}).items():
+        login = person.get("linear_username")
+        if not login:
+            continue
+        try:
+            completed = get_completed_issues_for_person(login, 7)
+        except Exception as e:
+            logging.error(f"Failed to fetch completed issues for {login}: {e}")
+            continue
+        if not completed:
+            # link to user page filtered to last 7 days
+            url = f"{base_url.rstrip('/')}/team/{person_key}?days=7"
+            inactive.append(f"- <{url}|{person_key}>")
+    if not inactive:
+        return
+    markdown = "*Engineers with no completed issues in the last 7 days*\n\n"
+    markdown += "\n".join(inactive)
+    post_to_manager_slack(markdown)
+
+
+@with_retries
 def post_upcoming_projects():
     """Notify leads about projects starting on Monday."""
     projects = get_projects()
@@ -340,10 +372,7 @@ def post_friday_deadlines():
             p
             for p in projects
             if cycle_init
-            in {
-                node.get("name")
-                for node in p.get("initiatives", {}).get("nodes", [])
-            }
+            in {node.get("name") for node in p.get("initiatives", {}).get("nodes", [])}
         ]
 
     upcoming = []
@@ -503,6 +532,7 @@ def post_weekly_changelog():
 
 
 if os.getenv("DEBUG") == "true":
+    post_inactive_engineers()
     post_priority_bugs()
     post_leaderboard()
     post_weekly_changelog()
@@ -510,6 +540,7 @@ if os.getenv("DEBUG") == "true":
     post_upcoming_projects()
     post_friday_deadlines()
 else:
+    schedule.every().friday.at("13:00").do(post_inactive_engineers)
     schedule.every(1).days.at("12:00").do(post_priority_bugs)
     schedule.every().friday.at("20:00").do(post_leaderboard)
     schedule.every().thursday.at("19:00").do(post_weekly_changelog)

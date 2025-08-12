@@ -46,6 +46,5 @@ To run the scheduled jobs locally, start the worker:
 python jobs.py
 ```
 
+
 The `Procfile` defines both commands for platforms such as Heroku.
-
-
