@@ -180,6 +180,18 @@ def team_slug(slug):
     else:
         avg_priority_bug_fix = None
 
+    # Compute metrics for all completed work
+    all_work_done = len(completed_items)
+    all_fix_times = [
+        issue["assignee_time_to_fix"]
+        for issue in completed_items
+        if issue.get("assignee_time_to_fix") is not None
+    ]
+    if all_fix_times:
+        avg_all_time_to_fix = int(sum(all_fix_times) / len(all_fix_times))
+    else:
+        avg_all_time_to_fix = None
+
     # Group open and completed items by project
     open_by_project = by_project(open_items)
     completed_by_project = by_project(completed_items)
@@ -269,6 +281,8 @@ def team_slug(slug):
         prs_reviewed=prs_reviewed,
         priority_bug_avg_time_to_fix=avg_priority_bug_fix,
         priority_bugs_fixed=priority_bugs_fixed,
+        all_work_done=all_work_done,
+        avg_all_time_to_fix=avg_all_time_to_fix,
     )
 
 
