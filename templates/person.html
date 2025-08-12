@@ -79,6 +79,14 @@
           </article>
         </div>
       </div>
+        <hr />
+        <h2>Work by Platform</h2>
+        <article>
+          <div>
+  <canvas id="platformChart"></canvas>
+  </div>
+  </article>
+
       <h2>Completed</h2>
         {% for project, issues in completed_by_project.items() %}
         <details>
@@ -93,13 +101,6 @@
           {% endfor %}
         </details>
         {% endfor %}
-        <hr />
-        <h2>Work by Platform</h2>
-        <article>
-          <div>
-  <canvas id="platformChart"></canvas>
-  </div>
-  </article>
 {% endblock %}
 
 {% block extra_scripts %}
