@@ -87,7 +87,8 @@
   </div>
   </article>
 
-      <h2>Completed</h2>
+      {% if completed_by_project %}
+        <h2>Completed</h2>
         {% for project, issues in completed_by_project.items() %}
         <details>
           <summary>{{ project }}</summary>
@@ -101,6 +102,7 @@
           {% endfor %}
         </details>
         {% endfor %}
+      {% endif %}
 {% endblock %}
 
 {% block extra_scripts %}
