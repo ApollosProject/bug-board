@@ -79,6 +79,25 @@
           </article>
         </div>
       </div>
+
+      <div class="grid">
+        <div>
+          <article>
+            <header>All Work Done</header>
+            <h1>{{ all_work_done }}</h1>
+          </article>
+        </div>
+        <div>
+          <article>
+            <header>Time to Completion</header>
+            {% if avg_all_time_to_fix is not none %}
+            <h1>{{ avg_all_time_to_fix }}d</h1>
+            {% else %}
+            <h1>n/a</h1>
+            {% endif %}
+          </article>
+        </div>
+      </div>
         <hr />
         <h2>Work by Platform</h2>
         <article>
