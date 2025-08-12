@@ -260,7 +260,7 @@ def post_stale():
             filtered[reviewer] = keep
     prs = filtered
     if prs:
-        markdown += "*PRs - Checks Passing, Waiting for Review*\n"
+        markdown += "*PRs - Checks Passing, Waiting for Review (+12h)*\n"
         for reviewer, pr_list in prs.items():
             if not pr_list:
                 continue
