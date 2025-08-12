@@ -2,6 +2,20 @@
 
 {% block title %}{{ person_name|first_name }}{% endblock %}
 
+{% block extra_head %}
+<style>
+  #work-done-tooltip[data-tooltip]::before {
+    font-size: 0.7em;
+  }
+  h1.low {
+    color: #b33;
+  }
+  h1.high {
+    color: #3b3;
+  }
+</style>
+{% endblock %}
+
 {% block header_nav %}{% endblock %}
 
 {% block content %}
@@ -83,8 +97,16 @@
       <div class="grid">
         <div>
           <article>
-            <header>All Work Done</header>
-            <h1>{{ all_work_done }}</h1>
+            <header>
+              All Work Done
+              <small id="work-done-tooltip" data-tooltip="< 2/week: red; ≥ 5/week: green" style="font-size: 0.8em; opacity: 0.6;">ⓘ</small>
+            </header>
+            {% if days >= 7 %}
+              {% set rate = (all_work_done * 7 / days) %}
+            {% endif %}
+            <h1{% if days >= 7 and rate < 2 %} class="low"{% elif days >= 7 and rate >= 5 %} class="high"{% endif %}>
+              {{ all_work_done }}
+            </h1>
           </article>
         </div>
         <div>
