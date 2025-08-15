@@ -409,6 +409,54 @@ def get_open_issues_for_person(login: str):
     return issues
 
 
+def get_open_issues_in_projects(project_names):
+    """Return open issues across the team limited to specified Linear project names.
+
+    project_names: iterable of project name strings to include.
+    """
+
+    # Ensure we work with a list for GraphQL variables
+    project_names = list(project_names)
+
+    query = gql(
+        """
+        query OpenIssuesInProjects($projectNames: [String!], $cursor: String) {
+          issues(
+            first: 50
+            after: $cursor
+            filter: {
+              team: { name: { eq: \"Apollos\" } }
+              state: { name: { nin: [\"Done\", \"Canceled\", \"Duplicate\"] } }
+              project: { name: { in: $projectNames } }
+            }
+            orderBy: updatedAt
+          ) {
+            nodes {
+              id
+              title
+              url
+              updatedAt
+              assignee { displayName }
+              project { name }
+            }
+            pageInfo { hasNextPage endCursor }
+          }
+        }
+        """,
+    )
+
+    cursor = None
+    issues = []
+    while True:
+        params = {"projectNames": project_names, "cursor": cursor}
+        data = _get_client().execute(query, variable_values=params)
+        issues += data["issues"]["nodes"]
+        if not data["issues"]["pageInfo"]["hasNextPage"]:
+            break
+        cursor = data["issues"]["pageInfo"]["endCursor"]
+    return issues
+
+
 def get_completed_issues_for_person(login: str, days=30):
     """Return completed issues for a user over the last `days` days, filtered by Linear username."""
 
