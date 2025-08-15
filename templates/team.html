@@ -16,19 +16,21 @@
 {% block content %}
       <h2>Engineering Teams</h2>
       <h2>Current Focus</h2>
+      {% if developers %}
       <h4>Cycle</h4>
       <ul>
-    {% for dev in developers %}
-      <li>
-        <a href="{{ url_for('team_slug', slug=dev.slug) }}">{{ dev.name|first_name }}</a>
-        {% set projs = developer_projects.get(dev.slug, []) %}
-        {% if projs %}&ndash;{% for proj in projs %}
-          <a href="{{ proj.url }}">{{ proj.name }}</a>{% if not loop.last %}, {% endif %}
-        {% endfor %}{% endif %}
-      </li>
-    {% endfor %}
+      {% for dev in developers %}
+        <li>
+          <a href="{{ url_for('team_slug', slug=dev.slug) }}">{{ dev.name|first_name }}</a>
+          {% set projs = developer_projects.get(dev.slug, []) %}
+          {% if projs %}&ndash;{% for proj in projs %}
+            <a href="{{ proj.url }}">{{ proj.name }}</a>{% if not loop.last %}, {% endif %}
+          {% endfor %}{% endif %}
+        </li>
+      {% endfor %}
       </ul>
       <hr />
+      {% endif %}
       <h4>Support</h4>
       <ul>
       {%- for person in on_call_support -%}
@@ -42,6 +44,7 @@
       {%- endfor -%}
       </ul>
       <hr />
+      {% if cycle_projects_by_initiative %}
       <h3>Cycle Projects</h3>
       <ul>
       {% for initiative, projects in cycle_projects_by_initiative.items() %}
@@ -89,6 +92,7 @@
         {% endfor %}
       {% endfor %}
       </ul>
+      {% endif %}
       {% if completed_cycle_projects %}
       <details open>
         <summary>Completed Projects</summary>
