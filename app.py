@@ -17,6 +17,7 @@ from linear.issues import (
     get_time_data,
 )
 from linear.projects import get_projects
+from support import get_support_slugs
 from github import merged_prs_by_author, merged_prs_by_reviewer
 
 app = Flask(__name__)
@@ -242,7 +243,8 @@ def team_slug(slug):
     )
     current_names = [proj.get("name") for proj in current_projects]
 
-    if person_cfg.get("on_call_support"):
+    on_support = slug in get_support_slugs()
+    if on_support:
         open_current_cycle = {
             proj: issues
             for proj, issues in open_by_project.items()
@@ -275,7 +277,7 @@ def team_slug(slug):
         open_current_cycle=open_current_cycle,
         open_other=open_other,
         completed_by_project=completed_by_project,
-        on_call_support=person_cfg.get("on_call_support"),
+        on_call_support=on_support,
         work_by_platform=work_by_platform,
         prs_merged=prs_merged,
         prs_reviewed=prs_reviewed,
@@ -425,11 +427,11 @@ def team():
         key=lambda d: d["name"],
     )
 
+    support_slugs = get_support_slugs()
     on_call_support = sorted(
         [
             {"slug": name, "name": format_name(name)}
-            for name, person in config.get("people", {}).items()
-            if person.get("on_call_support")
+            for name in support_slugs
         ],
         key=lambda d: d["name"],
     )
