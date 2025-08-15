@@ -31,6 +31,21 @@
       </ul>
       <hr />
       {% endif %}
+      {% if onboarding_developers %}
+      <h4>Onboarding</h4>
+      <ul>
+      {% for dev in onboarding_developers %}
+        <li>
+          <a href="{{ url_for('team_slug', slug=dev.slug) }}">{{ dev.name|first_name }}</a>
+          {% set projs = onboarding_developer_projects.get(dev.slug, []) %}
+          {% if projs %}&ndash;{% for proj in projs %}
+            <a href="{{ proj.url }}">{{ proj.name }}</a>{% if not loop.last %}, {% endif %}
+          {% endfor %}{% endif %}
+        </li>
+      {% endfor %}
+      </ul>
+      <hr />
+      {% endif %}
       <h4>Support</h4>
       <ul>
       {%- for person in on_call_support -%}
