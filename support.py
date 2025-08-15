@@ -2,8 +2,8 @@ from datetime import datetime
 from typing import Dict, Set
 
 from config import load_config
-from linear.projects import get_projects
 from linear.issues import get_open_issues_in_projects
+from linear.projects import get_projects
 
 
 def _normalize(name: str) -> str:
@@ -90,13 +90,16 @@ def get_support_slugs() -> Set[str]:
     people_cfg = config.get("people", {})
     all_people_slugs: Set[str] = set(people_cfg.keys())
     available_slugs: Set[str] = {
-        slug for slug, info in people_cfg.items() if info.get("available_for_support", False)
+        slug
+        for slug, info in people_cfg.items()
+        if info.get("available_for_support", False)
     }
 
     # Additional filter: exclude anyone currently assigned to issues
     # in an Onboarding Churches project and who is also a member of that project.
     onboarding_projects = [
-        p for p in projects
+        p
+        for p in projects
         if any(
             (node.get("name") or "") == "Onboarding Churches"
             for node in (p.get("initiatives", {}) or {}).get("nodes", []) or []
@@ -110,7 +113,7 @@ def get_support_slugs() -> Set[str]:
         lead_name = (p.get("lead") or {}).get("displayName")
         if lead_name:
             members.add(lead_name)
-        onboarding_members_by_project[p.get("name")] = { _normalize(n) for n in members }
+        onboarding_members_by_project[p.get("name")] = {_normalize(n) for n in members}
 
     if onboarding_project_names:
         issues = get_open_issues_in_projects(onboarding_project_names)
@@ -133,4 +136,8 @@ def get_support_slugs() -> Set[str]:
 
     # On support = available AND not assigned to an active cycle project
     # AND not assigned to onboarding project issues while being project member
-    return (all_people_slugs & available_slugs) - assigned_active_slugs - assigned_onboarding_slugs
+    return (
+        (all_people_slugs & available_slugs)
+        - assigned_active_slugs
+        - assigned_onboarding_slugs
+    )
