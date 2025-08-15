@@ -10,6 +10,7 @@ import schedule
 from dotenv import load_dotenv
 
 from config import load_config
+from support import get_support_slugs
 from constants import PRIORITY_TO_SCORE
 from github import (
     get_pr_diff,
@@ -155,10 +156,12 @@ def post_priority_bugs():
             lead = config["platforms"][platform_slug]["lead"]
             lead_info = config["people"][lead]
             notified.add(f"<@{lead_info['slack_id']}> ({platform} Lead)")
+            support_slugs = get_support_slugs()
             for developer in config["platforms"][platform_slug]["developers"]:
                 person = config["people"][developer]
-                if person["linear_username"] not in assigned and person.get(
-                    "on_call_support", False
+                if (
+                    person["linear_username"] not in assigned
+                    and developer in support_slugs
                 ):
                     notified.add(f"<@{person['slack_id']}>")
         if notified:
