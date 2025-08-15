@@ -16,19 +16,6 @@
 {% block content %}
       <h2>Engineering Teams</h2>
       <h2>Current Focus</h2>
-      <h4>Support</h4>
-      <ul>
-      {%- for person in on_call_support -%}
-        <li>
-          <a href="{{ url_for('team_slug', slug=person.slug) }}">{{ person.name|first_name }}</a>
-          {% set issues = support_issues.get(person.slug) %}
-          {% if issues %}&ndash;{% for issue in issues %}
-            <a href="{{ issue.url }}">{{ issue.title }}</a>{% if not loop.last %}, {% endif %}
-          {% endfor %}{% endif %}
-        </li>
-      {%- endfor -%}
-      </ul>
-      <hr />
       <h4>Cycle</h4>
       <ul>
     {% for dev in developers %}
@@ -40,6 +27,19 @@
         {% endfor %}{% endif %}
       </li>
     {% endfor %}
+      </ul>
+      <hr />
+      <h4>Support</h4>
+      <ul>
+      {%- for person in on_call_support -%}
+        <li>
+          <a href="{{ url_for('team_slug', slug=person.slug) }}">{{ person.name|first_name }}</a>
+          {% set issues = support_issues.get(person.slug) %}
+          {% if issues %}&ndash;{% for issue in issues %}
+            <a href="{{ issue.url }}">{{ issue.title }}</a>{% if not loop.last %}, {% endif %}
+          {% endfor %}{% endif %}
+        </li>
+      {%- endfor -%}
       </ul>
       <hr />
       <h3>Cycle Projects</h3>
