@@ -341,6 +341,14 @@ def team():
         sorted(projects_by_initiative.items(), key=lambda x: x[0])
     )
 
+    # Extract projects for the Onboarding Churches initiative (active only)
+    onboarding_initiative_name = "Onboarding Churches"
+    onboarding_churches_projects = [
+        p
+        for p in projects_by_initiative.get(onboarding_initiative_name, [])
+        if p.get("status", {}).get("name") not in {"Completed", "Incomplete"}
+    ]
+
     # filter to only the cycle initiative (from config.yml)
     current_init = config.get("cycle_initiative")
     if current_init:
@@ -449,6 +457,7 @@ def team():
         completed_cycle_projects=completed_projects,
         on_call_support=on_call_support,
         support_issues=support_issues,
+        onboarding_churches_projects=onboarding_churches_projects,
     )
 
 
