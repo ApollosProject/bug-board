@@ -17,7 +17,7 @@ def get_open_issues(priority, label):
             filter: {
               team: { name: { eq: "Apollos" } }
               labels: { name: { eq: $label } }
-              priority: { lte: $priority }
+              priority: { lte: $priority, gte: 1 }
               state: { name: { nin: ["Done", "Canceled", "Duplicate"] } }
               project: { null: true }
             }
@@ -46,7 +46,9 @@ def get_open_issues(priority, label):
     )
 
     data = _get_client().execute(query, variable_values=params)
-    issues = data["issues"]["nodes"]
+    issues = [
+        issue for issue in data["issues"]["nodes"] if issue.get("priority", 0) > 0
+    ]
     for issue in issues:
         platforms = [
             tag["name"]
@@ -78,7 +80,7 @@ def get_completed_issues(priority, label, days=30):
         filter: {
               team: { name: { eq: "Apollos" } }
               labels: { name: { eq: $label } }
-              priority: { lte: $priority }
+              priority: { lte: $priority, gte: 1 }
               state: { name: { in: ["Done"] } }
               completedAt: { gt: $days }
             }
@@ -151,6 +153,8 @@ def get_completed_issues(priority, label, days=30):
             break
         cursor = data["issues"]["pageInfo"]["endCursor"]
 
+    issues = [issue for issue in issues if issue.get("priority", 0) > 0]
+
     for issue in issues:
         proj = issue.get("project", {}).get("name") if issue.get("project") else None
         issue["project"] = proj
@@ -173,7 +177,7 @@ def get_created_issues(priority, label, days=30):
                 filter: {
                     team: { name: { eq: "Apollos" } }
                     labels: { name: { eq: $label } }
-                    priority: { lte: $priority }
+                    priority: { lte: $priority, gte: 1 }
                     createdAt:{gt: $days}
                     project: { null: true }
                 }
@@ -188,6 +192,7 @@ def get_created_issues(priority, label, days=30):
                         }
                     }
                     createdAt
+                    priority
                 }
                 pageInfo {
                   hasNextPage
@@ -212,6 +217,7 @@ def get_created_issues(priority, label, days=30):
         if not data["issues"]["pageInfo"]["hasNextPage"]:
             break
         cursor = data["issues"]["pageInfo"]["endCursor"]
+    issues = [issue for issue in issues if issue.get("priority", 0) > 0]
     for issue in issues:
         platforms = [
             tag["name"]
