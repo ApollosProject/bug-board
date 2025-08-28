@@ -139,6 +139,7 @@ platforms:
       - vitor
       - dennis
       - john
+      - rumesh
   tv:
     lead: darryl
     developers:
@@ -165,6 +166,7 @@ platforms:
       - bruno
       - austin
       - dennis
+      - rumesh
   cluster:
     lead: vincent
     developers:
