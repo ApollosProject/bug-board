@@ -106,6 +106,11 @@ people:
     linear_username: rumesh.lahiru
     github_username:
     available_for_support: true
+  zach:
+    slack_id: U0BLNNPAB
+    linear_username: zach
+    github_username: solideo-gloria
+    available_for_support: true
 
 
 platforms:
