@@ -38,11 +38,6 @@ people:
     linear_username: aleksandar.trujic
     github_username: trujic1000
     available_for_support: true
-  bruno:
-    slack_id: U07MLGM93D0
-    linear_username: bruno.arndt
-    github_username: bfarndt
-    available_for_support: true
   vitor:
     slack_id: U07KCR739QR
     linear_username: vitor.lelis
@@ -118,7 +113,6 @@ platforms:
     lead: nathan
     developers:
       - vitor
-      - bruno
       - jimmy
   crossroads-anywhere:
     lead: dylan
@@ -158,13 +152,11 @@ platforms:
     lead: nathan
     developers:
       - jimmy
-      - bruno
       - dennis
   admin:
     lead: nathan
     developers:
       - jimmy
-      - bruno
       - austin
       - dennis
       - rumesh
@@ -185,14 +177,12 @@ platforms:
     developers:
       - rajuran
       - jimmy
-      - bruno
       - cameron
       - dennis
   transcriptions:
     lead: vincent
     developers:
       - jimmy
-      - bruno
       - dennis
 
 cycle_initiative: "Apollos: Cycle 5.2025"
