@@ -1,10 +1,11 @@
-from flask import Flask, render_template, request, abort
-
-from config import load_config
 import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
+from flask import Flask, abort, render_template, request
+
+from config import load_config
+from github import merged_prs_by_author, merged_prs_by_reviewer
 from linear.issues import (
     by_assignee,
     by_platform,
@@ -18,7 +19,6 @@ from linear.issues import (
 )
 from linear.projects import get_projects
 from support import get_support_slugs
-from github import merged_prs_by_author, merged_prs_by_reviewer
 
 app = Flask(__name__)
 
@@ -51,15 +51,18 @@ def index():
     open_priority_bugs = get_open_issues(2, "Bug")
     # Only include non-project issues in the index summary
     completed_priority_bugs = [
-        issue for issue in get_completed_issues(2, "Bug", days)
+        issue
+        for issue in get_completed_issues(2, "Bug", days)
         if not issue.get("project")
     ]
     completed_bugs = [
-        issue for issue in get_completed_issues(5, "Bug", days)
+        issue
+        for issue in get_completed_issues(5, "Bug", days)
         if not issue.get("project")
     ]
     completed_new_features = [
-        issue for issue in get_completed_issues(
+        issue
+        for issue in get_completed_issues(
             5,
             "New Feature",
             days,
@@ -67,7 +70,8 @@ def index():
         if not issue.get("project")
     ]
     completed_technical_changes = [
-        issue for issue in get_completed_issues(
+        issue
+        for issue in get_completed_issues(
             5,
             "Technical Change",
             days,
@@ -135,9 +139,7 @@ def team_slug(slug):
     github_username = person_cfg.get("github_username")
     with ThreadPoolExecutor(max_workers=3) as executor:
         open_future = executor.submit(get_open_issues_for_person, login)
-        completed_future = executor.submit(
-            get_completed_issues_for_person, login, days
-        )
+        completed_future = executor.submit(get_completed_issues_for_person, login, days)
         github_future = None
         if github_username:
             github_future = executor.submit(
@@ -375,7 +377,9 @@ def team():
             del projects_by_initiative[name]
 
     # Determine which team members are participating in cycle projects
-    cycle_projects_filtered = [p for projs in projects_by_initiative.values() for p in projs]
+    cycle_projects_filtered = [
+        p for projs in projects_by_initiative.values() for p in projs
+    ]
 
     def normalize(name: str) -> str:
         """Normalize a Linear display name or username for comparison."""
@@ -454,19 +458,13 @@ def team():
         for slug, projects in onboarding_member_projects.items()
     }
     onboarding_developers = sorted(
-        [
-            {"slug": slug, "name": format_name(slug)}
-            for slug in onboarding_member_slugs
-        ],
+        [{"slug": slug, "name": format_name(slug)} for slug in onboarding_member_slugs],
         key=lambda d: d["name"],
     )
 
     support_slugs = get_support_slugs()
     on_call_support = sorted(
-        [
-            {"slug": name, "name": format_name(name)}
-            for name in support_slugs
-        ],
+        [{"slug": name, "name": format_name(name)} for name in support_slugs],
         key=lambda d: d["name"],
     )
 
@@ -497,7 +495,6 @@ def team():
         support_issues=support_issues,
         onboarding_churches_projects=onboarding_churches_projects,
     )
-
 
 
 if __name__ == "__main__":
