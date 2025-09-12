@@ -29,26 +29,38 @@
     </header>
     <main class="container">{% block content %}{% endblock %}</main>
     <footer class="container">
-      <h6>SRE</h6>
-      <ul>
-        <li>
-          <a
-            href="https://cloud.astronomer.io/cljsvo8d800yz01giqt70a7e7/dags?status=failed&state=active"
-            target="_blank"
-            rel="noopener noreferrer"
-            >Failing DAGs</a
-          >
-        </li>
-        <li>
-          <a href="https://differential-ka.sentry.io/issues" target="_blank" rel="noopener noreferrer">Sentry Issues</a>
-        </li>
-        <li>
-          <a href="https://telemetry.betterstack.com/team/278287/tail?s=1201580" target="_blank" rel="noopener noreferrer">BetterStack Logs</a>
-        </li>
-        <li>
-          <a href="https://apollos-metabase-app-8bc87d621513.herokuapp.com/" target="_blank" rel="noopener noreferrer">Metabase (Data)</a>
-        </li>
-      </ul>
+      <div class="grid">
+        <div>
+          <h6>SRE</h6>
+          <ul>
+            <li>
+              <a
+                href="https://cloud.astronomer.io/cljsvo8d800yz01giqt70a7e7/dags?status=failed&state=active"
+                target="_blank"
+                rel="noopener noreferrer"
+                >Failing DAGs</a
+              >
+            </li>
+            <li>
+              <a href="https://differential-ka.sentry.io/issues" target="_blank" rel="noopener noreferrer">Sentry Issues</a>
+            </li>
+            <li>
+              <a href="https://telemetry.betterstack.com/team/278287/tail?s=1201580" target="_blank" rel="noopener noreferrer">BetterStack Logs</a>
+            </li>
+            <li>
+              <a href="https://apollos-metabase-app-8bc87d621513.herokuapp.com/" target="_blank" rel="noopener noreferrer">Metabase (Data)</a>
+            </li>
+          </ul>
+        </div>
+        <div>
+          <h6>Resources</h6>
+          <ul>
+            <li>
+              <a href="{{ url_for('static', filename='resources/engineering-expectations.pdf') }}" target="_blank" rel="noopener noreferrer">Engineering Expectations</a>
+            </li>
+          </ul>
+        </div>
+      </div>
     </footer>
     {% block extra_scripts %}{% endblock %}
   </body>
