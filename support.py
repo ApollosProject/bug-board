@@ -45,14 +45,24 @@ def _is_active_today(project: Dict) -> bool:
     except Exception:
         return False
     today = datetime.utcnow().date()
+    if start_dt > today:
+        return False
+
     if target:
         try:
             target_dt = datetime.fromisoformat(target).date()
         except Exception:
-            # If target can't be parsed, treat as not active to be conservative
-            return False
-        return start_dt <= today <= target_dt
-    return start_dt <= today
+            # If target can't be parsed, assume work is ongoing as long as it has
+            # started.
+            return True
+        if today <= target_dt:
+            return True
+        # The target date has passed but the project is still marked active.
+        # Treat it as ongoing so the assignees remain off the support rotation
+        # until the project is completed.
+        return True
+
+    return True
 
 
 def get_support_slugs() -> Set[str]:
