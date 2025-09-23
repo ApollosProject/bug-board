@@ -380,7 +380,7 @@ def post_friday_deadlines():
 
     upcoming = []
     today = datetime.now(timezone.utc).date()
-    inactive_statuses = {"Completed", "Incomplete", "Cancelled", "Canceled"}
+    inactive_statuses = {"Completed", "Incomplete", "Canceled"}
 
     for project in projects:
         target = project.get("targetDate")
