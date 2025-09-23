@@ -380,9 +380,14 @@ def post_friday_deadlines():
 
     upcoming = []
     today = datetime.now(timezone.utc).date()
+    inactive_statuses = {"Completed", "Incomplete", "Canceled"}
+
     for project in projects:
         target = project.get("targetDate")
         if not target:
+            continue
+        status_name = (project.get("status") or {}).get("name")
+        if status_name in inactive_statuses:
             continue
         try:
             target_dt = datetime.fromisoformat(target).date()
