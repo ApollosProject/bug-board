@@ -151,19 +151,30 @@ def post_priority_bugs():
         }
         platforms = {bug["platform"] for bug in unassigned if bug["platform"]}
         notified = set()
+        support_slugs = get_support_slugs()
         for platform in platforms:
             platform_slug = platform.lower().replace(" ", "-")
-            lead = config["platforms"][platform_slug]["lead"]
-            lead_info = config["people"][lead]
-            notified.add(f"<@{lead_info['slack_id']}> ({platform} Lead)")
-            support_slugs = get_support_slugs()
-            for developer in config["platforms"][platform_slug]["developers"]:
-                person = config["people"][developer]
-                if (
-                    person["linear_username"] not in assigned
-                    and developer in support_slugs
-                ):
-                    notified.add(f"<@{person['slack_id']}>")
+            platform_config = config["platforms"].get(platform_slug, {})
+
+            participant_roles = []
+            lead_slug = platform_config.get("lead")
+            if lead_slug:
+                participant_roles.append((lead_slug, True))
+            for developer_slug in platform_config.get("developers", []):
+                participant_roles.append((developer_slug, False))
+
+            for slug, is_lead in participant_roles:
+                person = config["people"].get(slug)
+                if not person:
+                    continue
+                if slug not in support_slugs:
+                    continue
+                if person["linear_username"] in assigned:
+                    continue
+                mention = f"<@{person['slack_id']}>"
+                if is_lead:
+                    mention = f"{mention} ({platform} Lead)"
+                notified.add(mention)
         if notified:
             notified_text = "\n".join(notified)
             markdown += f"attn:\n\n{notified_text}"
