@@ -10,7 +10,6 @@ import schedule
 from dotenv import load_dotenv
 
 from config import load_config
-from support import get_support_slugs
 from constants import PRIORITY_TO_SCORE
 from github import (
     get_pr_diff,
@@ -25,6 +24,7 @@ from linear.issues import (
 )
 from linear.projects import get_projects
 from openai_client import get_chat_function_call
+from support import get_support_slugs
 
 load_dotenv()
 
