@@ -132,7 +132,6 @@ platforms:
       - jimmy
       - aleks
       - vitor
-      - dennis
       - john
       - rumesh
   tv:
@@ -141,12 +140,10 @@ platforms:
       - jimmy
       - aleks
       - vitor
-      - dennis
       - john
   roku:
     lead: andy
     developers:
-      - dennis
       - jimmy
   web:
     lead: nathan
@@ -179,7 +176,6 @@ platforms:
       - rajuran
       - jimmy
       - cameron
-      - dennis
   transcriptions:
     lead: vincent
     developers:
