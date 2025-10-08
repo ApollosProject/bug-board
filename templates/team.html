@@ -64,7 +64,7 @@
       <ul>
       {% for initiative, projects in cycle_projects_by_initiative.items() %}
         {% for project in projects %}
-          {% set is_completed = project.status and project.status.name in ['Completed', 'Incomplete'] %}
+          {% set is_completed = project.status and project.status.name in ['Completed', 'Incomplete', 'Canceled'] %}
           <li>
             {% if project.health and not is_completed %}
               {% if project.health == 'onTrack' %}
@@ -124,7 +124,7 @@
       <h3>Onboarding Churches</h3>
       <ul>
         {% for project in onboarding_churches_projects %}
-          {% set is_completed = project.status and project.status.name in ['Completed', 'Incomplete'] %}
+          {% set is_completed = project.status and project.status.name in ['Completed', 'Incomplete', 'Canceled'] %}
           <li>
             {% if project.health and not is_completed %}
               {% if project.health == 'onTrack' %}

@@ -347,10 +347,11 @@ def team():
 
     # Extract projects for the Onboarding Churches initiative (active only)
     onboarding_initiative_name = "Onboarding Churches"
+    inactive_project_statuses = {"Completed", "Incomplete", "Canceled"}
     onboarding_churches_projects = [
         p
         for p in projects_by_initiative.get(onboarding_initiative_name, [])
-        if p.get("status", {}).get("name") not in {"Completed", "Incomplete"}
+        if p.get("status", {}).get("name") not in inactive_project_statuses
     ]
 
     # filter to only the cycle initiative (from config.yml)
@@ -367,7 +368,7 @@ def team():
     for name, projects in list(projects_by_initiative.items()):
         remaining = []
         for project in projects:
-            if project.get("status", {}).get("name") in {"Completed", "Incomplete"}:
+            if project.get("status", {}).get("name") in inactive_project_statuses:
                 completed_projects.append(project)
             else:
                 remaining.append(project)
