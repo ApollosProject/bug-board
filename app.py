@@ -5,6 +5,7 @@ from datetime import datetime
 from flask import Flask, abort, render_template, request
 
 from config import load_config
+from constants import PRIORITY_TO_SCORE
 from github import merged_prs_by_author, merged_prs_by_reviewer
 from linear.issues import (
     by_assignee,
@@ -90,10 +91,82 @@ def index():
     )
 
     config_data = load_config()
-    username_to_slug = {
-        info.get("linear_username"): slug
-        for slug, info in config_data.get("people", {}).items()
-    }
+    people_config = config_data.get("people", {})
+
+    def format_display_name(linear_username: str) -> str:
+        return re.sub(r"[._-]+", " ", linear_username).title()
+
+    username_to_slug = {}
+    github_to_linear = {}
+    leaderboard_entries = {}
+
+    for slug, info in people_config.items():
+        linear_username = info.get("linear_username") or slug
+        username_to_slug[linear_username] = slug
+        github_username = info.get("github_username")
+        if github_username:
+            github_to_linear[github_username] = linear_username
+
+    completed_work = (
+        completed_bugs + completed_new_features + completed_technical_changes
+    )
+
+    for issue in completed_work:
+        assignee = issue.get("assignee")
+        if not assignee:
+            continue
+        linear_username = assignee.get("name") or assignee.get("displayName")
+        if not linear_username:
+            continue
+        display_name = assignee.get("displayName") or format_display_name(
+            linear_username
+        )
+        entry = leaderboard_entries.setdefault(
+            linear_username,
+            {
+                "display_name": display_name,
+                "linear_username": linear_username,
+                "score": 0,
+                "issues": [],
+                "reviews": 0,
+            },
+        )
+        entry["issues"].append(issue)
+        entry["score"] += PRIORITY_TO_SCORE.get(issue.get("priority"), 1)
+
+    for reviewer, prs in merged_prs_by_reviewer(days).items():
+        linear_username = github_to_linear.get(reviewer)
+        if linear_username:
+            entry = leaderboard_entries.setdefault(
+                linear_username,
+                {
+                    "display_name": format_display_name(linear_username),
+                    "linear_username": linear_username,
+                    "score": 0,
+                    "issues": [],
+                    "reviews": 0,
+                },
+            )
+        else:
+            entry = leaderboard_entries.setdefault(
+                reviewer,
+                {
+                    "display_name": format_display_name(reviewer),
+                    "linear_username": None,
+                    "score": 0,
+                    "issues": [],
+                    "reviews": 0,
+                },
+            )
+        review_points = len(prs)
+        entry["reviews"] += review_points
+        entry["score"] += review_points
+
+    completed_issues_by_assignee = sorted(
+        leaderboard_entries.values(),
+        key=lambda item: item["score"],
+        reverse=True,
+    )
 
     return render_template(
         "index.html",
@@ -105,9 +178,7 @@ def index():
             / len(completed_bugs + completed_new_features + completed_technical_changes)
             * 100
         ),
-        completed_issues_by_assignee=by_assignee(
-            completed_bugs + completed_new_features + completed_technical_changes
-        ),
+        completed_issues_by_assignee=completed_issues_by_assignee,
         all_issues=created_priority_bugs + open_priority_bugs,
         issues_by_platform=by_platform(created_priority_bugs),
         lead_time_data=time_data["lead"],
