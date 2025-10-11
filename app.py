@@ -48,41 +48,60 @@ def mmdd_filter(date_str: str) -> str:
 @app.route("/")
 def index():
     days = request.args.get("days", default=30, type=int)
-    created_priority_bugs = get_created_issues(2, "Bug", days)
-    open_priority_bugs = get_open_issues(2, "Bug")
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        created_priority_future = executor.submit(
+            get_created_issues, 2, "Bug", days
+        )
+        open_priority_future = executor.submit(get_open_issues, 2, "Bug")
+        completed_priority_future = executor.submit(
+            get_completed_issues, 2, "Bug", days
+        )
+        completed_bugs_future = executor.submit(
+            get_completed_issues, 5, "Bug", days
+        )
+        completed_new_features_future = executor.submit(
+            get_completed_issues, 5, "New Feature", days
+        )
+        completed_technical_changes_future = executor.submit(
+            get_completed_issues, 5, "Technical Change", days
+        )
+        open_bugs_future = executor.submit(get_open_issues, 5, "Bug")
+        open_new_features_future = executor.submit(
+            get_open_issues, 5, "New Feature"
+        )
+        open_technical_changes_future = executor.submit(
+            get_open_issues, 5, "Technical Change"
+        )
+        reviews_future = executor.submit(merged_prs_by_reviewer, days)
+
+    created_priority_bugs = created_priority_future.result()
+    open_priority_bugs = open_priority_future.result()
+
     # Only include non-project issues in the index summary
     completed_priority_bugs = [
         issue
-        for issue in get_completed_issues(2, "Bug", days)
+        for issue in completed_priority_future.result()
         if not issue.get("project")
     ]
     completed_bugs = [
         issue
-        for issue in get_completed_issues(5, "Bug", days)
+        for issue in completed_bugs_future.result()
         if not issue.get("project")
     ]
     completed_new_features = [
         issue
-        for issue in get_completed_issues(
-            5,
-            "New Feature",
-            days,
-        )
+        for issue in completed_new_features_future.result()
         if not issue.get("project")
     ]
     completed_technical_changes = [
         issue
-        for issue in get_completed_issues(
-            5,
-            "Technical Change",
-            days,
-        )
+        for issue in completed_technical_changes_future.result()
         if not issue.get("project")
     ]
     open_work = (
-        get_open_issues(5, "Bug")
-        + get_open_issues(5, "New Feature")
-        + get_open_issues(5, "Technical Change")
+        open_bugs_future.result()
+        + open_new_features_future.result()
+        + open_technical_changes_future.result()
     )
     time_data = get_time_data(completed_priority_bugs)
     fixes_per_day = (
@@ -96,16 +115,41 @@ def index():
     def format_display_name(linear_username: str) -> str:
         return re.sub(r"[._-]+", " ", linear_username).title()
 
-    username_to_slug = {}
-    github_to_linear = {}
-    leaderboard_entries = {}
+    alias_to_slug = {}
+    github_to_slug = {}
+    display_name_overrides = {}
+
+    def normalize_identity(value: str | None) -> str:
+        if not value:
+            return ""
+        return re.sub(r"[^a-z0-9]", "", value.lower())
 
     for slug, info in people_config.items():
         linear_username = info.get("linear_username") or slug
-        username_to_slug[linear_username] = slug
+        display_name_overrides[slug] = format_display_name(linear_username)
+        for alias in {
+            slug,
+            linear_username,
+            display_name_overrides[slug],
+        }:
+            normalized = normalize_identity(alias)
+            if normalized:
+                alias_to_slug[normalized] = slug
         github_username = info.get("github_username")
         if github_username:
-            github_to_linear[github_username] = linear_username
+            github_to_slug[normalize_identity(github_username)] = slug
+
+    def resolve_slug(*identities: str | None) -> str | None:
+        for identity in identities:
+            normalized = normalize_identity(identity)
+            if normalized and normalized in alias_to_slug:
+                return alias_to_slug[normalized]
+        return None
+
+    scores_by_slug: dict[str, int] = {}
+    scores_by_external: dict[str, int] = {}
+    names_by_external: dict[str, str] = {}
+    names_by_slug: dict[str, str] = {}
 
     completed_work = (
         completed_bugs + completed_new_features + completed_technical_changes
@@ -115,58 +159,56 @@ def index():
         assignee = issue.get("assignee")
         if not assignee:
             continue
-        linear_username = assignee.get("name") or assignee.get("displayName")
-        if not linear_username:
-            continue
+        raw_identity = assignee.get("name") or assignee.get("displayName") or ""
         display_name = assignee.get("displayName") or format_display_name(
-            linear_username
+            raw_identity
         )
-        entry = leaderboard_entries.setdefault(
-            linear_username,
-            {
-                "display_name": display_name,
-                "linear_username": linear_username,
-                "score": 0,
-                "issues": [],
-                "reviews": 0,
-            },
-        )
-        entry["issues"].append(issue)
-        entry["score"] += PRIORITY_TO_SCORE.get(issue.get("priority"), 1)
-
-    for reviewer, prs in merged_prs_by_reviewer(days).items():
-        linear_username = github_to_linear.get(reviewer)
-        if linear_username:
-            entry = leaderboard_entries.setdefault(
-                linear_username,
-                {
-                    "display_name": format_display_name(linear_username),
-                    "linear_username": linear_username,
-                    "score": 0,
-                    "issues": [],
-                    "reviews": 0,
-                },
-            )
+        slug = resolve_slug(assignee.get("name"), assignee.get("displayName"))
+        points = PRIORITY_TO_SCORE.get(issue.get("priority"), 0)
+        if slug:
+            scores_by_slug[slug] = scores_by_slug.get(slug, 0) + points
+            names_by_slug.setdefault(slug, display_name or display_name_overrides[slug])
         else:
-            entry = leaderboard_entries.setdefault(
-                reviewer,
-                {
-                    "display_name": format_display_name(reviewer),
-                    "linear_username": None,
-                    "score": 0,
-                    "issues": [],
-                    "reviews": 0,
-                },
-            )
-        review_points = len(prs)
-        entry["reviews"] += review_points
-        entry["score"] += review_points
+            key = normalize_identity(display_name) or normalize_identity(raw_identity)
+            if not key:
+                continue
+            scores_by_external[key] = scores_by_external.get(key, 0) + points
+            names_by_external.setdefault(key, display_name or raw_identity)
 
-    completed_issues_by_assignee = sorted(
-        leaderboard_entries.values(),
-        key=lambda item: item["score"],
-        reverse=True,
+    merged_reviews = reviews_future.result()
+    for reviewer, prs in merged_reviews.items():
+        review_points = len(prs)
+        if review_points == 0:
+            continue
+        slug = github_to_slug.get(normalize_identity(reviewer))
+        if slug:
+            scores_by_slug[slug] = scores_by_slug.get(slug, 0) + review_points
+            names_by_slug.setdefault(slug, display_name_overrides[slug])
+        else:
+            key = normalize_identity(reviewer)
+            if not key:
+                continue
+            scores_by_external[key] = scores_by_external.get(key, 0) + review_points
+            names_by_external.setdefault(key, format_display_name(reviewer))
+
+    leaderboard_entries = [
+        {
+            "slug": slug,
+            "display_name": names_by_slug.get(slug) or display_name_overrides.get(slug),
+            "score": score,
+        }
+        for slug, score in scores_by_slug.items()
+    ]
+    leaderboard_entries.extend(
+        {
+            "slug": None,
+            "display_name": names_by_external[key],
+            "score": score,
+        }
+        for key, score in scores_by_external.items()
     )
+
+    leaderboard_entries.sort(key=lambda entry: entry["score"], reverse=True)
 
     return render_template(
         "index.html",
@@ -178,7 +220,7 @@ def index():
             / len(completed_bugs + completed_new_features + completed_technical_changes)
             * 100
         ),
-        completed_issues_by_assignee=completed_issues_by_assignee,
+        leaderboard_entries=leaderboard_entries,
         all_issues=created_priority_bugs + open_priority_bugs,
         issues_by_platform=by_platform(created_priority_bugs),
         lead_time_data=time_data["lead"],
@@ -193,7 +235,6 @@ def index():
             reverse=True,
         ),
         fixes_per_day=fixes_per_day,
-        username_to_slug=username_to_slug,
     )
 
 

@@ -115,15 +115,14 @@
           <tr>
             <th scope="col">Person</th>
             <th scope="col">Score</th>
-            <th scope="col">PR Reviews</th>
           </tr>
         </thead>
         <tbody>
-          {% for entry in completed_issues_by_assignee %}
+          {% for entry in leaderboard_entries %}
           <tr>
             <td>
-              {% if entry.linear_username and entry.linear_username in username_to_slug %}
-                <a href="{{ url_for('team_slug', slug=username_to_slug[entry.linear_username], days=days) }}">
+              {% if entry.slug %}
+                <a href="{{ url_for('team_slug', slug=entry.slug, days=days) }}">
                   {{ entry.display_name|first_name }}
                 </a>
               {% else %}
@@ -131,7 +130,6 @@
               {% endif %}
             </td>
             <td>{{ entry.score }}</td>
-            <td>{{ entry.reviews }}</td>
           </tr>
           {% endfor %}
         </tbody>
