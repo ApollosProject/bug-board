@@ -15,6 +15,7 @@ from github import (
     get_pr_diff,
     get_prs_waiting_for_review_by_reviewer,
     get_prs_with_changes_requested_by_reviewer,
+    merged_prs_by_reviewer,
 )
 from linear.issues import (
     get_completed_issues,
@@ -88,6 +89,14 @@ def get_slack_markdown_by_linear_username(username):
         if config["people"][person]["linear_username"] == username:
             return f"<@{config['people'][person]['slack_id']}>"
     return "No Assignee"
+
+
+def get_slack_markdown_by_github_username(username):
+    config = load_config()
+    for person in config["people"].values():
+        if person.get("github_username") == username:
+            return f"<@{person['slack_id']}>"
+    return username
 
 
 def _get_pr_diffs(issue):
@@ -224,21 +233,29 @@ def post_leaderboard():
         if not assignee:
             continue
         assignee_name = assignee["displayName"]
-        if assignee_name not in leaderboard:
-            leaderboard[assignee_name] = 0
+        slack_markdown = get_slack_markdown_by_linear_username(assignee_name)
+        if slack_markdown not in leaderboard:
+            leaderboard[slack_markdown] = 0
         score = priority_to_score.get(item["priority"], 0)
-        leaderboard[assignee_name] += score
+        leaderboard[slack_markdown] += score
+
+    for reviewer, prs in merged_prs_by_reviewer(7).items():
+        slack_markdown = get_slack_markdown_by_github_username(reviewer)
+        if slack_markdown not in leaderboard:
+            leaderboard[slack_markdown] = 0
+        leaderboard[slack_markdown] += len(prs)
+
     leaderboard = dict(sorted(leaderboard.items(), key=lambda x: x[1], reverse=True))
     medals = ["🥇", "🥈", "🥉"]
     markdown = "*Weekly Leaderboard*\n\n"
     for i, (assignee, score) in enumerate(leaderboard.items()):
         if i >= 3:
             break
-        slack_markdown = get_slack_markdown_by_linear_username(assignee)
-        markdown += f"{medals[i]} {slack_markdown}: {score}\n"
+        markdown += f"{medals[i]} {assignee}: {score}\n"
     markdown += "\n\n"
     markdown += (
-        "_scores - 20pts for urgent, 10pts for high, 5pts for medium, 1pt for low_\n\n"
+        "_scores - 20pts for urgent, 10pts for high, 5pts for medium, 1pt for low, "
+        "1pt per PR review_\n\n"
     )
     markdown += f"<{os.getenv('APP_URL')}?days=7|View Bug Board>"
     post_to_slack(markdown)
