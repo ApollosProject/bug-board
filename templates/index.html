@@ -106,24 +106,30 @@
         Scores
         <small
           id="score-tooltip"
-          data-tooltip="20pts for urgent, 10pts for high, 5pts for medium, 1pt for low"
+          data-tooltip="20pts for urgent, 10pts for high, 5pts for medium, 1pt for low, 1pt per PR review"
           style="font-size: 0.8em; opacity: 0.6;"
           >ⓘ</small>
       </h4>
       <table>
+        <thead>
+          <tr>
+            <th scope="col">Person</th>
+            <th scope="col">Score</th>
+          </tr>
+        </thead>
         <tbody>
-          {% for assignee in completed_issues_by_assignee %}
+          {% for entry in leaderboard_entries %}
           <tr>
             <td>
-              {% if assignee in username_to_slug %}
-                <a href="{{ url_for('team_slug', slug=username_to_slug[assignee], days=days) }}">
-                  {{ assignee|first_name }}
+              {% if entry.slug %}
+                <a href="{{ url_for('team_slug', slug=entry.slug, days=days) }}">
+                  {{ entry.display_name|first_name }}
                 </a>
               {% else %}
-                {{ assignee|first_name }}
+                {{ entry.display_name|first_name }}
               {% endif %}
             </td>
-            <td>{{ completed_issues_by_assignee[assignee]["score"] }}</td>
+            <td>{{ entry.score }}</td>
           </tr>
           {% endfor %}
         </tbody>
