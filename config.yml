@@ -109,18 +109,7 @@ people:
 
 
 platforms:
-  marketing-site:
-    lead: nathan
-    developers:
-      - vitor
-      - jimmy
-  crossroads-anywhere:
-    lead: dylan
-    developers:
-      - vitor
-      - dennis
-      - john
-  crossroads-api:
+  crossroads:
     lead: dylan
     developers:
       - vitor
