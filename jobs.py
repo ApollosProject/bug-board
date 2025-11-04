@@ -26,6 +26,10 @@ from linear.issues import (
 from linear.projects import get_projects
 from openai_client import get_chat_function_call
 from support import get_support_slugs
+from leaderboard import (
+    calculate_cycle_project_lead_points,
+    calculate_cycle_project_member_points,
+)
 
 load_dotenv()
 
@@ -220,10 +224,11 @@ def post_priority_bugs():
 
 @with_retries
 def post_leaderboard():
+    days = 7
     items = (
-        get_completed_issues(5, "Bug", 7)
-        + get_completed_issues(5, "New Feature", 7)
-        + get_completed_issues(5, "Technical Change", 7)
+        get_completed_issues(5, "Bug", days)
+        + get_completed_issues(5, "New Feature", days)
+        + get_completed_issues(5, "Technical Change", days)
     )
     items = [item for item in items if not item.get("project")]
     priority_to_score = PRIORITY_TO_SCORE
@@ -239,11 +244,23 @@ def post_leaderboard():
         score = priority_to_score.get(item["priority"], 0)
         leaderboard[slack_markdown] += score
 
-    for reviewer, prs in merged_prs_by_reviewer(7).items():
+    for reviewer, prs in merged_prs_by_reviewer(days).items():
         slack_markdown = get_slack_markdown_by_github_username(reviewer)
         if slack_markdown not in leaderboard:
             leaderboard[slack_markdown] = 0
         leaderboard[slack_markdown] += len(prs)
+
+    cycle_points = calculate_cycle_project_lead_points(days)
+    for lead_name, points in cycle_points.items():
+        slack_markdown = get_slack_markdown_by_linear_username(lead_name)
+        key = slack_markdown if slack_markdown != "No Assignee" else lead_name
+        leaderboard[key] = leaderboard.get(key, 0) + points
+
+    member_points = calculate_cycle_project_member_points(days)
+    for member_name, points in member_points.items():
+        slack_markdown = get_slack_markdown_by_linear_username(member_name)
+        key = slack_markdown if slack_markdown != "No Assignee" else member_name
+        leaderboard[key] = leaderboard.get(key, 0) + points
 
     leaderboard = dict(sorted(leaderboard.items(), key=lambda x: x[1], reverse=True))
     medals = ["🥇", "🥈", "🥉"]
@@ -255,9 +272,10 @@ def post_leaderboard():
     markdown += "\n\n"
     markdown += (
         "_scores - 20pts for urgent, 10pts for high, 5pts for medium, 1pt for low, "
-        "1pt per PR review_\n\n"
+        "1pt per PR review, 50pts/week for completed cycle project leads, "
+        "25pts/week for completed cycle project members_\n\n"
     )
-    markdown += f"<{os.getenv('APP_URL')}?days=7|View Bug Board>"
+    markdown += f"<{os.getenv('APP_URL')}?days={days}|View Bug Board>"
     post_to_slack(markdown)
 
 
