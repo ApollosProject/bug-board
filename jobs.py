@@ -402,7 +402,7 @@ def post_upcoming_projects():
             continue
         days_until = (start_dt - today).days
         if start_dt.weekday() == 0 and 0 <= days_until <= 5:
-            lead = project.get("lead", {}).get("displayName")
+            lead = (project.get("lead") or {}).get("displayName")
             lead_md = get_slack_markdown_by_linear_username(lead) if lead else "No Lead"
             upcoming.append(f"- <{project['url']}|{project['name']}> - Lead: {lead_md}")
     if upcoming:
@@ -441,7 +441,7 @@ def post_friday_deadlines():
             continue
         days_until = (target_dt - today).days
         if target_dt.weekday() == 4 and 0 <= days_until <= 5:
-            lead = project.get("lead", {}).get("displayName")
+            lead = (project.get("lead") or {}).get("displayName")
             lead_md = get_slack_markdown_by_linear_username(lead) if lead else "No Lead"
             upcoming.append(f"- <{project['url']}|{project['name']}> - Lead: {lead_md}")
     if upcoming:
