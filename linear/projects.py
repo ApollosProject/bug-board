@@ -19,6 +19,7 @@ def get_projects():
                   status {
                     name
                   }
+                  completedAt
                   startDate
                   targetDate
                   lead {

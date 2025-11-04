@@ -20,6 +20,10 @@ from linear.issues import (
 )
 from linear.projects import get_projects
 from support import get_support_slugs
+from leaderboard import (
+    calculate_cycle_project_lead_points,
+    calculate_cycle_project_member_points,
+)
 
 app = Flask(__name__)
 
@@ -190,6 +194,32 @@ def index():
                 continue
             scores_by_external[key] = scores_by_external.get(key, 0) + review_points
             names_by_external.setdefault(key, format_display_name(reviewer))
+
+    cycle_lead_points = calculate_cycle_project_lead_points(days)
+    for lead_name, points in cycle_lead_points.items():
+        slug = resolve_slug(lead_name, format_display_name(lead_name))
+        if slug:
+            scores_by_slug[slug] = scores_by_slug.get(slug, 0) + points
+            names_by_slug.setdefault(slug, display_name_overrides[slug])
+        else:
+            key = normalize_identity(lead_name)
+            if not key:
+                continue
+            scores_by_external[key] = scores_by_external.get(key, 0) + points
+            names_by_external.setdefault(key, format_display_name(lead_name))
+
+    cycle_member_points = calculate_cycle_project_member_points(days)
+    for member_name, points in cycle_member_points.items():
+        slug = resolve_slug(member_name, format_display_name(member_name))
+        if slug:
+            scores_by_slug[slug] = scores_by_slug.get(slug, 0) + points
+            names_by_slug.setdefault(slug, display_name_overrides[slug])
+        else:
+            key = normalize_identity(member_name)
+            if not key:
+                continue
+            scores_by_external[key] = scores_by_external.get(key, 0) + points
+            names_by_external.setdefault(key, format_display_name(member_name))
 
     leaderboard_entries = [
         {
