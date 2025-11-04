@@ -27,6 +27,46 @@ from leaderboard import (
 
 app = Flask(__name__)
 
+BREAKDOWN_CATEGORIES = [
+    {"key": "urgent", "label": "Urgent issues", "count_label": "issue"},
+    {"key": "high", "label": "High issues", "count_label": "issue"},
+    {"key": "medium", "label": "Medium issues", "count_label": "issue"},
+    {"key": "low", "label": "Low issues", "count_label": "issue"},
+    {"key": "reviews", "label": "PR reviews", "count_label": "review"},
+    {"key": "cycle_lead", "label": "Completed project lead", "count_label": None},
+    {"key": "cycle_member", "label": "Completed project member", "count_label": None},
+]
+
+PRIORITY_BREAKDOWN_KEYS = {
+    1: "urgent",
+    2: "high",
+    3: "medium",
+    4: "low",
+    5: "low",
+}
+
+
+def format_breakdown_text(
+    points_map: dict[str, int] | None, count_map: dict[str, int] | None
+) -> str:
+    if not points_map:
+        return ""
+    count_map = count_map or {}
+    lines: list[str] = []
+    for entry in BREAKDOWN_CATEGORIES:
+        key = entry["key"]
+        points = points_map.get(key, 0)
+        if not points:
+            continue
+        line = f"{entry['label']}: {points} pts"
+        count = count_map.get(key, 0)
+        count_label = entry["count_label"]
+        if count and count_label:
+            label = count_label if count == 1 else f"{count_label}s"
+            line = f"{line} ({count} {label})"
+        lines.append(line)
+    return "\n".join(lines)
+
 
 @app.template_filter("first_name")
 def first_name_filter(name: str) -> str:
@@ -154,6 +194,28 @@ def index():
     scores_by_external: dict[str, int] = {}
     names_by_external: dict[str, str] = {}
     names_by_slug: dict[str, str] = {}
+    points_breakdown_by_slug: dict[str, dict[str, int]] = {}
+    points_breakdown_by_external: dict[str, dict[str, int]] = {}
+    count_breakdown_by_slug: dict[str, dict[str, int]] = {}
+    count_breakdown_by_external: dict[str, dict[str, int]] = {}
+
+    def record_breakdown(
+        store_points: dict[str, dict[str, int]],
+        store_counts: dict[str, dict[str, int]],
+        key: str,
+        category: str,
+        points: int,
+        count_increment: int = 0,
+    ) -> None:
+        if points == 0:
+            return
+        person_points = store_points.setdefault(key, {})
+        person_points[category] = person_points.get(category, 0) + points
+        if count_increment:
+            person_counts = store_counts.setdefault(key, {})
+            person_counts[category] = (
+                person_counts.get(category, 0) + count_increment
+            )
 
     completed_work = (
         completed_bugs + completed_new_features + completed_technical_changes
@@ -168,16 +230,36 @@ def index():
             raw_identity
         )
         slug = resolve_slug(assignee.get("name"), assignee.get("displayName"))
-        points = PRIORITY_TO_SCORE.get(issue.get("priority"), 0)
+        priority = issue.get("priority")
+        points = PRIORITY_TO_SCORE.get(priority, 0)
+        category_key = PRIORITY_BREAKDOWN_KEYS.get(priority)
         if slug:
             scores_by_slug[slug] = scores_by_slug.get(slug, 0) + points
             names_by_slug.setdefault(slug, display_name or display_name_overrides[slug])
+            if category_key:
+                record_breakdown(
+                    points_breakdown_by_slug,
+                    count_breakdown_by_slug,
+                    slug,
+                    category_key,
+                    points,
+                    1,
+                )
         else:
             key = normalize_identity(display_name) or normalize_identity(raw_identity)
             if not key:
                 continue
             scores_by_external[key] = scores_by_external.get(key, 0) + points
             names_by_external.setdefault(key, display_name or raw_identity)
+            if category_key:
+                record_breakdown(
+                    points_breakdown_by_external,
+                    count_breakdown_by_external,
+                    key,
+                    category_key,
+                    points,
+                    1,
+                )
 
     merged_reviews = reviews_future.result()
     for reviewer, prs in merged_reviews.items():
@@ -188,12 +270,28 @@ def index():
         if slug:
             scores_by_slug[slug] = scores_by_slug.get(slug, 0) + review_points
             names_by_slug.setdefault(slug, display_name_overrides[slug])
+            record_breakdown(
+                points_breakdown_by_slug,
+                count_breakdown_by_slug,
+                slug,
+                "reviews",
+                review_points,
+                review_points,
+            )
         else:
             key = normalize_identity(reviewer)
             if not key:
                 continue
             scores_by_external[key] = scores_by_external.get(key, 0) + review_points
             names_by_external.setdefault(key, format_display_name(reviewer))
+            record_breakdown(
+                points_breakdown_by_external,
+                count_breakdown_by_external,
+                key,
+                "reviews",
+                review_points,
+                review_points,
+            )
 
     cycle_lead_points = calculate_cycle_project_lead_points(days)
     for lead_name, points in cycle_lead_points.items():
@@ -201,12 +299,26 @@ def index():
         if slug:
             scores_by_slug[slug] = scores_by_slug.get(slug, 0) + points
             names_by_slug.setdefault(slug, display_name_overrides[slug])
+            record_breakdown(
+                points_breakdown_by_slug,
+                count_breakdown_by_slug,
+                slug,
+                "cycle_lead",
+                points,
+            )
         else:
             key = normalize_identity(lead_name)
             if not key:
                 continue
             scores_by_external[key] = scores_by_external.get(key, 0) + points
             names_by_external.setdefault(key, format_display_name(lead_name))
+            record_breakdown(
+                points_breakdown_by_external,
+                count_breakdown_by_external,
+                key,
+                "cycle_lead",
+                points,
+            )
 
     cycle_member_points = calculate_cycle_project_member_points(days)
     for member_name, points in cycle_member_points.items():
@@ -214,18 +326,37 @@ def index():
         if slug:
             scores_by_slug[slug] = scores_by_slug.get(slug, 0) + points
             names_by_slug.setdefault(slug, display_name_overrides[slug])
+            record_breakdown(
+                points_breakdown_by_slug,
+                count_breakdown_by_slug,
+                slug,
+                "cycle_member",
+                points,
+            )
         else:
             key = normalize_identity(member_name)
             if not key:
                 continue
             scores_by_external[key] = scores_by_external.get(key, 0) + points
             names_by_external.setdefault(key, format_display_name(member_name))
+            record_breakdown(
+                points_breakdown_by_external,
+                count_breakdown_by_external,
+                key,
+                "cycle_member",
+                points,
+            )
 
     leaderboard_entries = [
         {
             "slug": slug,
             "display_name": names_by_slug.get(slug) or display_name_overrides.get(slug),
             "score": score,
+            "breakdown": format_breakdown_text(
+                points_breakdown_by_slug.get(slug),
+                count_breakdown_by_slug.get(slug),
+            )
+            or None,
         }
         for slug, score in scores_by_slug.items()
     ]
@@ -234,6 +365,11 @@ def index():
             "slug": None,
             "display_name": names_by_external[key],
             "score": score,
+            "breakdown": format_breakdown_text(
+                points_breakdown_by_external.get(key),
+                count_breakdown_by_external.get(key),
+            )
+            or None,
         }
         for key, score in scores_by_external.items()
     )
