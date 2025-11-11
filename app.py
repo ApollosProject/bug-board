@@ -33,6 +33,7 @@ BREAKDOWN_CATEGORIES = [
     {"key": "medium", "label": "Medium issues", "count_label": "issue"},
     {"key": "low", "label": "Low issues", "count_label": "issue"},
     {"key": "reviews", "label": "PR reviews", "count_label": "review"},
+    {"key": "prs", "label": "PRs merged", "count_label": "PR"},
     {"key": "cycle_lead", "label": "Completed project lead", "count_label": None},
     {"key": "cycle_member", "label": "Completed project member", "count_label": None},
 ]
@@ -117,6 +118,7 @@ def index():
             get_open_issues, 5, "Technical Change"
         )
         reviews_future = executor.submit(merged_prs_by_reviewer, days)
+        authored_prs_future = executor.submit(merged_prs_by_author, days)
 
     created_priority_bugs = created_priority_future.result()
     open_priority_bugs = open_priority_future.result()
@@ -262,6 +264,7 @@ def index():
                 )
 
     merged_reviews = reviews_future.result()
+    merged_authored_prs = authored_prs_future.result()
     for reviewer, prs in merged_reviews.items():
         review_points = len(prs)
         if review_points == 0:
@@ -291,6 +294,37 @@ def index():
                 "reviews",
                 review_points,
                 review_points,
+            )
+
+    for author, prs in merged_authored_prs.items():
+        pr_points = len(prs)
+        if pr_points == 0:
+            continue
+        slug = github_to_slug.get(normalize_identity(author))
+        if slug:
+            scores_by_slug[slug] = scores_by_slug.get(slug, 0) + pr_points
+            names_by_slug.setdefault(slug, display_name_overrides[slug])
+            record_breakdown(
+                points_breakdown_by_slug,
+                count_breakdown_by_slug,
+                slug,
+                "prs",
+                pr_points,
+                pr_points,
+            )
+        else:
+            key = normalize_identity(author)
+            if not key:
+                continue
+            scores_by_external[key] = scores_by_external.get(key, 0) + pr_points
+            names_by_external.setdefault(key, format_display_name(author))
+            record_breakdown(
+                points_breakdown_by_external,
+                count_breakdown_by_external,
+                key,
+                "prs",
+                pr_points,
+                pr_points,
             )
 
     cycle_lead_points = calculate_cycle_project_lead_points(days)

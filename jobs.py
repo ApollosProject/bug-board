@@ -15,6 +15,7 @@ from github import (
     get_pr_diff,
     get_prs_waiting_for_review_by_reviewer,
     get_prs_with_changes_requested_by_reviewer,
+    merged_prs_by_author,
     merged_prs_by_reviewer,
 )
 from linear.issues import (
@@ -250,6 +251,12 @@ def post_leaderboard():
             leaderboard[slack_markdown] = 0
         leaderboard[slack_markdown] += len(prs)
 
+    for author, prs in merged_prs_by_author(days).items():
+        slack_markdown = get_slack_markdown_by_github_username(author)
+        if slack_markdown not in leaderboard:
+            leaderboard[slack_markdown] = 0
+        leaderboard[slack_markdown] += len(prs)
+
     cycle_points = calculate_cycle_project_lead_points(days)
     for lead_name, points in cycle_points.items():
         slack_markdown = get_slack_markdown_by_linear_username(lead_name)
@@ -272,7 +279,7 @@ def post_leaderboard():
     markdown += "\n\n"
     markdown += (
         "_scores - 20pts for urgent, 10pts for high, 5pts for medium, 1pt for low, "
-        "1pt per PR review, 30pts/week for completed cycle project leads, "
+        "1pt per merged PR, 1pt per PR review, 30pts/week for completed cycle project leads, "
         "15pts/week for completed cycle project members_\n\n"
     )
     markdown += f"<{os.getenv('APP_URL')}?days={days}|View Bug Board>"
