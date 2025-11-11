@@ -272,8 +272,8 @@ def post_leaderboard():
     markdown += "\n\n"
     markdown += (
         "_scores - 20pts for urgent, 10pts for high, 5pts for medium, 1pt for low, "
-        "1pt per PR review, 50pts/week for completed cycle project leads, "
-        "25pts/week for completed cycle project members_\n\n"
+        "1pt per PR review, 30pts/week for completed cycle project leads, "
+        "15pts/week for completed cycle project members_\n\n"
     )
     markdown += f"<{os.getenv('APP_URL')}?days={days}|View Bug Board>"
     post_to_slack(markdown)
