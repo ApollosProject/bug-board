@@ -88,6 +88,17 @@ def with_retries(func):
     return wrapper
 
 
+def get_team_members(team_slug: str):
+    """Return the subset of people config entries on a given team."""
+    config = load_config()
+    people = config.get("people", {})
+    return {
+        slug: info
+        for slug, info in people.items()
+        if info.get("team") == team_slug
+    }
+
+
 def get_slack_markdown_by_linear_username(username):
     config = load_config()
     for person in config["people"]:
@@ -324,9 +335,16 @@ def post_leaderboard():
 
 @with_retries
 def post_stale():
-    config = load_config()
+    apollos_team_members = get_team_members("apollos_engineering")
     people_by_github_username = {
-        person["github_username"]: person for person in config["people"].values()
+        person.get("github_username"): person
+        for person in apollos_team_members.values()
+        if person.get("github_username")
+    }
+    apollos_linear_usernames = {
+        person.get("linear_username")
+        for person in apollos_team_members.values()
+        if person.get("linear_username")
     }
     prs = get_prs_waiting_for_review_by_reviewer()
     cr_prs = get_prs_with_changes_requested_by_reviewer()
@@ -342,6 +360,8 @@ def post_stale():
     markdown = ""
     filtered = {}
     for reviewer, pr_list in prs.items():
+        if reviewer not in people_by_github_username:
+            continue
         keep = []
         for pr in pr_list:
             crers = [r for r, pls in cr_prs.items() if pr in pls]
@@ -386,11 +406,18 @@ def post_stale():
                 markdown += f"- <{pr['url']}|{pr['title']}> (+{days_waiting}d)\n"
         markdown += "\n\n"
 
-    if any(issues for issues in stale_issues.values()):
+    filtered_stale_issues = {
+        assignee: issues
+        for assignee, issues in stale_issues.items()
+        if assignee in apollos_linear_usernames and issues
+    }
+
+    if not prs and not filtered_stale_issues:
+        return
+
+    if any(filtered_stale_issues.values()):
         markdown += "*Stale Open Issues*\n"
-        for assignee, issues in stale_issues.items():
-            if not issues:
-                continue
+        for assignee, issues in filtered_stale_issues.items():
             assignee_slack_markdown = get_slack_markdown_by_linear_username(assignee)
             markdown += f"\n{assignee_slack_markdown}:\n\n"
             for issue in issues:
@@ -406,10 +433,10 @@ def post_stale():
 @with_retries
 def post_inactive_engineers():
     """Send list of engineers with no completed Linear issues in the last 7 days."""
-    config = load_config()
+    apollos_team_members = get_team_members("apollos_engineering")
     inactive = []
     base_url = os.getenv("APP_URL", "")
-    for person_key, person in config.get("people", {}).items():
+    for person_key, person in apollos_team_members.items():
         login = person.get("linear_username")
         if not login:
             continue
