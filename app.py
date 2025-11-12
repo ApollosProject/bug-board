@@ -614,9 +614,15 @@ def team_slug(slug):
 @app.route("/team")
 def team():
     config = load_config()
+    people_config = config.get("people", {})
+    apollos_team_slugs = {
+        slug
+        for slug, info in people_config.items()
+        if info.get("team") == "apollos_engineering"
+    }
 
     def format_name(key):
-        data = config["people"].get(key, {})
+        data = people_config.get(key, {})
         name = data.get("linear_username", key)
         return name.replace(".", " ").replace("-", " ").title()
 
@@ -708,7 +714,7 @@ def team():
         return name.replace(".", " ").replace("-", " ").title()
 
     name_to_slug = {}
-    for slug, info in config.get("people", {}).items():
+    for slug, info in people_config.items():
         username = info.get("linear_username", slug)
         full = normalize(username)
         # Map the full normalized name to the slug
@@ -733,7 +739,7 @@ def team():
             slug = name_to_slug.get(normalize(name)) or name_to_slug.get(
                 normalize(name).split()[0]
             )
-            if slug:
+            if slug and slug in apollos_team_slugs:
                 cycle_member_slugs.add(slug)
                 member_projects.setdefault(slug, set()).add(
                     (project.get("name"), project.get("url"))
@@ -766,7 +772,7 @@ def team():
             slug = name_to_slug.get(normalize(name)) or name_to_slug.get(
                 normalize(name).split()[0]
             )
-            if slug:
+            if slug and slug in apollos_team_slugs:
                 onboarding_member_slugs.add(slug)
                 onboarding_member_projects.setdefault(slug, set()).add(
                     (project.get("name"), project.get("url"))
@@ -784,7 +790,7 @@ def team():
         key=lambda d: d["name"],
     )
 
-    support_slugs = get_support_slugs()
+    support_slugs = [slug for slug in get_support_slugs() if slug in apollos_team_slugs]
     on_call_support = sorted(
         [{"slug": name, "name": format_name(name)} for name in support_slugs],
         key=lambda d: d["name"],
@@ -798,7 +804,7 @@ def team():
         slug = name_to_slug.get(normalize(assignee)) or name_to_slug.get(
             normalize(assignee).split()[0]
         )
-        if slug:
+        if slug and slug in apollos_team_slugs:
             support_issues[slug] = [
                 {"title": issue["title"], "url": issue["url"]}
                 for issue in data["issues"]
