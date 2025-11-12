@@ -548,6 +548,42 @@ def team_slug(slug):
                 pass
         proj["days_left"] = days_left
         proj["starts_in"] = starts_in
+
+    def normalize_display_name(value: str | None) -> str:
+        if not value:
+            return ""
+        cleaned = value.replace(".", " ").replace("-", " ").strip()
+        return re.sub(r"\s+", " ", cleaned).lower()
+
+    normalized_person_name = normalize_display_name(
+        person_cfg.get("linear_display_name") or person_name
+    )
+    inactive_project_statuses = {"Completed", "Incomplete", "Canceled"}
+    led_projects = [
+        project
+        for project in cycle_projects
+        if normalize_display_name(
+            (project.get("lead") or {}).get("displayName")
+        )
+        == normalized_person_name
+    ]
+    lead_completed_projects = sum(
+        1
+        for project in led_projects
+        if (project.get("status") or {}).get("name") == "Completed"
+    )
+    lead_incomplete_projects = sum(
+        1
+        for project in led_projects
+        if (project.get("status") or {}).get("name") == "Incomplete"
+    )
+    lead_late_projects = sum(
+        1
+        for project in led_projects
+        if (project.get("status") or {}).get("name") not in inactive_project_statuses
+        and project.get("days_left") is not None
+        and project["days_left"] < 0
+    )
     projects_by_initiative = {}
     for project in cycle_projects:
         nodes = project.get("initiatives", {}).get("nodes", [])
@@ -608,6 +644,9 @@ def team_slug(slug):
         priority_bugs_fixed=priority_bugs_fixed,
         all_work_done=all_work_done,
         avg_all_time_to_fix=avg_all_time_to_fix,
+        lead_completed_projects=lead_completed_projects,
+        lead_late_projects=lead_late_projects,
+        lead_incomplete_projects=lead_incomplete_projects,
     )
 
 
