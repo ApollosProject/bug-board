@@ -713,14 +713,7 @@ def team():
         sorted(projects_by_initiative.items(), key=lambda x: x[0])
     )
 
-    # Extract projects for the Onboarding Churches initiative (active only)
-    onboarding_initiative_name = "Onboarding Churches"
     inactive_project_statuses = {"Completed", "Incomplete", "Canceled"}
-    onboarding_churches_projects = [
-        p
-        for p in projects_by_initiative.get(onboarding_initiative_name, [])
-        if p.get("status", {}).get("name") not in inactive_project_statuses
-    ]
 
     # filter to only the cycle initiative (from config.yml)
     current_init = config.get("cycle_initiative")
@@ -800,37 +793,6 @@ def team():
         key=lambda d: d["name"],
     )
 
-    # Build onboarding members and their projects for Current Focus section
-    onboarding_member_slugs = set()
-    onboarding_member_projects = {}
-    for project in onboarding_churches_projects:
-        lead = (project.get("lead") or {}).get("displayName")
-        participants = []
-        if lead:
-            participants.append(lead)
-        participants.extend(project.get("members", []))
-        for name in participants:
-            slug = name_to_slug.get(normalize(name)) or name_to_slug.get(
-                normalize(name).split()[0]
-            )
-            if slug and slug in apollos_team_slugs:
-                onboarding_member_slugs.add(slug)
-                onboarding_member_projects.setdefault(slug, set()).add(
-                    (project.get("name"), project.get("url"))
-                )
-
-    onboarding_member_projects = {
-        slug: [
-            {"name": name, "url": url}
-            for name, url in sorted(projects, key=lambda x: x[0])
-        ]
-        for slug, projects in onboarding_member_projects.items()
-    }
-    onboarding_developers = sorted(
-        [{"slug": slug, "name": format_name(slug)} for slug in onboarding_member_slugs],
-        key=lambda d: d["name"],
-    )
-
     support_slugs = [slug for slug in get_support_slugs() if slug in apollos_team_slugs]
     on_call_support = sorted(
         [{"slug": name, "name": format_name(name)} for name in support_slugs],
@@ -856,13 +818,10 @@ def team():
         platform_teams=platform_teams,
         developers=developers,
         developer_projects=member_projects,
-        onboarding_developers=onboarding_developers,
-        onboarding_developer_projects=onboarding_member_projects,
         cycle_projects_by_initiative=projects_by_initiative,
         completed_cycle_projects=completed_projects,
         on_call_support=on_call_support,
         support_issues=support_issues,
-        onboarding_churches_projects=onboarding_churches_projects,
     )
 
 

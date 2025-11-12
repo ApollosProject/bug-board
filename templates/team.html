@@ -31,21 +31,6 @@
       </ul>
       <hr />
       {% endif %}
-      {% if onboarding_developers %}
-      <h4>Onboarding</h4>
-      <ul>
-      {% for dev in onboarding_developers %}
-        <li>
-          <a href="{{ url_for('team_slug', slug=dev.slug) }}">{{ dev.name|first_name }}</a>
-          {% set projs = onboarding_developer_projects.get(dev.slug, []) %}
-          {% if projs %}&ndash;{% for proj in projs %}
-            <a href="{{ proj.url }}">{{ proj.name }}</a>{% if not loop.last %}, {% endif %}
-          {% endfor %}{% endif %}
-        </li>
-      {% endfor %}
-      </ul>
-      <hr />
-      {% endif %}
       <h4>Support</h4>
       <ul>
       {%- for person in on_call_support -%}
@@ -119,53 +104,6 @@
         {% endfor %}
         </ul>
       </details>
-      {% endif %}
-      {% if onboarding_churches_projects %}
-      <h3>Onboarding Churches</h3>
-      <ul>
-        {% for project in onboarding_churches_projects %}
-          {% set is_completed = project.status and project.status.name in ['Completed', 'Incomplete', 'Canceled'] %}
-          <li>
-            {% if project.health and not is_completed %}
-              {% if project.health == 'onTrack' %}
-                {% set icon = '🟢' %}
-              {% elif project.health == 'atRisk' %}
-                {% set icon = '🟡' %}
-              {% else %}
-                {% set icon = '🔴' %}
-              {% endif %}
-              <span class="health-icon" title="{{ project.health }}">{{ icon }}</span>
-            {% endif %}
-            <a href="{{ project.url }}" class="{% if is_completed %}completed-project{% endif %}">{{ project.name }}</a>
-            {% if project.startDate or project.targetDate %}
-              <small>
-                {% if project.startDate %}{{ project.startDate|mmdd }}{% endif %}{% if project.targetDate %} → {{ project.targetDate|mmdd }}{% endif %}
-                {% if not is_completed %}
-                  {% if project.starts_in is not none and project.starts_in > 0 %}
-                    (starts in {{ project.starts_in }}d)
-                  {% elif project.days_left is not none %}
-                    {% if project.days_left < 0 %}
-                      ({{ project.days_left | abs }}d overdue)
-                    {% else %}
-                      ({{ project.days_left }}d left)
-                    {% endif %}
-                  {% endif %}
-                {% endif %}
-              </small>
-            {% endif %} &ndash;
-            {% set members = project.members %}
-            {% if project.lead %}
-              {% set members = members | reject("equalto", project.lead.displayName) | list %}
-              {% set team_members = [project.lead.displayName] + members %}
-            {% else %}
-              {% set team_members = members %}
-            {% endif %}
-            {% for member in team_members %}
-              {{ member|first_name }}{% if project.lead and loop.first %}*{% endif %}{% if not loop.last %}, {% endif %}
-            {% endfor %}
-          </li>
-        {% endfor %}
-      </ul>
       {% endif %}
       <h3>Platforms</h3>
       <ul>

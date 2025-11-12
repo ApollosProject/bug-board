@@ -2,7 +2,6 @@ from datetime import datetime
 from typing import Dict, Set
 
 from config import load_config
-from linear.issues import get_open_issues_in_projects
 from linear.projects import get_projects
 
 
@@ -105,49 +104,5 @@ def get_support_slugs() -> Set[str]:
         if info.get("team") == "apollos_engineering"
     }
 
-    # Additional filter: exclude anyone currently assigned to issues
-    # in an Onboarding Churches project and who is also a member of that project.
-    onboarding_projects = [
-        p
-        for p in projects
-        if any(
-            (node.get("name") or "") == "Onboarding Churches"
-            for node in (p.get("initiatives", {}) or {}).get("nodes", []) or []
-        )
-    ]
-    onboarding_project_names = {p.get("name") for p in onboarding_projects}
-    # Build membership map for onboarding projects
-    onboarding_members_by_project: Dict[str, Set[str]] = {}
-    for p in onboarding_projects:
-        members: Set[str] = set(p.get("members", []) or [])
-        lead_name = (p.get("lead") or {}).get("displayName")
-        if lead_name:
-            members.add(lead_name)
-        onboarding_members_by_project[p.get("name")] = {_normalize(n) for n in members}
-
-    if onboarding_project_names:
-        issues = get_open_issues_in_projects(onboarding_project_names)
-    else:
-        issues = []
-    assigned_onboarding_slugs: Set[str] = set()
-    for issue in issues:
-        assignee = (issue.get("assignee") or {}).get("displayName")
-        project_name = (issue.get("project") or {}).get("name")
-        if not assignee or not project_name:
-            continue
-        # Only exclude if assignee is also a member of that project
-        normalized = _normalize(assignee)
-        proj_members = onboarding_members_by_project.get(project_name, set())
-        if normalized not in proj_members:
-            continue
-        slug = name_to_slug.get(normalized) or name_to_slug.get(normalized.split()[0])
-        if slug:
-            assigned_onboarding_slugs.add(slug)
-
     # On support = available AND not assigned to an active cycle project
-    # AND not assigned to onboarding project issues while being project member
-    return (
-        (all_people_slugs & available_slugs)
-        - assigned_active_slugs
-        - assigned_onboarding_slugs
-    )
+    return (all_people_slugs & available_slugs) - assigned_active_slugs
