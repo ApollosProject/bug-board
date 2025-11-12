@@ -632,6 +632,7 @@ def team_slug(slug):
         "person.html",
         person_slug=slug,
         person_name=person_name,
+        linear_username=login,
         days=days,
         open_current_cycle=open_current_cycle,
         open_other=open_other,
