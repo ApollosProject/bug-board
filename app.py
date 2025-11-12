@@ -667,6 +667,48 @@ def team():
         name = data.get("linear_username", key)
         return name.replace(".", " ").replace("-", " ").title()
 
+    def normalize(name: str) -> str:
+        """Normalize a Linear display name or username for comparison."""
+        return name.replace(".", " ").replace("-", " ").title()
+
+    name_to_slug = {}
+    for slug, info in people_config.items():
+        username = info.get("linear_username", slug)
+        full = normalize(username)
+        # Map the full normalized name to the slug
+        name_to_slug[full] = slug
+        first = full.split()[0]
+        # Also map first name if unique (don't overwrite existing mapping)
+        name_to_slug.setdefault(first, slug)
+
+    def slug_for_name(name: str | None) -> str | None:
+        if not name:
+            return None
+        normalized = normalize(name)
+        if not normalized:
+            return None
+        slug = name_to_slug.get(normalized)
+        if slug:
+            return slug
+        parts = normalized.split()
+        if not parts:
+            return None
+        return name_to_slug.get(parts[0])
+
+    def project_has_apollos_member(project: dict) -> bool:
+        """Return True when a project includes an Apollos engineer."""
+        participants: list[str] = []
+        lead = (project.get("lead") or {}).get("displayName")
+        if lead:
+            participants.append(lead)
+        members = project.get("members") or []
+        participants.extend(members)
+        for name in participants:
+            slug = slug_for_name(name)
+            if slug and slug in apollos_team_slugs:
+                return True
+        return False
+
     platform_teams = {}
     for slug, info in config.get("platforms", {}).items():
         lead = info.get("lead")
@@ -729,6 +771,8 @@ def team():
     for name, projects in list(projects_by_initiative.items()):
         remaining = []
         for project in projects:
+            if not project_has_apollos_member(project):
+                continue
             if project.get("status", {}).get("name") in inactive_project_statuses:
                 completed_projects.append(project)
             else:
@@ -743,20 +787,6 @@ def team():
         p for projs in projects_by_initiative.values() for p in projs
     ]
 
-    def normalize(name: str) -> str:
-        """Normalize a Linear display name or username for comparison."""
-        return name.replace(".", " ").replace("-", " ").title()
-
-    name_to_slug = {}
-    for slug, info in people_config.items():
-        username = info.get("linear_username", slug)
-        full = normalize(username)
-        # Map the full normalized name to the slug
-        name_to_slug[full] = slug
-        first = full.split()[0]
-        # Also map first name if unique (don't overwrite existing mapping)
-        name_to_slug.setdefault(first, slug)
-
     cycle_member_slugs = set()
     member_projects = {}
     for project in cycle_projects_filtered:
@@ -770,9 +800,7 @@ def team():
             participants.append(lead)
         participants.extend(project.get("members", []))
         for name in participants:
-            slug = name_to_slug.get(normalize(name)) or name_to_slug.get(
-                normalize(name).split()[0]
-            )
+            slug = slug_for_name(name)
             if slug and slug in apollos_team_slugs:
                 cycle_member_slugs.add(slug)
                 member_projects.setdefault(slug, set()).add(
@@ -804,9 +832,7 @@ def team():
     bugs_by_assignee = by_assignee(priority_bugs)
     support_issues = {}
     for assignee, data in bugs_by_assignee.items():
-        slug = name_to_slug.get(normalize(assignee)) or name_to_slug.get(
-            normalize(assignee).split()[0]
-        )
+        slug = slug_for_name(assignee)
         if slug and slug in apollos_team_slugs:
             support_issues[slug] = [
                 {"title": issue["title"], "url": issue["url"]}
