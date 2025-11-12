@@ -64,7 +64,13 @@
       <div class="grid">
         <div>
           <article>
-            <header>PRs Merged</header>
+            <header>
+              {% if github_username %}
+              <a href="https://github.com/pulls?q=is%3Aclosed+is%3Apr+author%3A{{ github_username | urlencode }}+archived%3Afalse">PRs Merged</a>
+              {% else %}
+              PRs Merged
+              {% endif %}
+            </header>
             <h1>{{ prs_merged }}</h1>
           </article>
         </div>
@@ -123,19 +129,19 @@
       <div class="grid">
         <div>
           <article>
-            <header>Completed Projects</header>
+            <header><a href="https://linear.app/differential/projects/all">Completed Projects</a></header>
             <h1>{{ lead_completed_projects }}</h1>
           </article>
         </div>
         <div>
           <article>
-            <header>Late Projects</header>
+            <header><a href="https://linear.app/differential/projects/all">Late Projects</a></header>
             <h1>{{ lead_late_projects }}</h1>
           </article>
         </div>
         <div>
           <article>
-            <header>Incomplete Projects</header>
+            <header><a href="https://linear.app/differential/projects/all">Incomplete Projects</a></header>
             <h1>{{ lead_incomplete_projects }}</h1>
           </article>
         </div>

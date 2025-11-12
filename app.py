@@ -633,6 +633,7 @@ def team_slug(slug):
         person_slug=slug,
         person_name=person_name,
         linear_username=login,
+        github_username=github_username,
         days=days,
         open_current_cycle=open_current_cycle,
         open_other=open_other,
