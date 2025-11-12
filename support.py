@@ -102,7 +102,7 @@ def get_support_slugs() -> Set[str]:
     available_slugs: Set[str] = {
         slug
         for slug, info in people_cfg.items()
-        if info.get("available_for_support", False)
+        if info.get("team") == "apollos_engineering"
     }
 
     # Additional filter: exclude anyone currently assigned to issues

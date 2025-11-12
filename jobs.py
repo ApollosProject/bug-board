@@ -226,6 +226,37 @@ def post_priority_bugs():
 @with_retries
 def post_leaderboard():
     days = 7
+    config = load_config()
+    people_config = config.get("people", {})
+    apollos_team_slugs = {
+        slug
+        for slug, info in people_config.items()
+        if info.get("team") == "apollos_engineering"
+    }
+
+    def normalize_identity(value: str | None) -> str:
+        if not value:
+            return ""
+        return re.sub(r"[^a-z0-9]", "", value.lower())
+
+    alias_to_slug = {}
+    for slug, info in people_config.items():
+        linear_username = info.get("linear_username") or slug
+        display_alias = (
+            re.sub(r"[._-]+", " ", linear_username).title() if linear_username else slug
+        )
+        aliases = {slug, linear_username, display_alias}
+        slack_id = info.get("slack_id")
+        if slack_id:
+            aliases.add(f"<@{slack_id}>")
+        github_username = info.get("github_username")
+        if github_username:
+            aliases.add(github_username)
+        for alias in aliases:
+            normalized = normalize_identity(alias)
+            if normalized:
+                alias_to_slug[normalized] = slug
+
     items = (
         get_completed_issues(5, "Bug", days)
         + get_completed_issues(5, "New Feature", days)
@@ -269,7 +300,12 @@ def post_leaderboard():
         key = slack_markdown if slack_markdown != "No Assignee" else member_name
         leaderboard[key] = leaderboard.get(key, 0) + points
 
-    leaderboard = dict(sorted(leaderboard.items(), key=lambda x: x[1], reverse=True))
+    filtered_leaderboard = {
+        assignee: score
+        for assignee, score in leaderboard.items()
+        if alias_to_slug.get(normalize_identity(assignee)) in apollos_team_slugs
+    }
+    leaderboard = dict(sorted(filtered_leaderboard.items(), key=lambda x: x[1], reverse=True))
     medals = ["🥇", "🥈", "🥉"]
     markdown = "*Weekly Leaderboard*\n\n"
     for i, (assignee, score) in enumerate(leaderboard.items()):

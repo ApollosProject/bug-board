@@ -157,6 +157,11 @@ def index():
 
     config_data = load_config()
     people_config = config_data.get("people", {})
+    apollos_team_slugs = {
+        slug
+        for slug, info in people_config.items()
+        if info.get("team") == "apollos_engineering"
+    }
 
     def format_display_name(linear_username: str) -> str:
         return re.sub(r"[._-]+", " ", linear_username).title()
@@ -407,6 +412,10 @@ def index():
         }
         for key, score in scores_by_external.items()
     )
+
+    leaderboard_entries = [
+        entry for entry in leaderboard_entries if entry.get("slug") in apollos_team_slugs
+    ]
 
     leaderboard_entries.sort(key=lambda entry: entry["score"], reverse=True)
 

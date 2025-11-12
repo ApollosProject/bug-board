@@ -1,111 +1,120 @@
 ---
 people:
   michael:
+    team: apollos_engineering
     slack_id: U01865757S9
     linear_username: michael.neeley
     github_username: redreceipt
   rajuran:
+    team: apollos_engineering
     slack_id: U063W0SFJ5A
     linear_username: rajuran
     github_username: rajuu89
-    available_for_support: true
   jimmy:
+    team: apollos_engineering
     slack_id: U019TA865C2
     linear_username: jimmy
     github_username: jimmyhogoboom
-    available_for_support: true
   andy:
+    team: apollos_engineering
     slack_id: U080E70RQ4U
     linear_username: andy.smith
     github_username: AndySmith1965
-    available_for_support: true
   nathan:
+    team: apollos_engineering
     slack_id: U022N4RTD40
     linear_username: nathan
     github_username: nlewis84
-    available_for_support: true
   vincent:
+    team: unassigned
     slack_id: U15CT1KEF
     linear_username: vincent
     github_username: vinnyjth
   darryl:
+    team: apollos_engineering
     slack_id: U07SM59JTD2
     linear_username: darryl
     github_username: darrylyip
-    available_for_support: true
   aleks:
+    team: apollos_engineering
     slack_id: U083XRVKMHN
     linear_username: aleksandar.trujic
     github_username: trujic1000
-    available_for_support: true
   vitor:
+    team: apollos_engineering
     slack_id: U07KCR739QR
     linear_username: vitor.lelis
     github_username: vitlelis
-    available_for_support: true
   jordan:
+    team: unassigned
     slack_id: U03RUFCJRNF
     linear_username: jordan.furdock
     github_username: jfurdock
   cameron:
+    team: apollos_engineering
     slack_id: U034L9QHG4C
     linear_username: cameron.llewellyn
     github_username: camrun91
-    available_for_support: true
   austin:
+    team: apollos_engineering
     slack_id: U082ES6NT52
     linear_username: austin.witherow
     github_username: awitherow
-    available_for_support: true
   nick:
+    team: unassigned
     slack_id: U02GJG77A
     linear_username: nick
     github_username: nickw
   brandon:
+    team: unassigned
     slack_id: U3V0GB3T8
     linear_username: brandon
     github_username: bkraeling
   conrad:
+    team: unassigned
     slack_id: U055MFLMY
     linear_username: conrad
     github_username: conrad-vanl
   lucas:
+    team: unassigned
     slack_id: U07P9FP9XB2
     linear_username: lucas
     github_username: diff-eq
   tharindu:
+    team: apollos_engineering
     slack_id: U06N28DLL0Z
     linear_username: tharindu.perera
     github_username: tmthekid
-    available_for_support: true
   dylan:
+    team: unassigned
     slack_id: U03LD9MJLNP
     linear_username: dylan
     github_username: dylan-manchester
   dennis:
+    team: apollos_engineering
     slack_id: U03KDSLUW7L
     linear_username: dennis
     github_username: dsilva609
-    available_for_support: true
   john:
+    team: apollos_engineering
     slack_id: UJ0AHPX6J
     linear_username: john
     github_username: jcanver
-    available_for_support: true
   gerry:
+    team: unassigned
     slack_id: U025403GG
     linear_username: gerry
     github_username: hellogerard
   rumesh:
+    team: apollos_engineering
     slack_id: U054D068S4W
     linear_username: rumesh.lahiru
     github_username: rumesh-di
-    available_for_support: true
   zach:
+    team: unassigned
     slack_id: U0BLNNPAB
     linear_username: zach
     github_username: solideo-gloria
-    available_for_support: true
 
 
 platforms:
