@@ -146,13 +146,15 @@
           </article>
         </div>
       </div>
-        <hr />
-        <h2>Work by Platform</h2>
-        <article>
-          <div>
-  <canvas id="platformChart"></canvas>
-  </div>
-  </article>
+      {% if work_by_platform %}
+      <hr />
+      <h2>Work by Platform</h2>
+      <article>
+        <div>
+          <canvas id="platformChart"></canvas>
+        </div>
+      </article>
+      {% endif %}
 
       {% if completed_by_project %}
         <h2>Completed</h2>
@@ -173,6 +175,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
+{% if work_by_platform %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
   const ctx = document.getElementById('platformChart');
@@ -212,4 +215,5 @@
     }
   });
 </script>
+{% endif %}
 {% endblock %}
