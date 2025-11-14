@@ -577,12 +577,10 @@ def team_slug(slug):
         for project in led_projects
         if (project.get("status") or {}).get("name") == "Incomplete"
     )
-    lead_late_projects = sum(
+    lead_current_projects = sum(
         1
         for project in led_projects
         if (project.get("status") or {}).get("name") not in inactive_project_statuses
-        and project.get("days_left") is not None
-        and project["days_left"] < 0
     )
     projects_by_initiative = {}
     for project in cycle_projects:
@@ -647,7 +645,7 @@ def team_slug(slug):
         all_work_done=all_work_done,
         avg_all_time_to_fix=avg_all_time_to_fix,
         lead_completed_projects=lead_completed_projects,
-        lead_late_projects=lead_late_projects,
+        lead_current_projects=lead_current_projects,
         lead_incomplete_projects=lead_incomplete_projects,
     )
 
