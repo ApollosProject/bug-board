@@ -486,6 +486,30 @@ def post_friday_deadlines():
     projects = get_projects()
     config = load_config()
     cycle_init = config.get("cycle_initiative")
+    people_config = config.get("people", {})
+    apollos_slugs = {
+        slug for slug, info in people_config.items() if info.get("team") == "apollos_engineering"
+    }
+
+    def normalize(name: str) -> str:
+        return name.replace(".", " ").replace("-", " ").title()
+
+    name_to_slug = {}
+    for slug, info in people_config.items():
+        username = info.get("linear_username") or slug
+        full = normalize(username)
+        name_to_slug[full] = slug
+        first = full.split()[0]
+        name_to_slug.setdefault(first, slug)
+
+    def is_apollos_lead_project(project: dict) -> bool:
+        lead = (project.get("lead") or {}).get("displayName")
+        if not lead:
+            return False
+        normalized = normalize(lead)
+        slug = name_to_slug.get(normalized) or name_to_slug.get(normalized.split()[0])
+        return slug in apollos_slugs
+
     if cycle_init:
         projects = [
             p
@@ -493,6 +517,7 @@ def post_friday_deadlines():
             if cycle_init
             in {node.get("name") for node in p.get("initiatives", {}).get("nodes", [])}
         ]
+    projects = [p for p in projects if is_apollos_lead_project(p)]
 
     upcoming = []
     today = datetime.now(timezone.utc).date()
