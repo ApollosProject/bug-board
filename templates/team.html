@@ -17,7 +17,7 @@
       <h2>Engineering Teams</h2>
       <h2>Current Focus</h2>
       {% if developers %}
-      <h4>Cycle</h4>
+      <h4>Projects</h4>
       <ul>
       {% for dev in developers %}
         <li>
@@ -45,7 +45,7 @@
       </ul>
       <hr />
       {% if cycle_projects_by_initiative %}
-      <h3>Cycle Projects</h3>
+      <h3>Projects</h3>
       <ul>
       {% for initiative, projects in cycle_projects_by_initiative.items() %}
         {% for project in projects %}

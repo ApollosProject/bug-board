@@ -525,8 +525,7 @@ def team_slug(slug):
     for issues in completed_by_project.values():
         issues.sort(key=lambda x: x["completedAt"], reverse=True)
 
-    # Determine current cycle initiative projects
-    cycle_initiative = config.get("cycle_initiative")
+    # Fetch all projects and annotate date helpers
     cycle_projects = get_projects()
     # attach start/target date info and compute days left
     for proj in cycle_projects:
@@ -582,23 +581,9 @@ def team_slug(slug):
         for project in led_projects
         if (project.get("status") or {}).get("name") not in inactive_project_statuses
     )
-    projects_by_initiative = {}
-    for project in cycle_projects:
-        nodes = project.get("initiatives", {}).get("nodes", [])
-        if nodes:
-            for init in nodes:
-                name = init.get("name") or "Unnamed Initiative"
-                projects_by_initiative.setdefault(name, []).append(project)
-        else:
-            projects_by_initiative.setdefault("No Initiative", []).append(project)
-    # Sort initiatives alphabetically
-    projects_by_initiative = dict(
-        sorted(projects_by_initiative.items(), key=lambda x: x[0])
-    )
-    current_projects = (
-        projects_by_initiative.get(cycle_initiative, []) if cycle_initiative else []
-    )
-    current_names = [proj.get("name") for proj in current_projects]
+    project_names = {
+        proj.get("name") for proj in cycle_projects if proj.get("name")
+    }
 
     on_support = slug in get_support_slugs()
     if on_support:
@@ -616,12 +601,12 @@ def team_slug(slug):
         open_current_cycle = {
             proj: issues
             for proj, issues in open_by_project.items()
-            if proj in current_names
+            if proj in project_names
         }
         open_other = {
             proj: issues
             for proj, issues in open_by_project.items()
-            if proj not in current_names
+            if proj not in project_names
         }
 
     work_by_platform = by_platform(open_items + completed_items)
@@ -738,16 +723,20 @@ def team():
         proj["days_left"] = days_left
         proj["starts_in"] = starts_in
 
-    # group cycle projects by initiatives
+    # group projects by initiatives
     projects_by_initiative = {}
+    seen_project_ids = set()
     for project in cycle_projects:
+        project_id = project.get("id") or project.get("name")
+        if project_id in seen_project_ids:
+            continue
+        seen_project_ids.add(project_id)
         nodes = project.get("initiatives", {}).get("nodes", [])
-        if nodes:
-            for init in nodes:
-                name = init.get("name") or "Unnamed Initiative"
-                projects_by_initiative.setdefault(name, []).append(project)
-        else:
-            projects_by_initiative.setdefault("No Initiative", []).append(project)
+        initiative_names = [init.get("name") or "Unnamed Initiative" for init in nodes]
+        if not initiative_names:
+            initiative_names = ["No Initiative"]
+        primary_initiative = sorted(initiative_names)[0]
+        projects_by_initiative.setdefault(primary_initiative, []).append(project)
     # sort initiatives alphabetically
     projects_by_initiative = dict(
         sorted(projects_by_initiative.items(), key=lambda x: x[0])
@@ -755,16 +744,7 @@ def team():
 
     inactive_project_statuses = {"Completed", "Incomplete", "Canceled"}
 
-    # filter to only the cycle initiative (from config.yml)
-    current_init = config.get("cycle_initiative")
-    if current_init:
-        projects_by_initiative = {
-            name: projects
-            for name, projects in projects_by_initiative.items()
-            if name == current_init
-        }
-
-    # Separate completed or incomplete projects from the cycle initiatives
+    # Separate completed or incomplete projects from the initiative buckets
     completed_projects = []
     for name, projects in list(projects_by_initiative.items()):
         remaining = []
@@ -780,14 +760,14 @@ def team():
         else:
             del projects_by_initiative[name]
 
-    # Determine which team members are participating in cycle projects
-    cycle_projects_filtered = [
+    # Determine which team members are participating in active projects
+    active_projects = [
         p for projs in projects_by_initiative.values() for p in projs
     ]
 
     cycle_member_slugs = set()
     member_projects = {}
-    for project in cycle_projects_filtered:
+    for project in active_projects:
         # Only include projects that have started (start date today or earlier)
         starts_in = project.get("starts_in")
         if starts_in is not None and starts_in > 0:

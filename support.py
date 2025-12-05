@@ -22,14 +22,6 @@ def _name_to_slug_map(config: Dict) -> Dict[str, str]:
     return mapping
 
 
-def _is_cycle_initiative_project(project: Dict, cycle_init: str | None) -> bool:
-    """Return True if project is part of the configured cycle initiative."""
-    if not cycle_init:
-        return False
-    nodes = project.get("initiatives", {}).get("nodes", []) or []
-    return any((node.get("name") or "") == cycle_init for node in nodes)
-
-
 def _is_active_today(project: Dict) -> bool:
     """Return True if today is within the project's start/target date window."""
     status = (project.get("status") or {}).get("name")
@@ -68,20 +60,16 @@ def get_support_slugs() -> Set[str]:
     """
     Compute the set of people slugs who are on support today.
 
-    Anyone not assigned to an initiative project active today (lead or member)
-    is considered on support. If assigned but today's date is outside the
-    project's start/target window, they are on support.
+    Anyone not assigned to an active project today (lead or member) is considered
+    on support. If assigned but today's date is outside the project's
+    start/target window, they are on support.
     """
     config = load_config()
     projects = get_projects()
     name_to_slug = _name_to_slug_map(config)
-    cycle_init = config.get("cycle_initiative")
 
     assigned_active_slugs: Set[str] = set()
     for project in projects:
-        # Only consider projects that belong to the configured cycle initiative
-        if not _is_cycle_initiative_project(project, cycle_init):
-            continue
         if not _is_active_today(project):
             continue
         participants = []

@@ -485,7 +485,6 @@ def post_friday_deadlines():
     """Notify leads about projects ending on Friday."""
     projects = get_projects()
     config = load_config()
-    cycle_init = config.get("cycle_initiative")
     people_config = config.get("people", {})
     apollos_slugs = {
         slug for slug, info in people_config.items() if info.get("team") == "apollos_engineering"
@@ -510,13 +509,6 @@ def post_friday_deadlines():
         slug = name_to_slug.get(normalized) or name_to_slug.get(normalized.split()[0])
         return slug in apollos_slugs
 
-    if cycle_init:
-        projects = [
-            p
-            for p in projects
-            if cycle_init
-            in {node.get("name") for node in p.get("initiatives", {}).get("nodes", [])}
-        ]
     projects = [p for p in projects if is_apollos_lead_project(p)]
 
     upcoming = []
@@ -564,27 +556,6 @@ def post_weekly_changelog():
             seen_ids.add(issue["id"])
             unique.append(issue)
     issues = unique
-
-    # Include only issues without a project or from the configured cycle initiative projects
-    config = load_config()
-    cycle_init = config.get("cycle_initiative")
-    if cycle_init:
-        projects = get_projects()
-        cycle_projects = [
-            p["name"]
-            for p in projects
-            if any(
-                node.get("name") == cycle_init
-                for node in p.get("initiatives", {}).get("nodes", [])
-            )
-        ]
-        issues = [
-            issue
-            for issue in issues
-            if not issue.get("project") or issue.get("project") in cycle_projects
-        ]
-    else:
-        issues = [issue for issue in issues if not issue.get("project")]
 
     if not issues:
         return

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from config import load_config
 from constants import (
     CYCLE_PROJECT_LEAD_POINTS_PER_WEEK,
     CYCLE_PROJECT_MEMBER_POINTS_PER_WEEK,
@@ -34,29 +33,18 @@ def _build_week_segments(
     return segments
 
 
-def _is_cycle_project(project: dict, cycle_initiative: str) -> bool:
-    nodes = project.get("initiatives", {}).get("nodes", []) or []
-    return any(node.get("name") == cycle_initiative for node in nodes)
-
-
 def _calculate_cycle_project_points(
     days: int, now: datetime | None = None
 ) -> tuple[dict[str, int], dict[str, int]]:
     if days <= 0:
         return {}, {}
-    config = load_config()
-    cycle_initiative = config.get("cycle_initiative")
-    if not cycle_initiative:
-        return {}, {}
-    projects = get_projects()
     now = now or datetime.now(timezone.utc)
+    projects = get_projects()
     timeframe_start = now - timedelta(days=days)
     week_segments = _build_week_segments(timeframe_start, now)
     points_by_lead: dict[str, int] = {}
     points_by_member: dict[str, int] = {}
     for project in projects:
-        if not _is_cycle_project(project, cycle_initiative):
-            continue
         status_name = (project.get("status") or {}).get("name")
         if status_name != "Completed":
             continue

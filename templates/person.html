@@ -19,7 +19,7 @@
 {% block header_nav %}{% endblock %}
 
 {% block content %}
-      <h2>{{ 'Current Support Work' if on_call_support else 'Current Cycle Work' }}</h2>
+      <h2>{{ 'Current Support Work' if on_call_support else 'Current Project Work' }}</h2>
       {% if open_current_cycle %}
       {% for project, issues in open_current_cycle.items() %}
       <details open>
