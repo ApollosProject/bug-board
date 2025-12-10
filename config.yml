@@ -35,11 +35,6 @@ people:
     slack_id: U07SM59JTD2
     linear_username: darryl
     github_username: darrylyip
-  aleks:
-    team: apollos_engineering
-    slack_id: U083XRVKMHN
-    linear_username: aleksandar.trujic
-    github_username: trujic1000
   vitor:
     team: apollos_engineering
     slack_id: U07KCR739QR
@@ -128,7 +123,6 @@ platforms:
     lead: darryl
     developers:
       - jimmy
-      - aleks
       - vitor
       - john
       - rumesh
@@ -136,7 +130,6 @@ platforms:
     lead: darryl
     developers:
       - jimmy
-      - aleks
       - vitor
       - john
   roku:
@@ -159,7 +152,6 @@ platforms:
     lead: vincent
     developers:
       - jimmy
-      - aleks
       - cameron
       - darryl
       - vitor
