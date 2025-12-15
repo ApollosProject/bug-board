@@ -175,7 +175,9 @@ def post_priority_bugs():
             if bug["assignee"]
         }
         platforms = {bug["platform"] for bug in unassigned if bug["platform"]}
-        notified = set()
+        notified_slack_ids: set[str] = set()
+        slug_by_slack_id: dict[str, str] = {}
+        lead_platforms_by_slack_id: dict[str, set[str]] = {}
         support_slugs = get_support_slugs()
         for platform in platforms:
             platform_slug = platform.lower().replace(" ", "-")
@@ -196,12 +198,31 @@ def post_priority_bugs():
                     continue
                 if person["linear_username"] in assigned:
                     continue
-                mention = f"<@{person['slack_id']}>"
+                slack_id = person.get("slack_id")
+                if not slack_id:
+                    continue
+                notified_slack_ids.add(slack_id)
+                slug_by_slack_id.setdefault(slack_id, slug)
                 if is_lead:
-                    mention = f"{mention} ({platform} Lead)"
-                notified.add(mention)
-        if notified:
-            notified_text = "\n".join(notified)
+                    lead_platforms_by_slack_id.setdefault(slack_id, set()).add(platform)
+
+        if notified_slack_ids:
+            notified_lines = []
+            for slack_id in sorted(
+                notified_slack_ids,
+                key=lambda sid: slug_by_slack_id.get(sid, ""),
+            ):
+                mention = f"<@{slack_id}>"
+                lead_platforms = sorted(lead_platforms_by_slack_id.get(slack_id, set()))
+                if lead_platforms:
+                    if len(lead_platforms) == 1:
+                        mention = f"{mention} ({lead_platforms[0]} Lead)"
+                    else:
+                        lead_text = ", ".join(f"{p} Lead" for p in lead_platforms)
+                        mention = f"{mention} ({lead_text})"
+                notified_lines.append(mention)
+
+            notified_text = "\n".join(notified_lines)
             markdown += f"attn:\n\n{notified_text}"
     if at_risk:
         markdown += "\n\n*At Risk*\n\n"
