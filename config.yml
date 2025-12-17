@@ -160,6 +160,7 @@ platforms:
     lead: dennis
     developers:
       - dennis
+      - cameron
   shovel:
     lead: vincent
     developers:
