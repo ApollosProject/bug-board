@@ -483,9 +483,13 @@ def post_upcoming_projects():
     projects = get_projects()
     upcoming = []
     today = datetime.now(timezone.utc).date()
+    canceled_statuses = {"canceled", "cancelled"}
     for project in projects:
         start = project.get("startDate")
         if not start:
+            continue
+        status_name = (project.get("status") or {}).get("name")
+        if status_name and status_name.lower() in canceled_statuses:
             continue
         try:
             start_dt = datetime.fromisoformat(start).date()
@@ -494,7 +498,9 @@ def post_upcoming_projects():
         days_until = (start_dt - today).days
         if start_dt.weekday() == 0 and 0 <= days_until <= 5:
             lead = (project.get("lead") or {}).get("displayName")
-            lead_md = get_slack_markdown_by_linear_username(lead) if lead else "No Lead"
+            if not lead:
+                continue
+            lead_md = get_slack_markdown_by_linear_username(lead)
             upcoming.append(f"- <{project['url']}|{project['name']}> - Lead: {lead_md}")
     if upcoming:
         markdown = "*Projects Starting Monday*\n\n" + "\n".join(upcoming)
