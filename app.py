@@ -30,6 +30,15 @@ from leaderboard import (
 
 app = Flask(__name__)
 
+# Configuration constants
+# Timeout in seconds for ThreadPoolExecutor result() calls
+EXECUTOR_TIMEOUT_SECONDS = 30
+# Number of worker threads used in the index route for parallel data fetching
+INDEX_THREADPOOL_MAX_WORKERS = 12
+# Number of worker threads used in the /team/<slug> route when fetching
+# Linear and GitHub data concurrently
+TEAM_THREADPOOL_MAX_WORKERS = 3
+# Cache time-to-live in seconds for the index page
 INDEX_CACHE_TTL_SECONDS = 60
 
 
@@ -110,7 +119,7 @@ def mmdd_filter(date_str: str) -> str:
 
 @lru_cache(maxsize=16)
 def _build_index_context(days: int, _cache_epoch: int) -> dict:
-    with ThreadPoolExecutor(max_workers=12) as executor:
+    with ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS) as executor:
         created_priority_future = executor.submit(
             get_created_issues, 2, "Bug", days
         )
@@ -461,9 +470,9 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
             open_priority_bugs, key=lambda x: x["createdAt"]
         ),
         "issue_count": len(created_priority_bugs),
-        "priority_percentage": int(
+        "priority_percentage": int(round(
             len(completed_priority_bugs) / total_completed_issues * 100
-        ) if total_completed_issues else 0,
+        )) if total_completed_issues else 0,
         "leaderboard_entries": leaderboard_entries,
         "all_issues": created_priority_bugs + open_priority_bugs,
         "issues_by_platform": by_platform(created_priority_bugs),
@@ -502,7 +511,7 @@ def team_slug(slug):
     login = person_cfg.get("linear_username", slug)
     person_name = login.replace(".", " ").replace("-", " ").title()
     github_username = person_cfg.get("github_username")
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=TEAM_THREADPOOL_MAX_WORKERS) as executor:
         open_future = executor.submit(get_open_issues_for_person, login)
         completed_future = executor.submit(get_completed_issues_for_person, login, days)
         github_future = None
@@ -514,17 +523,17 @@ def team_slug(slug):
                 )
             )
         open_items = sorted(
-            open_future.result(timeout=30),
+            open_future.result(timeout=EXECUTOR_TIMEOUT_SECONDS),
             key=lambda x: x["updatedAt"],
             reverse=True,
         )
         completed_items = sorted(
-            completed_future.result(timeout=30),
+            completed_future.result(timeout=EXECUTOR_TIMEOUT_SECONDS),
             key=lambda x: x["completedAt"],
             reverse=True,
         )
         if github_future:
-            author_map, reviewer_map = github_future.result(timeout=30)
+            author_map, reviewer_map = github_future.result(timeout=EXECUTOR_TIMEOUT_SECONDS)
             prs_merged = len(author_map.get(github_username, []))
             prs_reviewed = len(reviewer_map.get(github_username, []))
         else:
