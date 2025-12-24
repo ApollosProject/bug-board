@@ -99,7 +99,12 @@ def with_retries(func):
             try:
                 return func(*args, **kwargs)
             except Exception as e:
-                logging.error(f"Function {func.__name__} failed: {e}")
+                logging.error(
+                    "Function %s failed with exception %s",
+                    func.__name__,
+                    type(e).__name__,
+                    exc_info=True,
+                )
                 if attempt == RETRY_COUNT - 1:
                     raise
                 time.sleep(RETRY_SLEEP_SECONDS)
@@ -119,6 +124,10 @@ def get_team_members(team_slug: str):
 
 
 def get_slack_markdown_by_linear_username(username):
+    # Handle missing or empty usernames explicitly to avoid unnecessary config access.
+    if username is None or (isinstance(username, str) and not username.strip()):
+        return "No Assignee"
+
     config = load_config()
     for person in config["people"]:
         if config["people"][person]["linear_username"] == username:
@@ -127,6 +136,13 @@ def get_slack_markdown_by_linear_username(username):
 
 
 def get_slack_markdown_by_github_username(username):
+    # Validate input to avoid propagating None or empty usernames.
+    if username is None or (isinstance(username, str) and not username.strip()):
+        logging.warning(
+            "get_slack_markdown_by_github_username called with invalid username: %r",
+            username,
+        )
+        return "Unknown user"
     config = load_config()
     for person in config["people"].values():
         if person.get("github_username") == username:
@@ -151,7 +167,11 @@ def _get_pr_diffs(issue):
             diffs.append(diff)
         except Exception as e:  # pragma: no cover - network errors are ignored
             logging.error(
-                "Failed to fetch diff for %s/%s#%s: %s", owner, repo, number, e
+                "Failed to fetch diff for %s/%s#%s (error type: %s)",
+                owner,
+                repo,
+                number,
+                type(e).__name__,
             )
     return diffs
 
