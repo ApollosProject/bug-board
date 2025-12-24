@@ -28,16 +28,14 @@ from leaderboard import (
     calculate_cycle_project_member_points,
 )
 
-EXECUTOR_TIMEOUT_SECONDS = 30
-
 app = Flask(__name__)
 
+# Configuration constants
+EXECUTOR_TIMEOUT_SECONDS = 30
 INDEX_THREADPOOL_MAX_WORKERS = 12
-
 # Number of worker threads used in the /team/<slug> route when fetching
 # Linear and GitHub data concurrently.
 TEAM_THREADPOOL_MAX_WORKERS = 3
-
 INDEX_CACHE_TTL_SECONDS = 60
 
 
