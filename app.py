@@ -1,9 +1,9 @@
 import re
 import time
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
 from datetime import datetime
 from functools import lru_cache
-from typing import TypedDict
+from typing import TypedDict, TypeVar
 
 from flask import Flask, abort, render_template, request
 
@@ -123,7 +123,14 @@ def mmdd_filter(date_str: str) -> str:
         return date_str
 
 
-def get_future_result_with_timeout(future, default_value, timeout=INDEX_FUTURE_TIMEOUT):
+T = TypeVar('T')
+
+
+def get_future_result_with_timeout(
+    future: Future[T],
+    default_value: T,
+    timeout: int = INDEX_FUTURE_TIMEOUT
+) -> T:
     """
     Get result from a future with a timeout, returning a default value on timeout.
 
