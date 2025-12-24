@@ -76,16 +76,14 @@ def format_bug_line(bug):
 def with_retries(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        for i in range(3):
+        for attempt in range(3):
             try:
                 return func(*args, **kwargs)
             except Exception as e:
                 logging.error(f"Function {func.__name__} failed: {e}")
-                if i == 2:
+                if attempt == 2:
                     raise
                 time.sleep(5)
-        # This line is a safeguard to avoid any implicit None return
-        return func(*args, **kwargs)
 
     return wrapper
 
@@ -342,10 +340,10 @@ def post_leaderboard():
     leaderboard = dict(sorted(filtered_leaderboard.items(), key=lambda x: x[1], reverse=True))
     medals = ["🥇", "🥈", "🥉"]
     markdown = "*Weekly Leaderboard*\n\n"
-    for i, (assignee, score) in enumerate(leaderboard.items()):
-        if i >= 3:
+    for rank, (assignee, score) in enumerate(leaderboard.items()):
+        if rank >= 3:
             break
-        markdown += f"{medals[i]} {assignee}: {score}\n"
+        markdown += f"{medals[rank]} {assignee}: {score}\n"
     markdown += "\n\n"
     markdown += (
         "_scores - 20pts for urgent, 10pts for high, 5pts for medium, 1pt for low, "
@@ -400,11 +398,11 @@ def post_stale():
             if not pr_list:
                 continue
             unique_prs = {pr["url"]: pr for pr in pr_list}.values()
-            reviwer_slack_id = people_by_github_username.get(reviewer, {}).get(
+            reviewer_slack_id = people_by_github_username.get(reviewer, {}).get(
                 "slack_id"
             )
-            if reviwer_slack_id:
-                reviewer_slack_markdown = f"<@{reviwer_slack_id}>"
+            if reviewer_slack_id:
+                reviewer_slack_markdown = f"<@{reviewer_slack_id}>"
             else:
                 reviewer_slack_markdown = reviewer
             markdown += f"\n{reviewer_slack_markdown}:\n\n"
