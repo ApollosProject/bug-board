@@ -84,6 +84,8 @@ def with_retries(func):
                 if i == 2:
                     raise
                 time.sleep(5)
+        # This line is a safeguard to avoid any implicit None return
+        return func(*args, **kwargs)
 
     return wrapper
 
