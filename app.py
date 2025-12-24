@@ -28,7 +28,34 @@ from leaderboard import (
     calculate_cycle_project_member_points,
 )
 
+
+def normalize_identity(value: str | None) -> str:
+    if not value:
+        return ""
+    return re.sub(r"[^a-z0-9]", "", value.lower())
+
+
 app = Flask(__name__)
+
+
+def record_breakdown(
+    store_points: dict[str, dict[str, int]],
+    store_counts: dict[str, dict[str, int]],
+    key: str,
+    category: str,
+    points: int,
+    count_increment: int = 0,
+) -> None:
+    if points == 0:
+        return
+    person_points = store_points.setdefault(key, {})
+    person_points[category] = person_points.get(category, 0) + points
+    if count_increment:
+        person_counts = store_counts.setdefault(key, {})
+        person_counts[category] = (
+            person_counts.get(category, 0) + count_increment
+        )
+
 
 # Maximum time in seconds to wait for background tasks in the index context.
 # This shorter timeout is used for multiple concurrent futures in _build_index_context
@@ -148,34 +175,85 @@ def get_future_result_with_timeout(
         return default_value
 
 
+def _submit_index_futures(
+    executor: ThreadPoolExecutor,
+    days: int,
+) -> tuple[
+    Future,
+    Future,
+    Future,
+    Future,
+    Future,
+    Future,
+    Future,
+    Future,
+    Future,
+    Future,
+    Future,
+]:
+    """
+    Submit all futures required to build the index context.
+
+    This helper isolates the responsibility of scheduling concurrent work
+    away from `_build_index_context`, improving readability and testability.
+    """
+    created_priority_future = executor.submit(
+        get_created_issues, 2, "Bug", days
+    )
+    open_priority_future = executor.submit(get_open_issues, 2, "Bug")
+    completed_priority_future = executor.submit(
+        get_completed_issues_summary, 2, "Bug", days
+    )
+    completed_bugs_future = executor.submit(
+        get_completed_issues_summary, 5, "Bug", days
+    )
+    completed_new_features_future = executor.submit(
+        get_completed_issues_summary, 5, "New Feature", days
+    )
+    completed_technical_changes_future = executor.submit(
+        get_completed_issues_summary, 5, "Technical Change", days
+    )
+    open_bugs_future = executor.submit(get_open_issues, 5, "Bug")
+    open_new_features_future = executor.submit(
+        get_open_issues, 5, "New Feature"
+    )
+    open_technical_changes_future = executor.submit(
+        get_open_issues, 5, "Technical Change"
+    )
+    reviews_future = executor.submit(merged_prs_by_reviewer, days)
+    authored_prs_future = executor.submit(merged_prs_by_author, days)
+
+    return (
+        created_priority_future,
+        open_priority_future,
+        completed_priority_future,
+        completed_bugs_future,
+        completed_new_features_future,
+        completed_technical_changes_future,
+        open_bugs_future,
+        open_new_features_future,
+        open_technical_changes_future,
+        reviews_future,
+        authored_prs_future,
+    )
+
+
 @lru_cache(maxsize=16)
 def _build_index_context(days: int, _cache_epoch: int) -> dict:
     with ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS) as executor:
-        created_priority_future = executor.submit(
-            get_created_issues, 2, "Bug", days
-        )
-        open_priority_future = executor.submit(get_open_issues, 2, "Bug")
-        completed_priority_future = executor.submit(
-            get_completed_issues_summary, 2, "Bug", days
-        )
-        completed_bugs_future = executor.submit(
-            get_completed_issues_summary, 5, "Bug", days
-        )
-        completed_new_features_future = executor.submit(
-            get_completed_issues_summary, 5, "New Feature", days
-        )
-        completed_technical_changes_future = executor.submit(
-            get_completed_issues_summary, 5, "Technical Change", days
-        )
-        open_bugs_future = executor.submit(get_open_issues, 5, "Bug")
-        open_new_features_future = executor.submit(
-            get_open_issues, 5, "New Feature"
-        )
-        open_technical_changes_future = executor.submit(
-            get_open_issues, 5, "Technical Change"
-        )
-        reviews_future = executor.submit(merged_prs_by_reviewer, days)
-        authored_prs_future = executor.submit(merged_prs_by_author, days)
+        (
+            created_priority_future,
+            open_priority_future,
+            completed_priority_future,
+            completed_bugs_future,
+            completed_new_features_future,
+            completed_technical_changes_future,
+            open_bugs_future,
+            open_new_features_future,
+            open_technical_changes_future,
+            reviews_future,
+            authored_prs_future,
+        ) = _submit_index_futures(executor, days)
 
     created_priority_bugs = get_future_result_with_timeout(created_priority_future, [])
     open_priority_bugs = get_future_result_with_timeout(open_priority_future, [])
@@ -242,11 +320,6 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
     github_to_slug = {}
     display_name_overrides = {}
 
-    def normalize_identity(value: str | None) -> str:
-        if not value:
-            return ""
-        return re.sub(r"[^a-z0-9]", "", value.lower())
-
     for slug, info in people_config.items():
         linear_username = info.get("linear_username") or slug
         display_name_overrides[slug] = format_display_name(linear_username)
@@ -277,24 +350,6 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
     points_breakdown_by_external: dict[str, dict[str, int]] = {}
     count_breakdown_by_slug: dict[str, dict[str, int]] = {}
     count_breakdown_by_external: dict[str, dict[str, int]] = {}
-
-    def record_breakdown(
-        store_points: dict[str, dict[str, int]],
-        store_counts: dict[str, dict[str, int]],
-        key: str,
-        category: str,
-        points: int,
-        count_increment: int = 0,
-    ) -> None:
-        if points == 0:
-            return
-        person_points = store_points.setdefault(key, {})
-        person_points[category] = person_points.get(category, 0) + points
-        if count_increment:
-            person_counts = store_counts.setdefault(key, {})
-            person_counts[category] = (
-                person_counts.get(category, 0) + count_increment
-            )
 
     completed_work = (
         completed_bugs + completed_new_features + completed_technical_changes
@@ -511,15 +566,20 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
         completed_bugs + completed_new_features + completed_technical_changes
     )
 
+    if total_completed_issues:
+        priority_percentage = int(
+            round(len(completed_priority_bugs) / total_completed_issues * 100)
+        )
+    else:
+        priority_percentage = 0
+
     return {
         "days": days,
         "priority_issues": sorted(
             open_priority_bugs, key=lambda x: x["createdAt"]
         ),
         "issue_count": len(created_priority_bugs),
-        "priority_percentage": int(round(
-            len(completed_priority_bugs) / total_completed_issues * 100
-        )) if total_completed_issues else 0,
+        "priority_percentage": priority_percentage,
         "leaderboard_entries": leaderboard_entries,
         "all_issues": created_priority_bugs + open_priority_bugs,
         "issues_by_platform": by_platform(created_priority_bugs),
@@ -650,11 +710,14 @@ def team_slug(slug):
         proj["days_left"] = days_left
         proj["starts_in"] = starts_in
 
-    def normalize_display_name(value: str | None) -> str:
+    def _normalize_text(value: str | None) -> str:
         if not value:
             return ""
         cleaned = value.replace(".", " ").replace("-", " ").strip()
         return re.sub(r"\s+", " ", cleaned).lower()
+
+    def normalize_display_name(value: str | None) -> str:
+        return _normalize_text(value)
 
     normalized_person_name = normalize_display_name(
         person_cfg.get("linear_display_name") or person_name
