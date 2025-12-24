@@ -44,7 +44,7 @@ sniffio==1.3.1
 typing_extensions==4.12.2
 urllib3==2.3.0
 websockets==11.0.3
-Werkzeug==3.1.3
+Werkzeug==3.1.4
 yarl==1.18.3
 openai==1.97.0
 mypy==1.17.0
