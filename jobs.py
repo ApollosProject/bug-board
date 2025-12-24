@@ -56,7 +56,7 @@ def post_to_manager_slack(markdown: str):
     url = os.environ.get("MANAGER_SLACK_WEBHOOK_URL")
     if not url:
         logging.error(
-            "MANAGER_SLACK_WEBHOOK_URL environment variable is not set; "
+            "MANAGER_SLACK_WEBHOOK_URL environment variable is not set or empty; "
             "unable to send manager Slack message."
         )
         return
