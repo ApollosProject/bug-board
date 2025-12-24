@@ -24,6 +24,7 @@ mypy .
 - `LINEAR_API_KEY` – API token for Linear
 - `GITHUB_TOKEN` – GitHub token used for pull‑request data
 - `SLACK_WEBHOOK_URL` – Webhook URL used by the worker to post messages
+- `MANAGER_SLACK_WEBHOOK_URL` – Webhook URL used for manager-facing summaries
 - `APP_URL` – Public URL where the app is hosted
 - `DEBUG` – set to `true` to run the scheduled jobs immediately
 - `OPENAI_API_KEY` – API key used to generate weekly changelogs
