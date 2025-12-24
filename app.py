@@ -13,7 +13,6 @@ from linear.issues import (
     by_assignee,
     by_platform,
     by_project,
-    get_completed_issues,
     get_completed_issues_summary,
     get_completed_issues_for_person,
     get_created_issues,
