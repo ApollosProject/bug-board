@@ -163,17 +163,17 @@ ResultType = TypeVar('ResultType')
 
 class IndexFutures(TypedDict):
     """Named collection of futures used for building the index view."""
-    created_priority: Future
-    open_priority: Future
-    completed_priority: Future
-    completed_bugs: Future
-    completed_new_features: Future
-    completed_technical_changes: Future
-    open_bugs: Future
-    open_new_features: Future
-    open_technical_changes: Future
-    merged_prs_by_reviewer: Future
-    merged_prs_by_author: Future
+    created_priority: Future[list]
+    open_priority: Future[list]
+    completed_priority: Future[list]
+    completed_bugs: Future[list]
+    completed_new_features: Future[list]
+    completed_technical_changes: Future[list]
+    open_bugs: Future[list]
+    open_new_features: Future[list]
+    open_technical_changes: Future[list]
+    merged_prs_by_reviewer: Future[dict]
+    merged_prs_by_author: Future[dict]
 
 
 def get_future_result_with_timeout(
@@ -250,9 +250,9 @@ def _submit_index_futures(
 
 
 def _get_priority_bugs_from_futures(
-    created_priority_future: Future,
-    open_priority_future: Future,
-    completed_priority_future: Future,
+    created_priority_future: Future[list],
+    open_priority_future: Future[list],
+    completed_priority_future: Future[list],
 ) -> tuple[list, list, list]:
     """
     Retrieve priority bug data from futures and filter completed issues.
