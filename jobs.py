@@ -35,7 +35,7 @@ from leaderboard import (
 load_dotenv()
 
 # Retry configuration for the with_retries decorator.
-RETRY_COUNT = 3
+MAX_RETRY_COUNT = 3
 RETRY_SLEEP_SECONDS = 5
 
 
@@ -89,13 +89,13 @@ def format_bug_line(bug):
 def with_retries(func):
     """Decorator that retries the wrapped function.
 
-    Retries up to RETRY_COUNT times on failure. After each failure, logs the
+    Retries up to MAX_RETRY_COUNT times on failure. After each failure, logs the
     exception and waits RETRY_SLEEP_SECONDS before retrying. After the final
     attempt, the last exception is re-raised.
     """
     @wraps(func)
     def wrapper(*args, **kwargs):
-        for attempt in range(RETRY_COUNT):
+        for attempt in range(MAX_RETRY_COUNT):
             try:
                 return func(*args, **kwargs)
             except Exception as e:
@@ -105,7 +105,7 @@ def with_retries(func):
                     type(e).__name__,
                     exc_info=True,
                 )
-                if attempt == RETRY_COUNT - 1:
+                if attempt == MAX_RETRY_COUNT - 1:
                     raise
                 time.sleep(RETRY_SLEEP_SECONDS)
 
@@ -129,9 +129,9 @@ def get_slack_markdown_by_linear_username(username):
         return "No Assignee"
 
     config = load_config()
-    for person in config["people"]:
-        if config["people"][person]["linear_username"] == username:
-            return f"<@{config['people'][person]['slack_id']}>"
+    for person in config["people"].values():
+        if person.get("linear_username") == username:
+            return f"<@{person['slack_id']}>"
     return "No Assignee"
 
 
@@ -454,10 +454,11 @@ def post_stale():
                 ]
                 if events:
                     created = max(ev["createdAt"] for ev in events)
-                    if created.endswith("Z"):
-                        created = created[:-1]
-                    dt = datetime.fromisoformat(created)
-                    days_waiting = (datetime.now() - dt).days
+                    # Parse GitHub-style ISO 8601 timestamp with explicit UTC timezone
+                    dt = datetime.strptime(created, "%Y-%m-%dT%H:%M:%SZ").replace(
+                        tzinfo=timezone.utc
+                    )
+                    days_waiting = (datetime.now(timezone.utc) - dt).days
                 else:
                     days_waiting = 0
                 pr_days.append((days_waiting, pr))
