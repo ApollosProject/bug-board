@@ -470,9 +470,9 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
             open_priority_bugs, key=lambda x: x["createdAt"]
         ),
         "issue_count": len(created_priority_bugs),
-        "priority_percentage": round(
+        "priority_percentage": int(round(
             len(completed_priority_bugs) / total_completed_issues * 100
-        ) if total_completed_issues else 0,
+        )) if total_completed_issues else 0,
         "leaderboard_entries": leaderboard_entries,
         "all_issues": created_priority_bugs + open_priority_bugs,
         "issues_by_platform": by_platform(created_priority_bugs),
