@@ -32,6 +32,7 @@ app = Flask(__name__)
 
 INDEX_CACHE_TTL_SECONDS = 60
 
+
 class BreakdownCategory(TypedDict):
     key: str
     label: str

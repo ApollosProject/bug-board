@@ -4,7 +4,7 @@ from gql import gql
 
 from config import get_platforms
 from constants import PRIORITY_TO_SCORE
-from .client import _get_client, _compute_assignee_time_to_fix
+from .client import _compute_assignee_time_to_fix, _execute
 
 
 def get_open_issues(priority, label):
@@ -45,7 +45,7 @@ def get_open_issues(priority, label):
     """,
     )
 
-    data = _get_client().execute(query, variable_values=params)
+    data = _execute(query, variable_values=params)
     issues = [
         issue for issue in data["issues"]["nodes"] if issue.get("priority", 0) > 0
     ]
@@ -147,7 +147,7 @@ def get_completed_issues(priority, label, days=30):
             "days": f"-P{days}D",
             "cursor": cursor,
         }
-        data = _get_client().execute(query, variable_values=params)
+        data = _execute(query, variable_values=params)
         issues += data["issues"]["nodes"]
         if not data["issues"]["pageInfo"]["hasNextPage"]:
             break
@@ -216,7 +216,7 @@ def get_completed_issues_summary(priority, label, days=30):
             "days": f"-P{days}D",
             "cursor": cursor,
         }
-        data = _get_client().execute(query, variable_values=params)
+        data = _execute(query, variable_values=params)
         issues += data["issues"]["nodes"]
         if not data["issues"]["pageInfo"]["hasNextPage"]:
             break
@@ -281,7 +281,7 @@ def get_created_issues(priority, label, days=30):
             "days": f"-P{days}D",
             "cursor": cursor,
         }
-        data = _get_client().execute(query, variable_values=params)
+        data = _execute(query, variable_values=params)
         issues += data["issues"]["nodes"]
         if not data["issues"]["pageInfo"]["hasNextPage"]:
             break
@@ -460,7 +460,7 @@ def get_open_issues_for_person(login: str):
     issues = []
     while True:
         params = {"login": login, "cursor": cursor}
-        data = _get_client().execute(query, variable_values=params)
+        data = _execute(query, variable_values=params)
         issues += data["issues"]["nodes"]
         if not data["issues"]["pageInfo"]["hasNextPage"]:
             break
@@ -524,7 +524,7 @@ def get_open_issues_in_projects(project_names):
     issues = []
     while True:
         params = {"projectNames": project_names, "cursor": cursor}
-        data = _get_client().execute(query, variable_values=params)
+        data = _execute(query, variable_values=params)
         issues += data["issues"]["nodes"]
         if not data["issues"]["pageInfo"]["hasNextPage"]:
             break
@@ -585,7 +585,7 @@ def get_completed_issues_for_person(login: str, days=30):
     issues = []
     while True:
         params = {"login": login, "days": f"-P{days}D", "cursor": cursor}
-        data = _get_client().execute(query, variable_values=params)
+        data = _execute(query, variable_values=params)
         issues += data["issues"]["nodes"]
         if not data["issues"]["pageInfo"]["hasNextPage"]:
             break

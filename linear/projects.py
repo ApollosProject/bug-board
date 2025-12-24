@@ -1,6 +1,6 @@
 from gql import gql
 
-from .client import _get_client
+from .client import _execute
 
 
 def get_projects():
@@ -43,7 +43,7 @@ def get_projects():
         }
         """
     )
-    data = _get_client().execute(query)
+    data = _execute(query)
     teams = data.get("teams", {}).get("nodes", []) or []
     if not teams:
         return []

@@ -32,6 +32,13 @@ def _get_client():
     return client
 
 
+def _execute(query, variable_values=None):
+    client = _get_client()
+    if variable_values is None:
+        return client.execute(query, validate=False)
+    return client.execute(query, variable_values=variable_values, validate=False)
+
+
 # headers used for REST API requests
 rest_headers = {
     "Authorization": f"bearer {token}",
@@ -71,7 +78,7 @@ def get_repo_ids():
             # Skip invalid entries.
             continue
         params = {"owner": owner, "name": name}
-        data = _get_client().execute(repo_id_query, variable_values=params)
+        data = _execute(repo_id_query, variable_values=params)
         ids.append(data["repository"]["id"])
     return ids
 
@@ -144,7 +151,7 @@ def get_prs(repo_id, pr_states):
         }
     """
     )
-    data = _get_client().execute(query, variable_values=params)
+    data = _execute(query, variable_values=params)
     prs = data["node"]["pullRequests"]["nodes"]
     non_draft_prs = [pr for pr in prs if not pr.get("isDraft", False)]
     return non_draft_prs
