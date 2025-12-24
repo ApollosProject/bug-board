@@ -259,7 +259,10 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
         category_key = PRIORITY_BREAKDOWN_KEYS.get(priority)
         if slug:
             scores_by_slug[slug] = scores_by_slug.get(slug, 0) + points
-            names_by_slug.setdefault(slug, display_name or display_name_overrides[slug])
+            names_by_slug.setdefault(
+                slug,
+                display_name or display_name_overrides.get(slug, display_name),
+            )
             if category_key:
                 record_breakdown(
                     points_breakdown_by_slug,
@@ -294,7 +297,9 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
         slug = github_to_slug.get(normalize_identity(reviewer))
         if slug:
             scores_by_slug[slug] = scores_by_slug.get(slug, 0) + review_points
-            names_by_slug.setdefault(slug, display_name_overrides[slug])
+            names_by_slug.setdefault(
+                slug, display_name_overrides.get(slug, format_display_name(reviewer))
+            )
             record_breakdown(
                 points_breakdown_by_slug,
                 count_breakdown_by_slug,
@@ -325,7 +330,9 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
         slug = github_to_slug.get(normalize_identity(author))
         if slug:
             scores_by_slug[slug] = scores_by_slug.get(slug, 0) + pr_points
-            names_by_slug.setdefault(slug, display_name_overrides[slug])
+            names_by_slug.setdefault(
+                slug, display_name_overrides.get(slug, format_display_name(author))
+            )
             record_breakdown(
                 points_breakdown_by_slug,
                 count_breakdown_by_slug,
@@ -354,7 +361,9 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
         slug = resolve_slug(lead_name, format_display_name(lead_name))
         if slug:
             scores_by_slug[slug] = scores_by_slug.get(slug, 0) + points
-            names_by_slug.setdefault(slug, display_name_overrides[slug])
+            names_by_slug.setdefault(
+                slug, display_name_overrides.get(slug, format_display_name(lead_name))
+            )
             record_breakdown(
                 points_breakdown_by_slug,
                 count_breakdown_by_slug,
@@ -433,10 +442,16 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
     )
 
     leaderboard_entries = [
-        entry for entry in leaderboard_entries if entry.get("slug") in apollos_team_slugs
+        entry
+        for entry in leaderboard_entries
+        if (slug := entry.get("slug")) is not None and slug in apollos_team_slugs
     ]
 
     leaderboard_entries.sort(key=lambda entry: entry["score"], reverse=True)
+
+    total_completed_issues = len(
+        completed_bugs + completed_new_features + completed_technical_changes
+    )
 
     return {
         "days": days,
@@ -445,14 +460,8 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
         ),
         "issue_count": len(created_priority_bugs),
         "priority_percentage": int(
-            len(completed_priority_bugs)
-            / len(
-                completed_bugs
-                + completed_new_features
-                + completed_technical_changes
-            )
-            * 100
-        ),
+            len(completed_priority_bugs) / total_completed_issues * 100
+        ) if total_completed_issues else 0,
         "leaderboard_entries": leaderboard_entries,
         "all_issues": created_priority_bugs + open_priority_bugs,
         "issues_by_platform": by_platform(created_priority_bugs),
