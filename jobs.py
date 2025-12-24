@@ -34,10 +34,17 @@ from leaderboard import (
 
 load_dotenv()
 
+# Retry configuration for the with_retries decorator.
+RETRY_COUNT = 3
+RETRY_SLEEP_SECONDS = 5
+
 
 def post_to_slack(markdown: str):
     """Send a message to Slack and raise or log on failure."""
-    url = os.environ["SLACK_WEBHOOK_URL"]
+    url = os.environ.get("SLACK_WEBHOOK_URL")
+    if not url:
+        logging.error("SLACK_WEBHOOK_URL environment variable is not set or empty.")
+        raise RuntimeError("Missing SLACK_WEBHOOK_URL environment variable.")
     response = requests.post(url, json={"text": markdown})
     if response.status_code != 200:
         logging.error("Slack API returned %s: %s", response.status_code, response.text)
@@ -46,7 +53,13 @@ def post_to_slack(markdown: str):
 
 def post_to_manager_slack(markdown: str):
     """Send a message to the manager Slack webhook and raise or log on failure."""
-    url = os.environ["MANAGER_SLACK_WEBHOOK_URL"]
+    url = os.environ.get("MANAGER_SLACK_WEBHOOK_URL")
+    if not url:
+        logging.error(
+            "MANAGER_SLACK_WEBHOOK_URL environment variable is not set; "
+            "unable to send manager Slack message."
+        )
+        return
     response = requests.post(url, json={"text": markdown})
     if response.status_code != 200:
         logging.error(
@@ -74,16 +87,21 @@ def format_bug_line(bug):
 
 
 def with_retries(func):
+    """Decorator that retries the wrapped function up to 3 times.
+
+    On each failure, it logs the exception, waits 5 seconds, and retries.
+    After the third failed attempt, the last exception is re-raised.
+    """
     @wraps(func)
     def wrapper(*args, **kwargs):
-        for attempt in range(3):
+        for attempt in range(RETRY_COUNT):
             try:
                 return func(*args, **kwargs)
             except Exception as e:
                 logging.error(f"Function {func.__name__} failed: {e}")
-                if attempt == 2:
+                if attempt == RETRY_COUNT - 1:
                     raise
-                time.sleep(5)
+                time.sleep(RETRY_SLEEP_SECONDS)
 
     return wrapper
 
