@@ -57,6 +57,13 @@ def _get_client():
             url="https://api.linear.app/graphql",
             headers=headers,
         )
-        client = Client(transport=transport, fetch_schema_from_transport=True)
+        client = Client(transport=transport, fetch_schema_from_transport=False)
         _thread_local.client = client
     return client
+
+
+def _execute(query, variable_values=None):
+    client = _get_client()
+    if variable_values is None:
+        return client.execute(query, validate=False)
+    return client.execute(query, variable_values=variable_values, validate=False)

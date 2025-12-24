@@ -1,6 +1,9 @@
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from functools import lru_cache
+from typing import TypedDict
 
 from flask import Flask, abort, render_template, request
 
@@ -11,7 +14,7 @@ from linear.issues import (
     by_assignee,
     by_platform,
     by_project,
-    get_completed_issues,
+    get_completed_issues_summary,
     get_completed_issues_for_person,
     get_created_issues,
     get_open_issues,
@@ -27,7 +30,23 @@ from leaderboard import (
 
 app = Flask(__name__)
 
-BREAKDOWN_CATEGORIES = [
+INDEX_CACHE_TTL_SECONDS = 60
+
+
+class BreakdownCategory(TypedDict):
+    key: str
+    label: str
+    count_label: str | None
+
+
+class LeaderboardEntry(TypedDict):
+    slug: str | None
+    display_name: str | None
+    score: int
+    breakdown: str | None
+
+
+BREAKDOWN_CATEGORIES: list[BreakdownCategory] = [
     {"key": "urgent", "label": "Urgent issues", "count_label": "issue"},
     {"key": "high", "label": "High issues", "count_label": "issue"},
     {"key": "medium", "label": "Medium issues", "count_label": "issue"},
@@ -89,26 +108,24 @@ def mmdd_filter(date_str: str) -> str:
         return date_str
 
 
-# use a query string parameter for days on the index route
-@app.route("/")
-def index():
-    days = request.args.get("days", default=30, type=int)
-    with ThreadPoolExecutor(max_workers=8) as executor:
+@lru_cache(maxsize=16)
+def _build_index_context(days: int, _cache_epoch: int) -> dict:
+    with ThreadPoolExecutor(max_workers=12) as executor:
         created_priority_future = executor.submit(
             get_created_issues, 2, "Bug", days
         )
         open_priority_future = executor.submit(get_open_issues, 2, "Bug")
         completed_priority_future = executor.submit(
-            get_completed_issues, 2, "Bug", days
+            get_completed_issues_summary, 2, "Bug", days
         )
         completed_bugs_future = executor.submit(
-            get_completed_issues, 5, "Bug", days
+            get_completed_issues_summary, 5, "Bug", days
         )
         completed_new_features_future = executor.submit(
-            get_completed_issues, 5, "New Feature", days
+            get_completed_issues_summary, 5, "New Feature", days
         )
         completed_technical_changes_future = executor.submit(
-            get_completed_issues, 5, "Technical Change", days
+            get_completed_issues_summary, 5, "Technical Change", days
         )
         open_bugs_future = executor.submit(get_open_issues, 5, "Bug")
         open_new_features_future = executor.submit(
@@ -386,7 +403,7 @@ def index():
                 points,
             )
 
-    leaderboard_entries = [
+    leaderboard_entries: list[LeaderboardEntry] = [
         {
             "slug": slug,
             "display_name": names_by_slug.get(slug) or display_name_overrides.get(slug),
@@ -400,17 +417,19 @@ def index():
         for slug, score in scores_by_slug.items()
     ]
     leaderboard_entries.extend(
-        {
-            "slug": None,
-            "display_name": names_by_external[key],
-            "score": score,
-            "breakdown": format_breakdown_text(
-                points_breakdown_by_external.get(key),
-                count_breakdown_by_external.get(key),
-            )
-            or None,
-        }
-        for key, score in scores_by_external.items()
+        [
+            {
+                "slug": None,
+                "display_name": names_by_external[key],
+                "score": score,
+                "breakdown": format_breakdown_text(
+                    points_breakdown_by_external.get(key),
+                    count_breakdown_by_external.get(key),
+                )
+                or None,
+            }
+            for key, score in scores_by_external.items()
+        ]
     )
 
     leaderboard_entries = [
@@ -419,22 +438,27 @@ def index():
 
     leaderboard_entries.sort(key=lambda entry: entry["score"], reverse=True)
 
-    return render_template(
-        "index.html",
-        days=days,
-        priority_issues=sorted(open_priority_bugs, key=lambda x: x["createdAt"]),
-        issue_count=len(created_priority_bugs),
-        priority_percentage=int(
+    return {
+        "days": days,
+        "priority_issues": sorted(
+            open_priority_bugs, key=lambda x: x["createdAt"]
+        ),
+        "issue_count": len(created_priority_bugs),
+        "priority_percentage": int(
             len(completed_priority_bugs)
-            / len(completed_bugs + completed_new_features + completed_technical_changes)
+            / len(
+                completed_bugs
+                + completed_new_features
+                + completed_technical_changes
+            )
             * 100
         ),
-        leaderboard_entries=leaderboard_entries,
-        all_issues=created_priority_bugs + open_priority_bugs,
-        issues_by_platform=by_platform(created_priority_bugs),
-        lead_time_data=time_data["lead"],
-        queue_time_data=time_data["queue"],
-        open_assigned_work=sorted(
+        "leaderboard_entries": leaderboard_entries,
+        "all_issues": created_priority_bugs + open_priority_bugs,
+        "issues_by_platform": by_platform(created_priority_bugs),
+        "lead_time_data": time_data["lead"],
+        "queue_time_data": time_data["queue"],
+        "open_assigned_work": sorted(
             [
                 issue
                 for issue in open_work
@@ -443,8 +467,17 @@ def index():
             key=lambda x: x["createdAt"],
             reverse=True,
         ),
-        fixes_per_day=fixes_per_day,
-    )
+        "fixes_per_day": fixes_per_day,
+    }
+
+
+# use a query string parameter for days on the index route
+@app.route("/")
+def index():
+    days = request.args.get("days", default=30, type=int)
+    cache_epoch = int(time.time() / INDEX_CACHE_TTL_SECONDS)
+    context = _build_index_context(days, cache_epoch)
+    return render_template("index.html", **context)
 
 
 @app.route("/team/<slug>")
