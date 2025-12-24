@@ -748,13 +748,15 @@ def team():
                 target_dt = datetime.fromisoformat(target).date()
                 days_left = (target_dt - datetime.utcnow().date()).days
             except ValueError:
-                pass
+                # If the target date is malformed, treat it as missing but log it for debugging.
+                app.logger.warning("Invalid targetDate %r for project %r", target, proj.get("id"))
         if start:
             try:
                 start_dt = datetime.fromisoformat(start).date()
                 starts_in = (start_dt - datetime.utcnow().date()).days
             except ValueError:
-                pass
+                # If the start date is malformed, treat it as missing but log it for debugging.
+                app.logger.warning("Invalid startDate %r for project %r", start, proj.get("id"))
         proj["days_left"] = days_left
         proj["starts_in"] = starts_in
 
