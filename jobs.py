@@ -3,11 +3,11 @@ import os
 import re
 import time
 from datetime import datetime, timezone
-from functools import wraps
 
 import requests
 import schedule
 from dotenv import load_dotenv
+from tenacity import before_sleep_log, retry, stop_after_attempt, wait_fixed
 
 from config import load_config
 from constants import PRIORITY_TO_SCORE
@@ -93,23 +93,14 @@ def with_retries(func):
     exception and waits RETRY_SLEEP_SECONDS before retrying. After the final
     attempt, the last exception is re-raised.
     """
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        for attempt in range(MAX_RETRY_COUNT):
-            try:
-                return func(*args, **kwargs)
-            except Exception as e:
-                logging.error(
-                    "Function %s failed with exception %s",
-                    func.__name__,
-                    type(e).__name__,
-                    exc_info=True,
-                )
-                if attempt == MAX_RETRY_COUNT - 1:
-                    raise
-                time.sleep(RETRY_SLEEP_SECONDS)
-
-    return wrapper
+    logger = logging.getLogger(__name__)
+    retry_decorator = retry(
+        reraise=True,
+        stop=stop_after_attempt(MAX_RETRY_COUNT),
+        wait=wait_fixed(RETRY_SLEEP_SECONDS),
+        before_sleep=before_sleep_log(logger, logging.ERROR),
+    )
+    return retry_decorator(func)
 
 
 def get_team_members(team_slug: str):
