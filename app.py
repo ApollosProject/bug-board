@@ -390,7 +390,9 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
         slug = resolve_slug(member_name, format_display_name(member_name))
         if slug:
             scores_by_slug[slug] = scores_by_slug.get(slug, 0) + points
-            names_by_slug.setdefault(slug, display_name_overrides[slug])
+            names_by_slug.setdefault(
+                slug, display_name_overrides.get(slug, format_display_name(member_name))
+            )
             record_breakdown(
                 points_breakdown_by_slug,
                 count_breakdown_by_slug,
