@@ -571,12 +571,14 @@ def team_slug(slug):
                 target_dt = datetime.fromisoformat(target).date()
                 days_left = (target_dt - datetime.utcnow().date()).days
             except ValueError:
+                # If the target date is not in a valid ISO format, treat it as missing.
                 pass
         if start:
             try:
                 start_dt = datetime.fromisoformat(start).date()
                 starts_in = (start_dt - datetime.utcnow().date()).days
             except ValueError:
+                # If the start date is not in a valid ISO format, treat it as missing.
                 pass
         proj["days_left"] = days_left
         proj["starts_in"] = starts_in
