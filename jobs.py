@@ -52,7 +52,7 @@ def post_to_slack(markdown: str):
 
 
 def post_to_manager_slack(markdown: str):
-    """Send a message to the manager Slack webhook and raise or log on failure."""
+    """Send a message to the manager Slack webhook, or return early if not configured."""
     url = os.environ.get("MANAGER_SLACK_WEBHOOK_URL")
     if not url:
         logging.error(
@@ -87,10 +87,11 @@ def format_bug_line(bug):
 
 
 def with_retries(func):
-    """Decorator that retries the wrapped function up to 3 times.
+    """Decorator that retries the wrapped function.
 
-    On each failure, it logs the exception, waits 5 seconds, and retries.
-    After the third failed attempt, the last exception is re-raised.
+    Retries up to RETRY_COUNT times on failure. After each failure, logs the
+    exception and waits RETRY_SLEEP_SECONDS before retrying. After the final
+    attempt, the last exception is re-raised.
     """
     @wraps(func)
     def wrapper(*args, **kwargs):
