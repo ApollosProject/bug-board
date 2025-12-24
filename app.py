@@ -35,7 +35,15 @@ def normalize_identity(value: str | None) -> str:
     return re.sub(r"[^a-z0-9]", "", value.lower())
 
 
+def format_display_name(linear_username: str) -> str:
+    return re.sub(r"[._-]+", " ", linear_username).title()
+
+
 app = Flask(__name__)
+
+# Maximum number of distinct _build_index_context results to cache.
+# This can be increased or made configurable based on production usage patterns.
+INDEX_CONTEXT_CACHE_MAXSIZE = 16
 
 
 def record_breakdown(
@@ -150,14 +158,29 @@ def mmdd_filter(date_str: str) -> str:
         return date_str
 
 
-T = TypeVar('T')
+ResultType = TypeVar('ResultType')
+
+
+class IndexFutures(TypedDict):
+    """Named collection of futures used for building the index view."""
+    created_priority: Future
+    open_priority: Future
+    completed_priority: Future
+    completed_bugs: Future
+    completed_new_features: Future
+    completed_technical_changes: Future
+    open_bugs: Future
+    open_new_features: Future
+    open_technical_changes: Future
+    merged_prs_by_reviewer: Future
+    merged_prs_by_author: Future
 
 
 def get_future_result_with_timeout(
-    future: Future[T],
-    default_value: T,
+    future: Future[ResultType],
+    default_value: ResultType,
     timeout: int = INDEX_FUTURE_TIMEOUT
-) -> T:
+) -> ResultType:
     """
     Get result from a future with a timeout, returning a default value on timeout.
 
@@ -178,19 +201,7 @@ def get_future_result_with_timeout(
 def _submit_index_futures(
     executor: ThreadPoolExecutor,
     days: int,
-) -> tuple[
-    Future,
-    Future,
-    Future,
-    Future,
-    Future,
-    Future,
-    Future,
-    Future,
-    Future,
-    Future,
-    Future,
-]:
+) -> IndexFutures:
     """
     Submit all futures required to build the index context.
 
@@ -223,40 +234,37 @@ def _submit_index_futures(
     reviews_future = executor.submit(merged_prs_by_reviewer, days)
     authored_prs_future = executor.submit(merged_prs_by_author, days)
 
-    return (
-        created_priority_future,
-        open_priority_future,
-        completed_priority_future,
-        completed_bugs_future,
-        completed_new_features_future,
-        completed_technical_changes_future,
-        open_bugs_future,
-        open_new_features_future,
-        open_technical_changes_future,
-        reviews_future,
-        authored_prs_future,
+    return {
+        "created_priority": created_priority_future,
+        "open_priority": open_priority_future,
+        "completed_priority": completed_priority_future,
+        "completed_bugs": completed_bugs_future,
+        "completed_new_features": completed_new_features_future,
+        "completed_technical_changes": completed_technical_changes_future,
+        "open_bugs": open_bugs_future,
+        "open_new_features": open_new_features_future,
+        "open_technical_changes": open_technical_changes_future,
+        "merged_prs_by_reviewer": reviews_future,
+        "merged_prs_by_author": authored_prs_future,
+    }
+
+
+def _get_priority_bugs_from_futures(
+    created_priority_future: Future,
+    open_priority_future: Future,
+    completed_priority_future: Future,
+) -> tuple[list, list, list]:
+    """
+    Retrieve priority bug data from futures and filter completed issues.
+
+    Only non-project issues are included in the completed list.
+    """
+    created_priority_bugs = get_future_result_with_timeout(
+        created_priority_future, []
     )
-
-
-@lru_cache(maxsize=16)
-def _build_index_context(days: int, _cache_epoch: int) -> dict:
-    with ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS) as executor:
-        (
-            created_priority_future,
-            open_priority_future,
-            completed_priority_future,
-            completed_bugs_future,
-            completed_new_features_future,
-            completed_technical_changes_future,
-            open_bugs_future,
-            open_new_features_future,
-            open_technical_changes_future,
-            reviews_future,
-            authored_prs_future,
-        ) = _submit_index_futures(executor, days)
-
-    created_priority_bugs = get_future_result_with_timeout(created_priority_future, [])
-    open_priority_bugs = get_future_result_with_timeout(open_priority_future, [])
+    open_priority_bugs = get_future_result_with_timeout(
+        open_priority_future, []
+    )
 
     # Only include non-project issues in the index summary
     completed_priority_result = get_future_result_with_timeout(
@@ -267,14 +275,34 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
         for issue in completed_priority_result
         if not issue.get("project")
     ]
-    completed_bugs_result = get_future_result_with_timeout(completed_bugs_future, [])
+
+    return created_priority_bugs, open_priority_bugs, completed_priority_bugs
+
+
+@lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
+def _build_index_context(days: int, _cache_epoch: int) -> dict:
+    with ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS) as executor:
+        futures = _submit_index_futures(executor, days)
+
+    (
+        created_priority_bugs,
+        open_priority_bugs,
+        completed_priority_bugs,
+    ) = _get_priority_bugs_from_futures(
+        futures["created_priority"],
+        futures["open_priority"],
+        futures["completed_priority"],
+    )
+    completed_bugs_result = get_future_result_with_timeout(
+        futures["completed_bugs"], []
+    )
     completed_bugs = [
         issue
         for issue in completed_bugs_result
         if not issue.get("project")
     ]
     completed_new_features_result = get_future_result_with_timeout(
-        completed_new_features_future, []
+        futures["completed_new_features"], []
     )
     completed_new_features = [
         issue
@@ -282,17 +310,19 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
         if not issue.get("project")
     ]
     completed_technical_changes_result = get_future_result_with_timeout(
-        completed_technical_changes_future, []
+        futures["completed_technical_changes"], []
     )
     completed_technical_changes = [
         issue
         for issue in completed_technical_changes_result
         if not issue.get("project")
     ]
-    open_bugs_result = get_future_result_with_timeout(open_bugs_future, [])
-    open_new_features_result = get_future_result_with_timeout(open_new_features_future, [])
+    open_bugs_result = get_future_result_with_timeout(futures["open_bugs"], [])
+    open_new_features_result = get_future_result_with_timeout(
+        futures["open_new_features"], []
+    )
     open_technical_changes_result = get_future_result_with_timeout(
-        open_technical_changes_future, []
+        futures["open_technical_changes"], []
     )
     open_work = (
         open_bugs_result
@@ -312,9 +342,6 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
         for slug, info in people_config.items()
         if info.get("team") == "apollos_engineering"
     }
-
-    def format_display_name(linear_username: str) -> str:
-        return re.sub(r"[._-]+", " ", linear_username).title()
 
     alias_to_slug = {}
     github_to_slug = {}
@@ -398,8 +425,8 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
                     1,
                 )
 
-    merged_reviews = get_future_result_with_timeout(reviews_future, {})
-    merged_authored_prs = get_future_result_with_timeout(authored_prs_future, {})
+    merged_reviews = get_future_result_with_timeout(futures["merged_prs_by_reviewer"], {})
+    merged_authored_prs = get_future_result_with_timeout(futures["merged_prs_by_author"], {})
 
     for reviewer, prs in merged_reviews.items():
         review_points = len(prs)
