@@ -89,7 +89,7 @@ def format_bug_line(bug):
 def with_retries(func):
     """Decorator that retries the wrapped function.
 
-    Retries up to RETRY_COUNT times on failure. After each failure, logs the
+    Retries up to MAX_RETRY_COUNT times on failure. After each failure, logs the
     exception and waits RETRY_SLEEP_SECONDS before retrying. After the final
     attempt, the last exception is re-raised.
     """
