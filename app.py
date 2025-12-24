@@ -3,6 +3,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from functools import lru_cache
+from typing import TypedDict
 
 from flask import Flask, abort, render_template, request
 
@@ -31,7 +32,20 @@ app = Flask(__name__)
 
 INDEX_CACHE_TTL_SECONDS = 60
 
-BREAKDOWN_CATEGORIES = [
+class BreakdownCategory(TypedDict):
+    key: str
+    label: str
+    count_label: str | None
+
+
+class LeaderboardEntry(TypedDict):
+    slug: str | None
+    display_name: str | None
+    score: int
+    breakdown: str | None
+
+
+BREAKDOWN_CATEGORIES: list[BreakdownCategory] = [
     {"key": "urgent", "label": "Urgent issues", "count_label": "issue"},
     {"key": "high", "label": "High issues", "count_label": "issue"},
     {"key": "medium", "label": "Medium issues", "count_label": "issue"},
@@ -388,7 +402,7 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
                 points,
             )
 
-    leaderboard_entries = [
+    leaderboard_entries: list[LeaderboardEntry] = [
         {
             "slug": slug,
             "display_name": names_by_slug.get(slug) or display_name_overrides.get(slug),
@@ -402,17 +416,19 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
         for slug, score in scores_by_slug.items()
     ]
     leaderboard_entries.extend(
-        {
-            "slug": None,
-            "display_name": names_by_external[key],
-            "score": score,
-            "breakdown": format_breakdown_text(
-                points_breakdown_by_external.get(key),
-                count_breakdown_by_external.get(key),
-            )
-            or None,
-        }
-        for key, score in scores_by_external.items()
+        [
+            {
+                "slug": None,
+                "display_name": names_by_external[key],
+                "score": score,
+                "breakdown": format_breakdown_text(
+                    points_breakdown_by_external.get(key),
+                    count_breakdown_by_external.get(key),
+                )
+                or None,
+            }
+            for key, score in scores_by_external.items()
+        ]
     )
 
     leaderboard_entries = [
