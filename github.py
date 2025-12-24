@@ -27,7 +27,7 @@ def _get_client():
             url="https://api.github.com/graphql",
             headers=headers,
         )
-        client = Client(transport=transport, fetch_schema_from_transport=True)
+        client = Client(transport=transport, fetch_schema_from_transport=False)
         _thread_local.client = client
     return client
 

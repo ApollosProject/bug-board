@@ -161,6 +161,75 @@ def get_completed_issues(priority, label, days=30):
     return issues
 
 
+def get_completed_issues_summary(priority, label, days=30):
+
+    query = gql(
+        """
+        query CompletedIssuesSummary (
+            $priority: Float,
+            $label: String,
+            $days: DateTimeOrDuration,
+            $cursor: String
+        ) {
+          issues(
+            first: 50
+            after: $cursor
+            filter: {
+              team: { name: { eq: "Apollos" } }
+              labels: { name: { eq: $label } }
+              priority: { lte: $priority, gte: 1 }
+              state: { name: { in: ["Done"] } }
+              completedAt: { gt: $days }
+            }
+            orderBy: updatedAt
+          ) {
+            nodes {
+              id
+              title
+              project {
+                name
+              }
+              assignee {
+                name
+                displayName
+              }
+              priority
+              completedAt
+              createdAt
+              startedAt
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+        """,
+    )
+
+    cursor = None
+    issues = []
+    while True:
+        params = {
+            "priority": priority,
+            "label": label,
+            "days": f"-P{days}D",
+            "cursor": cursor,
+        }
+        data = _get_client().execute(query, variable_values=params)
+        issues += data["issues"]["nodes"]
+        if not data["issues"]["pageInfo"]["hasNextPage"]:
+            break
+        cursor = data["issues"]["pageInfo"]["endCursor"]
+
+    issues = [issue for issue in issues if issue.get("priority", 0) > 0]
+
+    for issue in issues:
+        proj = issue.get("project", {}).get("name") if issue.get("project") else None
+        issue["project"] = proj
+    return issues
+
+
 def get_created_issues(priority, label, days=30):
 
     query = gql(
