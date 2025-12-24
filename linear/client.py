@@ -65,5 +65,5 @@ def _get_client():
 def _execute(query, variable_values=None):
     client = _get_client()
     if variable_values is None:
-        return client.execute(query, validate=False)
-    return client.execute(query, variable_values=variable_values, validate=False)
+        return client.execute(query)
+    return client.execute(query, variable_values=variable_values)
