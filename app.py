@@ -31,10 +31,13 @@ from leaderboard import (
 app = Flask(__name__)
 
 # Maximum time in seconds to wait for background tasks in the index context.
+# This shorter timeout is used for multiple concurrent futures in _build_index_context
+# where we prefer to show partial data rather than hang indefinitely.
 INDEX_FUTURE_TIMEOUT = 10
 
 # Configuration constants
-# Timeout in seconds for ThreadPoolExecutor result() calls
+# Timeout in seconds for ThreadPoolExecutor result() calls in individual routes.
+# This longer timeout is used for single operations in routes like /team/<slug>.
 EXECUTOR_TIMEOUT_SECONDS = 30
 # Number of worker threads used in the index route for parallel data fetching
 INDEX_THREADPOOL_MAX_WORKERS = 12
@@ -120,6 +123,24 @@ def mmdd_filter(date_str: str) -> str:
         return date_str
 
 
+def get_future_result_with_timeout(future, default_value, timeout=INDEX_FUTURE_TIMEOUT):
+    """
+    Get result from a future with a timeout, returning a default value on timeout.
+
+    Args:
+        future: The concurrent.futures.Future to get result from
+        default_value: Value to return if timeout occurs
+        timeout: Maximum time to wait in seconds (default: INDEX_FUTURE_TIMEOUT)
+
+    Returns:
+        The future's result, or default_value if timeout occurs
+    """
+    try:
+        return future.result(timeout=timeout)
+    except TimeoutError:
+        return default_value
+
+
 @lru_cache(maxsize=16)
 def _build_index_context(days: int, _cache_epoch: int) -> dict:
     with ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS) as executor:
@@ -149,70 +170,45 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
         reviews_future = executor.submit(merged_prs_by_reviewer, days)
         authored_prs_future = executor.submit(merged_prs_by_author, days)
 
-    try:
-        created_priority_bugs = created_priority_future.result(timeout=INDEX_FUTURE_TIMEOUT)
-    except TimeoutError:
-        created_priority_bugs = []
-    try:
-        open_priority_bugs = open_priority_future.result(timeout=INDEX_FUTURE_TIMEOUT)
-    except TimeoutError:
-        open_priority_bugs = []
+    created_priority_bugs = get_future_result_with_timeout(created_priority_future, [])
+    open_priority_bugs = get_future_result_with_timeout(open_priority_future, [])
 
     # Only include non-project issues in the index summary
-    try:
-        completed_priority_result = completed_priority_future.result(timeout=INDEX_FUTURE_TIMEOUT)
-    except TimeoutError:
-        completed_priority_result = []
+    completed_priority_result = get_future_result_with_timeout(
+        completed_priority_future, []
+    )
     completed_priority_bugs = [
         issue
         for issue in completed_priority_result
         if not issue.get("project")
     ]
-    try:
-        completed_bugs_result = completed_bugs_future.result(timeout=INDEX_FUTURE_TIMEOUT)
-    except TimeoutError:
-        completed_bugs_result = []
+    completed_bugs_result = get_future_result_with_timeout(completed_bugs_future, [])
     completed_bugs = [
         issue
         for issue in completed_bugs_result
         if not issue.get("project")
     ]
-    try:
-        completed_new_features_result = completed_new_features_future.result(
-            timeout=INDEX_FUTURE_TIMEOUT
-        )
-    except TimeoutError:
-        completed_new_features_result = []
+    completed_new_features_result = get_future_result_with_timeout(
+        completed_new_features_future, []
+    )
     completed_new_features = [
         issue
         for issue in completed_new_features_result
         if not issue.get("project")
     ]
-    try:
-        completed_technical_changes_result = completed_technical_changes_future.result(
-            timeout=INDEX_FUTURE_TIMEOUT
-        )
-    except TimeoutError:
-        completed_technical_changes_result = []
+    completed_technical_changes_result = get_future_result_with_timeout(
+        completed_technical_changes_future, []
+    )
     completed_technical_changes = [
         issue
         for issue in completed_technical_changes_result
         if not issue.get("project")
     ]
-    try:
-        open_bugs_result = open_bugs_future.result(timeout=INDEX_FUTURE_TIMEOUT)
-    except TimeoutError:
-        open_bugs_result = []
-    try:
-        open_new_features_result = open_new_features_future.result(timeout=INDEX_FUTURE_TIMEOUT)
-    except TimeoutError:
-        open_new_features_result = []
-    try:
-        open_technical_changes_result = open_technical_changes_future.result(
-            timeout=INDEX_FUTURE_TIMEOUT
-        )
-    except TimeoutError:
-        open_technical_changes_result = []
+    open_bugs_result = get_future_result_with_timeout(open_bugs_future, [])
+    open_new_features_result = get_future_result_with_timeout(open_new_features_future, [])
+    open_technical_changes_result = get_future_result_with_timeout(
+        open_technical_changes_future, []
+    )
     open_work = (
         open_bugs_result
         + open_new_features_result
@@ -340,15 +336,8 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
                     1,
                 )
 
-    try:
-        merged_reviews = reviews_future.result(timeout=INDEX_FUTURE_TIMEOUT)
-    except TimeoutError:
-        merged_reviews = {}
-
-    try:
-        merged_authored_prs = authored_prs_future.result(timeout=INDEX_FUTURE_TIMEOUT)
-    except TimeoutError:
-        merged_authored_prs = {}
+    merged_reviews = get_future_result_with_timeout(reviews_future, {})
+    merged_authored_prs = get_future_result_with_timeout(authored_prs_future, {})
 
     for reviewer, prs in merged_reviews.items():
         review_points = len(prs)
