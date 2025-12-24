@@ -31,11 +31,14 @@ from leaderboard import (
 app = Flask(__name__)
 
 # Configuration constants
+# Timeout in seconds for ThreadPoolExecutor result() calls
 EXECUTOR_TIMEOUT_SECONDS = 30
+# Number of worker threads used in the index route for parallel data fetching
 INDEX_THREADPOOL_MAX_WORKERS = 12
 # Number of worker threads used in the /team/<slug> route when fetching
-# Linear and GitHub data concurrently.
+# Linear and GitHub data concurrently
 TEAM_THREADPOOL_MAX_WORKERS = 3
+# Cache time-to-live in seconds for the index page
 INDEX_CACHE_TTL_SECONDS = 60
 
 
