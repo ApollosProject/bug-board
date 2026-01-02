@@ -4,7 +4,7 @@ import threading
 
 from dotenv import load_dotenv
 from gql import Client
-from gql.transport.aiohttp import AIOHTTPTransport
+from gql.transport.requests import RequestsHTTPTransport
 
 load_dotenv()
 
@@ -53,7 +53,8 @@ def _get_client():
     client = getattr(_thread_local, "client", None)
     if client is None:
         headers = {"Authorization": os.getenv("LINEAR_API_KEY")}
-        transport = AIOHTTPTransport(
+        # Use the requests transport to avoid asyncio loop cleanup issues on exit.
+        transport = RequestsHTTPTransport(
             url="https://api.linear.app/graphql",
             headers=headers,
         )
