@@ -3,11 +3,13 @@ import os
 import re
 import time
 from datetime import datetime, timezone
+import signal
 
 import requests
 import schedule
 from dotenv import load_dotenv
 from tenacity import before_sleep_log, retry, stop_after_attempt, wait_fixed
+from requests.exceptions import RequestException
 
 from config import load_config
 from constants import PRIORITY_TO_SCORE
@@ -156,7 +158,7 @@ def _get_pr_diffs(issue):
         try:
             diff = get_pr_diff(owner, repo, int(number))
             diffs.append(diff)
-        except Exception as e:  # pragma: no cover - network errors are ignored
+        except requests.RequestException as e:  # pragma: no cover - network errors are ignored
             logging.error(
                 "Failed to fetch diff for %s/%s#%s (error type: %s)",
                 owner,
@@ -205,10 +207,10 @@ def post_priority_bugs():
             if bug["assignee"]
         }
         platforms = {bug["platform"] for bug in unassigned if bug["platform"]}
+        support_slugs = get_support_slugs()
         notified_slack_ids: set[str] = set()
         slug_by_slack_id: dict[str, str] = {}
         lead_platforms_by_slack_id: dict[str, set[str]] = {}
-        support_slugs = get_support_slugs()
         for platform in platforms:
             platform_slug = platform.lower().replace(" ", "-")
             platform_config = config["platforms"].get(platform_slug, {})
@@ -494,7 +496,7 @@ def post_inactive_engineers():
             continue
         try:
             completed = get_completed_issues_for_person(login, 7)
-        except Exception as e:
+        except (requests.RequestException, ValueError) as e:
             logging.error(f"Failed to fetch completed issues for {login}: {e}")
             continue
         if not completed:
@@ -680,7 +682,7 @@ def post_weekly_changelog():
             functions=function_spec,
             function_call_name="generate_changelog",
         )
-    except Exception as e:
+    except (RequestException, ValueError) as e:
         logging.error(
             "Failed to generate changelog via function call. Error: %s",
             e,
@@ -709,6 +711,15 @@ def post_weekly_changelog():
     post_to_slack(changelog_text)
 
 
+shutdown_requested = False
+
+
+def handle_shutdown(signum, frame):
+    global shutdown_requested
+    logging.info("Received shutdown signal %s, stopping scheduler loop...", signum)
+    shutdown_requested = True
+
+
 if os.getenv("DEBUG") == "true":
     post_inactive_engineers()
     post_priority_bugs()
@@ -726,6 +737,13 @@ else:
     schedule.every().friday.at("12:00").do(post_upcoming_projects)
     schedule.every().monday.at("12:00").do(post_friday_deadlines)
 
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
+    signal.signal(signal.SIGINT, handle_shutdown)
+    signal.signal(signal.SIGTERM, handle_shutdown)
+    logging.info("Starting scheduler loop")
+
+    try:
+        while not shutdown_requested:
+            schedule.run_pending()
+            time.sleep(1)
+    except KeyboardInterrupt:
+        logging.info("KeyboardInterrupt received, stopping scheduler loop...")
