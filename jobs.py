@@ -9,7 +9,6 @@ import requests
 import schedule
 from dotenv import load_dotenv
 from tenacity import before_sleep_log, retry, stop_after_attempt, wait_fixed
-from requests.exceptions import RequestException
 
 from config import load_config
 from constants import PRIORITY_TO_SCORE
@@ -682,7 +681,7 @@ def post_weekly_changelog():
             functions=function_spec,
             function_call_name="generate_changelog",
         )
-    except (RequestException, ValueError) as e:
+    except (requests.RequestException, ValueError) as e:
         logging.error(
             "Failed to generate changelog via function call. Error: %s",
             e,
@@ -741,9 +740,6 @@ else:
     signal.signal(signal.SIGTERM, handle_shutdown)
     logging.info("Starting scheduler loop")
 
-    try:
-        while not shutdown_requested:
-            schedule.run_pending()
-            time.sleep(1)
-    except KeyboardInterrupt:
-        logging.info("KeyboardInterrupt received, stopping scheduler loop...")
+    while not shutdown_requested:
+        schedule.run_pending()
+        time.sleep(1)
