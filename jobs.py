@@ -8,6 +8,9 @@ import signal
 import requests
 import schedule
 from dotenv import load_dotenv
+from gql.transport.exceptions import TransportQueryError
+from aiohttp import ClientError
+from openai import OpenAIError
 from tenacity import before_sleep_log, retry, stop_after_attempt, wait_fixed
 
 from config import load_config
@@ -495,7 +498,7 @@ def post_inactive_engineers():
             continue
         try:
             completed = get_completed_issues_for_person(login, 7)
-        except (requests.RequestException, ValueError) as e:
+        except (TransportQueryError, ClientError, ValueError) as e:
             logging.error(f"Failed to fetch completed issues for {login}: {e}")
             continue
         if not completed:
@@ -681,7 +684,7 @@ def post_weekly_changelog():
             functions=function_spec,
             function_call_name="generate_changelog",
         )
-    except (requests.RequestException, ValueError) as e:
+    except (OpenAIError, requests.RequestException, ValueError) as e:
         logging.error(
             "Failed to generate changelog via function call. Error: %s",
             e,
