@@ -84,14 +84,14 @@ def get_repo_ids():
 
 
 def get_prs(repo_id, pr_states):
-    params = {"repo_id": repo_id, "pr_states": pr_states}
     query = gql(
         """
-        query PRs ($repo_id: ID!, $pr_states: [PullRequestState!]) {
+        query PRs ($repo_id: ID!, $pr_states: [PullRequestState!], $cursor: String) {
             node(id: $repo_id) {
                 ... on Repository {
                     pullRequests(
                         first: 100,
+                        after: $cursor,
                         states: $pr_states,
                         orderBy: {field: UPDATED_AT, direction: DESC}
                     ) {
@@ -145,15 +145,28 @@ def get_prs(repo_id, pr_states):
                                 state
                             }
                         }
+                        pageInfo {
+                            endCursor
+                            hasNextPage
+                        }
                     }
                 }
             }
         }
     """
     )
-    data = _execute(query, variable_values=params)
-    prs = data["node"]["pullRequests"]["nodes"]
-    non_draft_prs = [pr for pr in prs if not pr.get("isDraft", False)]
+    all_prs = []
+    cursor = None
+    while True:
+        params = {"repo_id": repo_id, "pr_states": pr_states, "cursor": cursor}
+        data = _execute(query, variable_values=params)
+        payload = data["node"]["pullRequests"]
+        all_prs.extend(payload["nodes"])
+        page_info = payload["pageInfo"]
+        if not page_info["hasNextPage"]:
+            break
+        cursor = page_info["endCursor"]
+    non_draft_prs = [pr for pr in all_prs if not pr.get("isDraft", False)]
     return non_draft_prs
 
 
@@ -188,7 +201,6 @@ def prs_by_approver():
     return prs_by_approver
 
 
-@lru_cache(maxsize=4)
 def _get_merged_prs(days: int = 30):
     """Return merged PRs across all repos within the last ``days`` days."""
     cutoff = datetime.utcnow() - timedelta(days=days)
