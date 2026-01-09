@@ -25,15 +25,9 @@
         <option value="90" {{ 'selected' if days == 90 else '' }}>90d</option>
       </select>
     </form>
-    <div id="priority-stats" aria-busy="true">
-      <article aria-busy="true"></article>
-    </div>
-    <section id="open-items" aria-busy="true">
-      <article aria-busy="true"></article>
-    </section>
-    <section id="leaderboard" aria-busy="true">
-      <article aria-busy="true"></article>
-    </section>
+    <div id="priority-stats" aria-busy="true"></div>
+    <section id="open-items" aria-busy="true"></section>
+    <section id="leaderboard" aria-busy="true"></section>
 {% endblock %}
 
 {% block extra_scripts %}
