@@ -401,19 +401,23 @@ def get_time_data(issues):
             queue_times.append(queue_time)
             work_time = (completed_at - started_at).days
             work_times.append(work_time)
+
+    def summarize(values):
+        if not values:
+            return {"avg": 0, "p95": 0}
+        values_sorted = sorted(values)
+        p95_index = int(len(values_sorted) * 0.95)
+        if p95_index >= len(values_sorted):
+            p95_index = len(values_sorted) - 1
+        return {
+            "avg": int(sum(values_sorted) / len(values_sorted)),
+            "p95": int(values_sorted[p95_index]),
+        }
+
     data = {
-        "lead": {
-            "avg": int(sum(lead_times) / len(lead_times)),
-            "p95": int(sorted(lead_times)[int(len(lead_times) * 0.95)]),
-        },
-        "queue": {
-            "avg": int(sum(queue_times) / len(queue_times)),
-            "p95": int(sorted(queue_times)[int(len(queue_times) * 0.95)]),
-        },
-        "work": {
-            "avg": int(sum(work_times) / len(work_times)),
-            "p95": int(sorted(work_times)[int(len(work_times) * 0.95)]),
-        },
+        "lead": summarize(lead_times),
+        "queue": summarize(queue_times),
+        "work": summarize(work_times),
     }
     return data
 
