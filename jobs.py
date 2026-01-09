@@ -37,6 +37,8 @@ load_dotenv()
 # Retry configuration for the with_retries decorator.
 MAX_RETRY_COUNT = 3
 RETRY_SLEEP_SECONDS = 5
+MAX_DIFF_CHARS = 12000
+MAX_DIFF_FILES = 20
 
 
 def post_to_slack(markdown: str):
@@ -143,6 +145,31 @@ def get_slack_markdown_by_github_username(username):
 
 def _get_pr_diffs(issue):
     """Return a list of diffs for PRs linked in the issue attachments."""
+    def summarize_diff(diff_text: str) -> str:
+        files = []
+        for line in diff_text.splitlines():
+            if not line.startswith("diff --git "):
+                continue
+            parts = line.split(" ")
+            if len(parts) < 4:
+                continue
+            path = parts[2]
+            if path.startswith("a/"):
+                path = path[2:]
+            if path and path not in files:
+                files.append(path)
+        total_files = len(files)
+        shown_files = files[:MAX_DIFF_FILES]
+        file_list = ", ".join(shown_files)
+        if total_files > MAX_DIFF_FILES:
+            file_list += f", +{total_files - MAX_DIFF_FILES} more"
+        if not file_list:
+            file_list = "File list unavailable"
+        return (
+            f"Diff too large ({len(diff_text)} chars). "
+            f"Files ({total_files}): {file_list}"
+        )
+
     diffs = []
     for attachment in issue.get("attachments", {}).get("nodes", []):
         metadata = attachment.get("metadata", {})
@@ -155,7 +182,10 @@ def _get_pr_diffs(issue):
         owner, repo, number = match.groups()
         try:
             diff = get_pr_diff(owner, repo, int(number))
-            diffs.append(diff)
+            if len(diff) > MAX_DIFF_CHARS:
+                diffs.append(summarize_diff(diff))
+            else:
+                diffs.append(diff)
         except Exception as e:  # pragma: no cover - network errors are ignored
             logging.error(
                 "Failed to fetch diff for %s/%s#%s (error type: %s)",
