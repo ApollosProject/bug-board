@@ -627,7 +627,7 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
             "fixes_per_day": fixes_per_day,
         }
     finally:
-        executor.shutdown(wait=False)
+        executor.shutdown(wait=False, cancel_futures=True)
 
 
 # use a query string parameter for days on the index route
