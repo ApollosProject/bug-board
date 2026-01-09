@@ -1,14 +1,16 @@
 from gql import gql
 
+from config import get_linear_team_key
 from .client import _execute
 
 
 def get_projects():
     """Return all Linear projects under the Apollos team, ordered by name."""
+    team_key = get_linear_team_key()
     query = gql(
         """
-        query {
-          teams(filter: { name: { eq: \"Apollos\" } }, first: 1) {
+        query Projects($team_key: String!) {
+          teams(filter: { key: { eq: $team_key } }, first: 1) {
             nodes {
               projects(first: 50) {
                 nodes {
@@ -43,7 +45,7 @@ def get_projects():
         }
         """
     )
-    data = _execute(query)
+    data = _execute(query, variable_values={"team_key": team_key})
     teams = data.get("teams", {}).get("nodes", []) or []
     if not teams:
         return []

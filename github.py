@@ -50,6 +50,8 @@ rest_headers = {
 
 @lru_cache(maxsize=1)
 def get_repo_ids():
+    if not token:
+        return []
     # List of repositories to track in the format "owner/name".
     repos = [
         "apollosproject/apollos-platforms",
@@ -78,12 +80,17 @@ def get_repo_ids():
             # Skip invalid entries.
             continue
         params = {"owner": owner, "name": name}
-        data = _execute(repo_id_query, variable_values=params)
+        try:
+            data = _execute(repo_id_query, variable_values=params)
+        except Exception:
+            return []
         ids.append(data["repository"]["id"])
     return ids
 
 
 def get_prs(repo_id, pr_states):
+    if not token:
+        return []
     query = gql(
         """
         query PRs ($repo_id: ID!, $pr_states: [PullRequestState!], $cursor: String) {
@@ -159,7 +166,10 @@ def get_prs(repo_id, pr_states):
     cursor = None
     while True:
         params = {"repo_id": repo_id, "pr_states": pr_states, "cursor": cursor}
-        data = _execute(query, variable_values=params)
+        try:
+            data = _execute(query, variable_values=params)
+        except Exception:
+            return []
         payload = data["node"]["pullRequests"]
         all_prs.extend(payload["nodes"])
         page_info = payload["pageInfo"]
@@ -180,13 +190,18 @@ def has_failing_required_checks(pr):
 def _get_all_prs(pr_states: List[str]) -> List[Dict[str, Any]]:
     """Fetch PRs for all tracked repositories concurrently."""
     repo_ids = get_repo_ids()
+    if not repo_ids:
+        return []
     with ThreadPoolExecutor(max_workers=len(repo_ids)) as executor:
         futures = [
             executor.submit(get_prs, repo_id, pr_states) for repo_id in repo_ids
         ]
         all_prs: List[Dict[str, Any]] = []
         for future in futures:
-            all_prs.extend(future.result())
+            try:
+                all_prs.extend(future.result())
+            except Exception:
+                continue
     return all_prs
 
 

@@ -2,20 +2,20 @@ from datetime import datetime
 
 from gql import gql
 
-from config import get_platforms
+from config import get_linear_team_key, get_platforms
 from constants import PRIORITY_TO_SCORE
 from .client import _compute_assignee_time_to_fix, _execute
 
 
 def get_open_issues(priority, label):
-
-    params = {"priority": priority, "label": label}
+    team_key = get_linear_team_key()
+    params = {"priority": priority, "label": label, "team_key": team_key}
     query = gql(
         """
-        query PriorityIssues ($priority: Float, $label: String) {
+        query PriorityIssues ($priority: Float, $label: String, $team_key: String!) {
           issues(
             filter: {
-              team: { name: { eq: "Apollos" } }
+              team: { key: { eq: $team_key } }
               labels: { name: { eq: $label } }
               priority: { lte: $priority, gte: 1 }
               state: { name: { nin: ["Done", "Canceled", "Duplicate"] } }
@@ -65,12 +65,13 @@ def get_open_issues(priority, label):
 
 
 def get_completed_issues(priority, label, days=30):
-
+    team_key = get_linear_team_key()
     query = gql(
         """
         query CompletedIssues (
             $priority: Float,
             $label: String,
+            $team_key: String!,
             $days: DateTimeOrDuration,
             $cursor: String
         ) {
@@ -78,7 +79,7 @@ def get_completed_issues(priority, label, days=30):
             first: 50
             after: $cursor
         filter: {
-              team: { name: { eq: "Apollos" } }
+              team: { key: { eq: $team_key } }
               labels: { name: { eq: $label } }
               priority: { lte: $priority, gte: 1 }
               state: { name: { in: ["Done"] } }
@@ -144,6 +145,7 @@ def get_completed_issues(priority, label, days=30):
         params = {
             "priority": priority,
             "label": label,
+            "team_key": team_key,
             "days": f"-P{days}D",
             "cursor": cursor,
         }
@@ -162,12 +164,13 @@ def get_completed_issues(priority, label, days=30):
 
 
 def get_completed_issues_summary(priority, label, days=30):
-
+    team_key = get_linear_team_key()
     query = gql(
         """
         query CompletedIssuesSummary (
             $priority: Float,
             $label: String,
+            $team_key: String!,
             $days: DateTimeOrDuration,
             $cursor: String
         ) {
@@ -175,7 +178,7 @@ def get_completed_issues_summary(priority, label, days=30):
             first: 50
             after: $cursor
             filter: {
-              team: { name: { eq: "Apollos" } }
+              team: { key: { eq: $team_key } }
               labels: { name: { eq: $label } }
               priority: { lte: $priority, gte: 1 }
               state: { name: { in: ["Done"] } }
@@ -213,6 +216,7 @@ def get_completed_issues_summary(priority, label, days=30):
         params = {
             "priority": priority,
             "label": label,
+            "team_key": team_key,
             "days": f"-P{days}D",
             "cursor": cursor,
         }
@@ -231,12 +235,13 @@ def get_completed_issues_summary(priority, label, days=30):
 
 
 def get_created_issues(priority, label, days=30):
-
+    team_key = get_linear_team_key()
     query = gql(
         """
         query CreatedIssues (
             $priority: Float,
             $label: String,
+            $team_key: String!,
             $days: DateTimeOrDuration,
             $cursor: String
         ) {
@@ -244,7 +249,7 @@ def get_created_issues(priority, label, days=30):
                 first: 50
                 after: $cursor
                 filter: {
-                    team: { name: { eq: "Apollos" } }
+                    team: { key: { eq: $team_key } }
                     labels: { name: { eq: $label } }
                     priority: { lte: $priority, gte: 1 }
                     createdAt:{gt: $days}
@@ -278,6 +283,7 @@ def get_created_issues(priority, label, days=30):
         params = {
             "priority": priority,
             "label": label,
+            "team_key": team_key,
             "days": f"-P{days}D",
             "cursor": cursor,
         }
@@ -386,14 +392,28 @@ def by_platform(issues):
     )
 
 
+def _parse_linear_datetime(value):
+    if not value:
+        return None
+    for fmt in ("%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%SZ"):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    return None
+
+
 def get_time_data(issues):
     def summarize_times(values):
         if not values:
             return {"avg": 0, "p95": 0}
         values_sorted = sorted(values)
-        p95_index = min(int(len(values_sorted) * 0.95), len(values_sorted) - 1)
+        count = len(values_sorted)
+        if count == 0:
+            return {"avg": 0, "p95": 0}
+        p95_index = min(int(count * 0.95), count - 1)
         return {
-            "avg": int(sum(values_sorted) / len(values_sorted)),
+            "avg": int(sum(values_sorted) / count),
             "p95": int(values_sorted[p95_index]),
         }
 
@@ -401,12 +421,17 @@ def get_time_data(issues):
     queue_times = []
     work_times = []
     for issue in issues:
-        completed_at = datetime.strptime(issue["completedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
-        created_at = datetime.strptime(issue["createdAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
-        lead_time = (completed_at - created_at).days
+        completed_at = _parse_linear_datetime(issue.get("completedAt"))
+        created_at = _parse_linear_datetime(issue.get("createdAt"))
+        if not completed_at or not created_at:
+            continue
+        try:
+            lead_time = (completed_at - created_at).days
+        except ZeroDivisionError:
+            continue
         lead_times.append(lead_time)
-        if issue["startedAt"]:
-            started_at = datetime.strptime(issue["startedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
+        started_at = _parse_linear_datetime(issue.get("startedAt"))
+        if started_at:
             queue_time = (started_at - created_at).days
             queue_times.append(queue_time)
             work_time = (completed_at - started_at).days
@@ -421,15 +446,15 @@ def get_time_data(issues):
 
 def get_open_issues_for_person(login: str):
     """Return open issues assigned to a given Linear username across all projects."""
-
+    team_key = get_linear_team_key()
     query = gql(
         """
-        query OpenIssues($login: String!, $cursor: String) {
+        query OpenIssues($login: String!, $team_key: String!, $cursor: String) {
           issues(
             first: 50
             after: $cursor
             filter: {
-              team: { name: { eq: "Apollos" } }
+              team: { key: { eq: $team_key } }
               assignee: { displayName: { eq: $login } }
               state: { name: { nin: ["Done", "Canceled", "Duplicate"] } }
             }
@@ -460,7 +485,7 @@ def get_open_issues_for_person(login: str):
     cursor = None
     issues = []
     while True:
-        params = {"login": login, "cursor": cursor}
+        params = {"login": login, "team_key": team_key, "cursor": cursor}
         data = _execute(query, variable_values=params)
         issues += data["issues"]["nodes"]
         if not data["issues"]["pageInfo"]["hasNextPage"]:
@@ -493,15 +518,20 @@ def get_open_issues_in_projects(project_names):
 
     # Ensure we work with a list for GraphQL variables
     project_names = list(project_names)
+    team_key = get_linear_team_key()
 
     query = gql(
         """
-        query OpenIssuesInProjects($projectNames: [String!], $cursor: String) {
+        query OpenIssuesInProjects(
+          $projectNames: [String!],
+          $team_key: String!,
+          $cursor: String
+        ) {
           issues(
             first: 50
             after: $cursor
             filter: {
-              team: { name: { eq: \"Apollos\" } }
+              team: { key: { eq: $team_key } }
               state: { name: { nin: [\"Done\", \"Canceled\", \"Duplicate\"] } }
               project: { name: { in: $projectNames } }
             }
@@ -524,7 +554,11 @@ def get_open_issues_in_projects(project_names):
     cursor = None
     issues = []
     while True:
-        params = {"projectNames": project_names, "cursor": cursor}
+        params = {
+            "projectNames": project_names,
+            "team_key": team_key,
+            "cursor": cursor,
+        }
         data = _execute(query, variable_values=params)
         issues += data["issues"]["nodes"]
         if not data["issues"]["pageInfo"]["hasNextPage"]:
@@ -535,15 +569,20 @@ def get_open_issues_in_projects(project_names):
 
 def get_completed_issues_for_person(login: str, days=30):
     """Return completed issues for a user over the last `days` days, filtered by Linear username."""
-
+    team_key = get_linear_team_key()
     query = gql(
         """
-        query CompletedIssues($login: String!, $days: DateTimeOrDuration, $cursor: String) {
+        query CompletedIssues(
+          $login: String!,
+          $team_key: String!,
+          $days: DateTimeOrDuration,
+          $cursor: String
+        ) {
           issues(
             first: 50
             after: $cursor
             filter: {
-              team: { name: { eq: "Apollos" } }
+              team: { key: { eq: $team_key } }
               assignee: { displayName: { eq: $login } }
               state: { name: { in: ["Done"] } }
               completedAt: { gt: $days }
@@ -585,7 +624,12 @@ def get_completed_issues_for_person(login: str, days=30):
     cursor = None
     issues = []
     while True:
-        params = {"login": login, "days": f"-P{days}D", "cursor": cursor}
+        params = {
+            "login": login,
+            "team_key": team_key,
+            "days": f"-P{days}D",
+            "cursor": cursor,
+        }
         data = _execute(query, variable_values=params)
         issues += data["issues"]["nodes"]
         if not data["issues"]["pageInfo"]["hasNextPage"]:
