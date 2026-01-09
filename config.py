@@ -24,3 +24,15 @@ def get_linear_team_key():
         or os.getenv("LINEAR_TEAM_KEY")
         or "APO"
     )
+
+
+def get_github_orgs():
+    """Return the GitHub orgs to include when aggregating PR activity."""
+    config = load_config()
+    orgs = config.get("github_orgs")
+    if orgs:
+        return orgs
+    env_orgs = os.getenv("GITHUB_ORGS")
+    if env_orgs:
+        return [org.strip() for org in env_orgs.split(",") if org.strip()]
+    return ["apollosproject", "differential"]

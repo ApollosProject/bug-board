@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 
+from config import get_github_orgs
+
 load_dotenv()
 
 
@@ -83,7 +85,7 @@ def get_repo_ids():
         try:
             data = _execute(repo_id_query, variable_values=params)
         except Exception:
-            return []
+            continue
         ids.append(data["repository"]["id"])
     return ids
 
@@ -217,22 +219,63 @@ def prs_by_approver():
 
 
 def _get_merged_prs(days: int = 30):
-    """Return merged PRs across all repos within the last ``days`` days."""
+    """Return merged PRs within the last ``days`` days using GitHub search."""
+    if not token:
+        return []
+    orgs = get_github_orgs()
+    if not orgs:
+        return []
     cutoff = datetime.utcnow() - timedelta(days=days)
-    all_prs = _get_all_prs(["MERGED"])
-
-    filtered = []
-    for pr in all_prs:
-        closed = pr.get("closedAt")
-        if not closed:
-            continue
-        if closed.endswith("Z"):
-            closed = closed[:-1]
-        if datetime.fromisoformat(closed) < cutoff:
-            continue
-        filtered.append(pr)
-
-    return filtered
+    cutoff_date = cutoff.date().isoformat()
+    org_filter = " ".join(f"org:{org}" for org in orgs)
+    search_query = f"{org_filter} is:pr is:merged merged:>={cutoff_date}"
+    query = gql(
+        """
+        query SearchMergedPRs($query: String!, $cursor: String) {
+          search(type: ISSUE, query: $query, first: 100, after: $cursor) {
+            nodes {
+              ... on PullRequest {
+                author { login }
+                reviews(first: 10, states: [APPROVED]) {
+                  nodes {
+                    author { login }
+                    state
+                  }
+                }
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+        """
+    )
+    prs = []
+    cursor = None
+    max_pages = 10
+    pages = 0
+    while True:
+        try:
+            data = _execute(
+                query, variable_values={"query": search_query, "cursor": cursor}
+            )
+        except Exception:
+            return []
+        payload = data.get("search", {}) or {}
+        nodes = payload.get("nodes", []) or []
+        for node in nodes:
+            if node:
+                prs.append(node)
+        page_info = payload.get("pageInfo", {}) or {}
+        if not page_info.get("hasNextPage"):
+            break
+        cursor = page_info.get("endCursor")
+        pages += 1
+        if pages >= max_pages:
+            break
+    return prs
 
 
 def merged_prs_by_author(days: int = 30) -> Dict[str, List[Dict[str, Any]]]:

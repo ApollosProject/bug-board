@@ -1,5 +1,8 @@
 ---
 linear_team_key: APO
+github_orgs:
+  - apollosproject
+  - differential
 people:
   michael:
     team: apollos_engineering
