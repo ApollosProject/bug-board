@@ -196,6 +196,8 @@ def get_future_result_with_timeout(
         return future.result(timeout=timeout)
     except TimeoutError:
         return default_value
+    except Exception:
+        return default_value
 
 
 def _submit_index_futures(
