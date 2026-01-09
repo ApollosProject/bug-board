@@ -17,16 +17,6 @@
 {% block header_nav %}{% endblock %}
 
 {% block content %}
-    {% set score_rules_tooltip = [
-      "Urgent issues: 20 pts",
-      "High issues: 10 pts",
-      "Medium issues: 5 pts",
-      "Low issues: 1 pt",
-      "PR reviews: 1 pt each",
-      "Merged PRs: 1 pt each",
-      "Completed project lead: 30 pts/week",
-      "Completed project member: 15 pts/week"
-    ] | join('\n') %}
     <h2>Priority Bug Stats</h2>
     <form method="get" style="display:inline-block; margin-bottom: 0.5em;">
       <select name="days" onchange="this.form.submit()">
@@ -35,155 +25,101 @@
         <option value="90" {{ 'selected' if days == 90 else '' }}>90d</option>
       </select>
     </form>
-      <div class="grid">
-        <div>
-          <article>
-            <header>New</header>
-            <h1>{{ issue_count }}</h1>
-          </article>
-        </div>
-        <div>
-          <article>
-            <header>Average Speed</header>
-            <h1>
-              {{ fixes_per_day|round(2) }} <sup><small>fixes/day</small></sup>
-            </h1>
-          </article>
-        </div>
-        <div>
-          <article>
-            <header>Priority Work Ratio</header>
-            <h1>{{ priority_percentage }}%</h1>
-          </article>
-        </div>
-      </div>
-      <div class="grid">
-        <div>
-          <article>
-            <header>Average Queue Time</header>
-            <h1>{{ queue_time_data["avg"] }}d</h1>
-          </article>
-        </div>
-        <div>
-          <article>
-            <header>Average Resolution Time</header>
-            <h1>{{ lead_time_data["avg"] }}d</h1>
-          </article>
-        </div>
-        <div>
-          <article>
-            <header>p95 Resolution Time</header>
-            <h1>{{ lead_time_data["p95"] }}d</h1>
-          </article>
-        </div>
-      </div>
-      <article>
-        <div>
-          <canvas id="myChart"></canvas>
-        </div>
-      </article>
-      <hr />
-      <h2>Open Items</h2>
-      <details open>
-        <summary>Priority</summary>
-        {% for issue in priority_issues %}
-        <div class="card">
-          <article>
-            <a href="{{ issue.url }}">{{ issue.title }}</a>
-            <small
-              >({% if issue.platform %}{{ issue.platform }}, {% endif %}+{{
-              issue.daysOpen }}d{% if issue.assignee %}, {{ issue.assignee.name|first_name
-              }}{% endif %})
-            </small>
-          </article>
-        </div>
-        {% endfor %}
-      </details>
-      <hr />
-      <details>
-        <summary>Non-priority</summary>
-        {% for issue in open_assigned_work %}
-        <div class="card">
-          <article>
-            <a href="{{ issue.url }}">{{ issue.title }}</a>
-            <small
-              >({% if issue.platform %}{{ issue.platform }}, {% endif %}+{{
-              issue.daysOpen }}d, {{ issue.assignee.name|first_name }})
-            </small>
-          </article>
-        </div>
-        {% endfor %}
-      </details>
-      <hr />
-      <h2>Leaderboard ({{ days }}d)</h2>
-      <h4>
-        Scores
-        <small
-          id="score-tooltip"
-          data-tooltip="{{ score_rules_tooltip }}"
-          style="font-size: 0.8em;"
-          >ⓘ</small>
-      </h4>
-      <table>
-        <thead>
-          <tr>
-            <th scope="col">Person</th>
-            <th scope="col">Score</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for entry in leaderboard_entries %}
-          <tr>
-            <td>
-              {% if entry.slug %}
-                <a href="{{ url_for('team_slug', slug=entry.slug, days=days) }}">
-                  {{ entry.display_name|first_name }}
-                </a>
-              {% else %}
-                {{ entry.display_name|first_name }}
-              {% endif %}
-            </td>
-            <td class="score-breakdown" {% if entry.breakdown %}data-tooltip="{{ entry.breakdown }}"{% endif %}>{{ entry.score }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+    <div id="priority-stats" aria-busy="true">
+      <article aria-busy="true"></article>
+    </div>
+    <section id="open-items" aria-busy="true">
+      <article aria-busy="true"></article>
+    </section>
+    <section id="leaderboard" aria-busy="true">
+      <article aria-busy="true"></article>
+    </section>
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <script>
-  const ctx = document.getElementById('myChart');
+  const days = {{ days }};
+  let chartLibraryPromise;
 
-  new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: [
-        {% for platform in issues_by_platform %}
-        '{{ platform }}',
-        {% endfor %}
-      ],
-      datasets: [{
-        label: 'New Priority Bugs',
-        data: [
-          {% for platform in issues_by_platform %}
-          {{ issues_by_platform[platform] | length }},
-          {% endfor %}
-        ],
-        borderWidth: 1
-      }]
-    },
-    options: {
-      scales: {
-        y: {
-          beginAtZero: true,
-          ticks: {
-            stepSize: 1,
+  function ensureChartLibrary() {
+    if (!chartLibraryPromise) {
+      chartLibraryPromise = new Promise((resolve) => {
+        if (window.Chart) {
+          resolve();
+          return;
+        }
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+        script.onload = () => resolve();
+        document.head.appendChild(script);
+      });
+    }
+    return chartLibraryPromise;
+  }
+
+  async function loadSection(id, url, onLoad) {
+    const container = document.getElementById(id);
+    if (!container) {
+      return;
+    }
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to load ${id}`);
+      }
+      const html = await response.text();
+      container.innerHTML = html;
+      container.removeAttribute('aria-busy');
+      if (onLoad) {
+        onLoad();
+      }
+    } catch (error) {
+      container.innerHTML = '<article>Unable to load section.</article>';
+      container.removeAttribute('aria-busy');
+    }
+  }
+
+  async function renderPlatformChart() {
+    const canvas = document.getElementById('platform-chart');
+    if (!canvas) {
+      return;
+    }
+    const labels = JSON.parse(canvas.dataset.labels || '[]');
+    const values = JSON.parse(canvas.dataset.values || '[]');
+    if (!labels.length) {
+      return;
+    }
+    await ensureChartLibrary();
+    const ctx = canvas.getContext('2d');
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'New Priority Bugs',
+          data: values,
+          borderWidth: 1
+        }]
+      },
+      options: {
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              stepSize: 1,
+            }
           }
         }
       }
-    }
-  });
+    });
+  }
+
+  loadSection(
+    'priority-stats',
+    `/partials/index/priority-stats?days=${days}`,
+    renderPlatformChart
+  );
+  loadSection('open-items', `/partials/index/open-items?days=${days}`);
+  loadSection('leaderboard', `/partials/index/leaderboard?days=${days}`);
 </script>
 {% endblock %}

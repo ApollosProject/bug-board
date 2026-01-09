@@ -1,0 +1,40 @@
+<h2>Open Items</h2>
+<details open>
+  <summary>Priority</summary>
+  {% if priority_issues %}
+    {% for issue in priority_issues %}
+    <div class="card">
+      <article>
+        <a href="{{ issue.url }}">{{ issue.title }}</a>
+        <small
+          >({% if issue.platform %}{{ issue.platform }}, {% endif %}+{{
+          issue.daysOpen }}d{% if issue.assignee %}, {{ issue.assignee.name|first_name
+          }}{% endif %})
+        </small>
+      </article>
+    </div>
+    {% endfor %}
+  {% else %}
+    <article>No open priority issues.</article>
+  {% endif %}
+</details>
+<hr />
+<details>
+  <summary>Non-priority</summary>
+  {% if open_assigned_work %}
+    {% for issue in open_assigned_work %}
+    <div class="card">
+      <article>
+        <a href="{{ issue.url }}">{{ issue.title }}</a>
+        <small
+          >({% if issue.platform %}{{ issue.platform }}, {% endif %}+{{
+          issue.daysOpen }}d, {{ issue.assignee.name|first_name }})
+        </small>
+      </article>
+    </div>
+    {% endfor %}
+  {% else %}
+    <article>No open non-priority issues assigned.</article>
+  {% endif %}
+</details>
+<hr />

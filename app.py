@@ -335,6 +335,65 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
         / days
     )
 
+    merged_reviews = get_future_result_with_timeout(
+        futures["merged_prs_by_reviewer"], {}
+    )
+    merged_authored_prs = get_future_result_with_timeout(
+        futures["merged_prs_by_author"], {}
+    )
+    leaderboard_entries = _build_leaderboard_entries(
+        days=days,
+        completed_bugs=completed_bugs,
+        completed_new_features=completed_new_features,
+        completed_technical_changes=completed_technical_changes,
+        merged_reviews=merged_reviews,
+        merged_authored_prs=merged_authored_prs,
+    )
+
+    total_completed_issues = len(
+        completed_bugs + completed_new_features + completed_technical_changes
+    )
+
+    if total_completed_issues:
+        priority_percentage = int(
+            round(len(completed_priority_bugs) / total_completed_issues * 100)
+        )
+    else:
+        priority_percentage = 0
+
+    return {
+        "days": days,
+        "priority_issues": sorted(
+            open_priority_bugs, key=lambda x: x["createdAt"]
+        ),
+        "issue_count": len(created_priority_bugs),
+        "priority_percentage": priority_percentage,
+        "leaderboard_entries": leaderboard_entries,
+        "all_issues": created_priority_bugs + open_priority_bugs,
+        "issues_by_platform": by_platform(created_priority_bugs),
+        "lead_time_data": time_data["lead"],
+        "queue_time_data": time_data["queue"],
+        "open_assigned_work": sorted(
+            [
+                issue
+                for issue in open_work
+                if issue["assignee"] is not None and issue["priority"] > 2
+            ],
+            key=lambda x: x["createdAt"],
+            reverse=True,
+        ),
+        "fixes_per_day": fixes_per_day,
+    }
+
+
+def _build_leaderboard_entries(
+    days: int,
+    completed_bugs: list,
+    completed_new_features: list,
+    completed_technical_changes: list,
+    merged_reviews: dict,
+    merged_authored_prs: dict,
+) -> list[LeaderboardEntry]:
     config_data = load_config()
     people_config = config_data.get("people", {})
     apollos_team_slugs = {
@@ -424,9 +483,6 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
                     points,
                     1,
                 )
-
-    merged_reviews = get_future_result_with_timeout(futures["merged_prs_by_reviewer"], {})
-    merged_authored_prs = get_future_result_with_timeout(futures["merged_prs_by_author"], {})
 
     for reviewer, prs in merged_reviews.items():
         review_points = len(prs)
@@ -589,10 +645,73 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
 
     leaderboard_entries.sort(key=lambda entry: entry["score"], reverse=True)
 
+    return leaderboard_entries
+
+
+@lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
+def _build_priority_stats_context(days: int, _cache_epoch: int) -> dict:
+    with ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS) as executor:
+        created_priority_future = executor.submit(get_created_issues, 2, "Bug", days)
+        completed_priority_future = executor.submit(
+            get_completed_issues_summary, 2, "Bug", days
+        )
+        completed_bugs_future = executor.submit(
+            get_completed_issues_summary, 5, "Bug", days
+        )
+        completed_new_features_future = executor.submit(
+            get_completed_issues_summary, 5, "New Feature", days
+        )
+        completed_technical_changes_future = executor.submit(
+            get_completed_issues_summary, 5, "Technical Change", days
+        )
+
+    created_priority_bugs = get_future_result_with_timeout(
+        created_priority_future, []
+    )
+    completed_priority_result = get_future_result_with_timeout(
+        completed_priority_future, []
+    )
+    completed_priority_bugs = [
+        issue
+        for issue in completed_priority_result
+        if not issue.get("project")
+    ]
+    completed_bugs_result = get_future_result_with_timeout(
+        completed_bugs_future, []
+    )
+    completed_bugs = [
+        issue
+        for issue in completed_bugs_result
+        if not issue.get("project")
+    ]
+    completed_new_features_result = get_future_result_with_timeout(
+        completed_new_features_future, []
+    )
+    completed_new_features = [
+        issue
+        for issue in completed_new_features_result
+        if not issue.get("project")
+    ]
+    completed_technical_changes_result = get_future_result_with_timeout(
+        completed_technical_changes_future, []
+    )
+    completed_technical_changes = [
+        issue
+        for issue in completed_technical_changes_result
+        if not issue.get("project")
+    ]
+
+    time_data = get_time_data(completed_priority_bugs)
+    fixes_per_day = (
+        len(completed_bugs + completed_new_features + completed_technical_changes)
+        / days
+        if days
+        else 0
+    )
+
     total_completed_issues = len(
         completed_bugs + completed_new_features + completed_technical_changes
     )
-
     if total_completed_issues:
         priority_percentage = int(
             round(len(completed_priority_bugs) / total_completed_issues * 100)
@@ -600,18 +719,57 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
     else:
         priority_percentage = 0
 
+    issues_by_platform = by_platform(created_priority_bugs)
+    platform_labels = list(issues_by_platform.keys())
+    platform_values = [
+        len(issues_by_platform[label]) for label in platform_labels
+    ]
+
+    return {
+        "days": days,
+        "issue_count": len(created_priority_bugs),
+        "fixes_per_day": fixes_per_day,
+        "priority_percentage": priority_percentage,
+        "queue_time_data": time_data["queue"],
+        "lead_time_data": time_data["lead"],
+        "platform_labels": platform_labels,
+        "platform_values": platform_values,
+    }
+
+
+@lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
+def _build_open_items_context(days: int, _cache_epoch: int) -> dict:
+    with ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS) as executor:
+        open_priority_future = executor.submit(get_open_issues, 2, "Bug")
+        open_bugs_future = executor.submit(get_open_issues, 5, "Bug")
+        open_new_features_future = executor.submit(
+            get_open_issues, 5, "New Feature"
+        )
+        open_technical_changes_future = executor.submit(
+            get_open_issues, 5, "Technical Change"
+        )
+
+    open_priority_bugs = get_future_result_with_timeout(
+        open_priority_future, []
+    )
+    open_bugs_result = get_future_result_with_timeout(open_bugs_future, [])
+    open_new_features_result = get_future_result_with_timeout(
+        open_new_features_future, []
+    )
+    open_technical_changes_result = get_future_result_with_timeout(
+        open_technical_changes_future, []
+    )
+    open_work = (
+        open_bugs_result
+        + open_new_features_result
+        + open_technical_changes_result
+    )
+
     return {
         "days": days,
         "priority_issues": sorted(
             open_priority_bugs, key=lambda x: x["createdAt"]
         ),
-        "issue_count": len(created_priority_bugs),
-        "priority_percentage": priority_percentage,
-        "leaderboard_entries": leaderboard_entries,
-        "all_issues": created_priority_bugs + open_priority_bugs,
-        "issues_by_platform": by_platform(created_priority_bugs),
-        "lead_time_data": time_data["lead"],
-        "queue_time_data": time_data["queue"],
         "open_assigned_work": sorted(
             [
                 issue
@@ -621,7 +779,64 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
             key=lambda x: x["createdAt"],
             reverse=True,
         ),
-        "fixes_per_day": fixes_per_day,
+    }
+
+
+@lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
+def _build_leaderboard_context(days: int, _cache_epoch: int) -> dict:
+    with ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS) as executor:
+        completed_bugs_future = executor.submit(
+            get_completed_issues_summary, 5, "Bug", days
+        )
+        completed_new_features_future = executor.submit(
+            get_completed_issues_summary, 5, "New Feature", days
+        )
+        completed_technical_changes_future = executor.submit(
+            get_completed_issues_summary, 5, "Technical Change", days
+        )
+        reviews_future = executor.submit(merged_prs_by_reviewer, days)
+        authored_prs_future = executor.submit(merged_prs_by_author, days)
+
+    completed_bugs_result = get_future_result_with_timeout(
+        completed_bugs_future, []
+    )
+    completed_bugs = [
+        issue
+        for issue in completed_bugs_result
+        if not issue.get("project")
+    ]
+    completed_new_features_result = get_future_result_with_timeout(
+        completed_new_features_future, []
+    )
+    completed_new_features = [
+        issue
+        for issue in completed_new_features_result
+        if not issue.get("project")
+    ]
+    completed_technical_changes_result = get_future_result_with_timeout(
+        completed_technical_changes_future, []
+    )
+    completed_technical_changes = [
+        issue
+        for issue in completed_technical_changes_result
+        if not issue.get("project")
+    ]
+
+    merged_reviews = get_future_result_with_timeout(reviews_future, {})
+    merged_authored_prs = get_future_result_with_timeout(authored_prs_future, {})
+
+    leaderboard_entries = _build_leaderboard_entries(
+        days=days,
+        completed_bugs=completed_bugs,
+        completed_new_features=completed_new_features,
+        completed_technical_changes=completed_technical_changes,
+        merged_reviews=merged_reviews,
+        merged_authored_prs=merged_authored_prs,
+    )
+
+    return {
+        "days": days,
+        "leaderboard_entries": leaderboard_entries,
     }
 
 
@@ -629,9 +844,31 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
 @app.route("/")
 def index():
     days = request.args.get("days", default=30, type=int)
+    return render_template("index.html", days=days)
+
+
+@app.route("/partials/index/priority-stats")
+def index_priority_stats_partial():
+    days = request.args.get("days", default=30, type=int)
     cache_epoch = int(time.time() / INDEX_CACHE_TTL_SECONDS)
-    context = _build_index_context(days, cache_epoch)
-    return render_template("index.html", **context)
+    context = _build_priority_stats_context(days, cache_epoch)
+    return render_template("partials/index_priority_stats.html", **context)
+
+
+@app.route("/partials/index/open-items")
+def index_open_items_partial():
+    days = request.args.get("days", default=30, type=int)
+    cache_epoch = int(time.time() / INDEX_CACHE_TTL_SECONDS)
+    context = _build_open_items_context(days, cache_epoch)
+    return render_template("partials/index_open_items.html", **context)
+
+
+@app.route("/partials/index/leaderboard")
+def index_leaderboard_partial():
+    days = request.args.get("days", default=30, type=int)
+    cache_epoch = int(time.time() / INDEX_CACHE_TTL_SECONDS)
+    context = _build_leaderboard_context(days, cache_epoch)
+    return render_template("partials/index_leaderboard.html", **context)
 
 
 @app.route("/team/<slug>")
@@ -645,190 +882,40 @@ def team_slug(slug):
     login = person_cfg.get("linear_username", slug)
     person_name = login.replace(".", " ").replace("-", " ").title()
     github_username = person_cfg.get("github_username")
-    with ThreadPoolExecutor(max_workers=TEAM_THREADPOOL_MAX_WORKERS) as executor:
-        open_future = executor.submit(get_open_issues_for_person, login)
-        completed_future = executor.submit(get_completed_issues_for_person, login, days)
-        github_future = None
-        if github_username:
-            github_future = executor.submit(
-                lambda: (
-                    merged_prs_by_author(days),
-                    merged_prs_by_reviewer(days),
-                )
-            )
-        open_items = sorted(
-            open_future.result(timeout=EXECUTOR_TIMEOUT_SECONDS),
-            key=lambda x: x["updatedAt"],
-            reverse=True,
-        )
-        completed_items = sorted(
-            completed_future.result(timeout=EXECUTOR_TIMEOUT_SECONDS),
-            key=lambda x: x["completedAt"],
-            reverse=True,
-        )
-        if github_future:
-            author_map, reviewer_map = github_future.result(timeout=EXECUTOR_TIMEOUT_SECONDS)
-            prs_merged = len(author_map.get(github_username, []))
-            prs_reviewed = len(reviewer_map.get(github_username, []))
-        else:
-            prs_merged = prs_reviewed = 0
-
-    priority_fix_times = []
-    priority_bugs_fixed = 0
-    for issue in completed_items:
-        is_priority_bug = issue.get("priority", 5) <= 2 and any(
-            lbl.get("name") == "Bug" for lbl in issue.get("labels", {}).get("nodes", [])
-        )
-        if not is_priority_bug:
-            continue
-        priority_bugs_fixed += 1
-        if issue.get("assignee_time_to_fix") is not None:
-            fix_time = issue["assignee_time_to_fix"]
-            priority_fix_times.append(fix_time)
-
-    if priority_fix_times:
-        avg_priority_bug_fix = int(sum(priority_fix_times) / len(priority_fix_times))
-    else:
-        avg_priority_bug_fix = None
-
-    # Compute metrics for all completed work
-    all_work_done = len(completed_items)
-    all_fix_times = [
-        issue["assignee_time_to_fix"]
-        for issue in completed_items
-        if issue.get("assignee_time_to_fix") is not None
-    ]
-    if all_fix_times:
-        avg_all_time_to_fix = int(sum(all_fix_times) / len(all_fix_times))
-    else:
-        avg_all_time_to_fix = None
-
-    # Group open and completed items by project
-    open_by_project = by_project(open_items)
-    completed_by_project = by_project(completed_items)
-
-    for issues in open_by_project.values():
-        issues.sort(key=lambda x: x["updatedAt"], reverse=True)
-    for issues in completed_by_project.values():
-        issues.sort(key=lambda x: x["completedAt"], reverse=True)
-
-    # Fetch all projects and annotate date helpers
-    cycle_projects = get_projects()
-    # attach start/target date info and compute days left
-    for proj in cycle_projects:
-        target = proj.get("targetDate")
-        start = proj.get("startDate")
-        days_left = None
-        starts_in = None
-        if target:
-            try:
-                target_dt = datetime.fromisoformat(target).date()
-                days_left = (target_dt - datetime.utcnow().date()).days
-            except ValueError:
-                # If the target date is not in a valid ISO format, treat it as missing.
-                pass
-        if start:
-            try:
-                start_dt = datetime.fromisoformat(start).date()
-                starts_in = (start_dt - datetime.utcnow().date()).days
-            except ValueError:
-                # If the start date is not in a valid ISO format, treat it as missing.
-                pass
-        proj["days_left"] = days_left
-        proj["starts_in"] = starts_in
-
-    def _normalize_text(value: str | None) -> str:
-        if not value:
-            return ""
-        cleaned = value.replace(".", " ").replace("-", " ").strip()
-        return re.sub(r"\s+", " ", cleaned).lower()
-
-    def normalize_display_name(value: str | None) -> str:
-        return _normalize_text(value)
-
-    normalized_person_name = normalize_display_name(
-        person_cfg.get("linear_display_name") or person_name
-    )
-    inactive_project_statuses = {"Completed", "Incomplete", "Canceled"}
-    led_projects = [
-        project
-        for project in cycle_projects
-        if normalize_display_name(
-            (project.get("lead") or {}).get("displayName")
-        )
-        == normalized_person_name
-    ]
-    lead_completed_projects = sum(
-        1
-        for project in led_projects
-        if (project.get("status") or {}).get("name") == "Completed"
-    )
-    lead_incomplete_projects = sum(
-        1
-        for project in led_projects
-        if (project.get("status") or {}).get("name") == "Incomplete"
-    )
-    lead_current_projects = sum(
-        1
-        for project in led_projects
-        if (project.get("status") or {}).get("name") not in inactive_project_statuses
-    )
-    project_names = {
-        proj.get("name") for proj in cycle_projects if proj.get("name")
-    }
-
-    on_support = slug in get_support_slugs()
-    if on_support:
-        open_current_cycle = {
-            proj: issues
-            for proj, issues in open_by_project.items()
-            if proj in ["Customer Success", "No Project"]
-        }
-        open_other = {
-            proj: issues
-            for proj, issues in open_by_project.items()
-            if proj not in ["Customer Success", "No Project"]
-        }
-    else:
-        open_current_cycle = {
-            proj: issues
-            for proj, issues in open_by_project.items()
-            if proj in project_names
-        }
-        open_other = {
-            proj: issues
-            for proj, issues in open_by_project.items()
-            if proj not in project_names
-        }
-
-    work_by_platform = by_platform(open_items + completed_items)
-
     return render_template(
         "person.html",
         person_slug=slug,
         person_name=person_name,
-        linear_username=login,
-        github_username=github_username,
         days=days,
-        open_current_cycle=open_current_cycle,
-        open_other=open_other,
-        completed_by_project=completed_by_project,
-        on_call_support=on_support,
-        work_by_platform=work_by_platform,
-        prs_merged=prs_merged,
-        prs_reviewed=prs_reviewed,
-        priority_bug_avg_time_to_fix=avg_priority_bug_fix,
-        priority_bugs_fixed=priority_bugs_fixed,
-        all_work_done=all_work_done,
-        avg_all_time_to_fix=avg_all_time_to_fix,
-        lead_completed_projects=lead_completed_projects,
-        lead_current_projects=lead_current_projects,
-        lead_incomplete_projects=lead_incomplete_projects,
     )
 
 
 @app.route("/team")
 def team():
+    return render_template("team.html")
+
+
+@app.route("/partials/team/content")
+def team_content_partial():
+    cache_epoch = int(time.time() / INDEX_CACHE_TTL_SECONDS)
+    context = _build_team_context(cache_epoch)
+    return render_template("partials/team_content.html", **context)
+
+
+@app.route("/partials/team/<slug>/content")
+def team_person_content_partial(slug):
+    days = request.args.get("days", default=30, type=int)
+    config = load_config()
+    person_cfg = config.get("people", {}).get(slug)
+    if not person_cfg:
+        abort(404)
+    cache_epoch = int(time.time() / INDEX_CACHE_TTL_SECONDS)
+    context = _build_person_context(slug, days, cache_epoch)
+    return render_template("partials/person_content.html", **context)
+
+
+@lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
+def _build_team_context(_cache_epoch: int) -> dict:
     config = load_config()
     people_config = config.get("people", {})
     apollos_team_slugs = {
@@ -1011,16 +1098,207 @@ def team():
                 for issue in data["issues"]
             ]
 
-    return render_template(
-        "team.html",
-        platform_teams=platform_teams,
-        developers=developers,
-        developer_projects=member_projects,
-        cycle_projects_by_initiative=projects_by_initiative,
-        completed_cycle_projects=completed_projects,
-        on_call_support=on_call_support,
-        support_issues=support_issues,
+    return {
+        "platform_teams": platform_teams,
+        "developers": developers,
+        "developer_projects": member_projects,
+        "cycle_projects_by_initiative": projects_by_initiative,
+        "completed_cycle_projects": completed_projects,
+        "on_call_support": on_call_support,
+        "support_issues": support_issues,
+    }
+
+
+@lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
+def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
+    config = load_config()
+    person_cfg = config.get("people", {}).get(slug) or {}
+    login = person_cfg.get("linear_username", slug)
+    person_name = login.replace(".", " ").replace("-", " ").title()
+    github_username = person_cfg.get("github_username")
+    with ThreadPoolExecutor(max_workers=TEAM_THREADPOOL_MAX_WORKERS) as executor:
+        open_future = executor.submit(get_open_issues_for_person, login)
+        completed_future = executor.submit(get_completed_issues_for_person, login, days)
+        github_future = None
+        if github_username:
+            github_future = executor.submit(
+                lambda: (
+                    merged_prs_by_author(days),
+                    merged_prs_by_reviewer(days),
+                )
+            )
+        open_items = sorted(
+            open_future.result(timeout=EXECUTOR_TIMEOUT_SECONDS),
+            key=lambda x: x["updatedAt"],
+            reverse=True,
+        )
+        completed_items = sorted(
+            completed_future.result(timeout=EXECUTOR_TIMEOUT_SECONDS),
+            key=lambda x: x["completedAt"],
+            reverse=True,
+        )
+        if github_future:
+            author_map, reviewer_map = github_future.result(timeout=EXECUTOR_TIMEOUT_SECONDS)
+            prs_merged = len(author_map.get(github_username, []))
+            prs_reviewed = len(reviewer_map.get(github_username, []))
+        else:
+            prs_merged = prs_reviewed = 0
+
+    priority_fix_times = []
+    priority_bugs_fixed = 0
+    for issue in completed_items:
+        is_priority_bug = issue.get("priority", 5) <= 2 and any(
+            lbl.get("name") == "Bug" for lbl in issue.get("labels", {}).get("nodes", [])
+        )
+        if not is_priority_bug:
+            continue
+        priority_bugs_fixed += 1
+        if issue.get("assignee_time_to_fix") is not None:
+            fix_time = issue["assignee_time_to_fix"]
+            priority_fix_times.append(fix_time)
+
+    if priority_fix_times:
+        avg_priority_bug_fix = int(sum(priority_fix_times) / len(priority_fix_times))
+    else:
+        avg_priority_bug_fix = None
+
+    # Compute metrics for all completed work
+    all_work_done = len(completed_items)
+    all_fix_times = [
+        issue["assignee_time_to_fix"]
+        for issue in completed_items
+        if issue.get("assignee_time_to_fix") is not None
+    ]
+    if all_fix_times:
+        avg_all_time_to_fix = int(sum(all_fix_times) / len(all_fix_times))
+    else:
+        avg_all_time_to_fix = None
+
+    # Group open and completed items by project
+    open_by_project = by_project(open_items)
+    completed_by_project = by_project(completed_items)
+
+    for issues in open_by_project.values():
+        issues.sort(key=lambda x: x["updatedAt"], reverse=True)
+    for issues in completed_by_project.values():
+        issues.sort(key=lambda x: x["completedAt"], reverse=True)
+
+    # Fetch all projects and annotate date helpers
+    cycle_projects = get_projects()
+    # attach start/target date info and compute days left
+    for proj in cycle_projects:
+        target = proj.get("targetDate")
+        start = proj.get("startDate")
+        days_left = None
+        starts_in = None
+        if target:
+            try:
+                target_dt = datetime.fromisoformat(target).date()
+                days_left = (target_dt - datetime.utcnow().date()).days
+            except ValueError:
+                # If the target date is not in a valid ISO format, treat it as missing.
+                pass
+        if start:
+            try:
+                start_dt = datetime.fromisoformat(start).date()
+                starts_in = (start_dt - datetime.utcnow().date()).days
+            except ValueError:
+                # If the start date is not in a valid ISO format, treat it as missing.
+                pass
+        proj["days_left"] = days_left
+        proj["starts_in"] = starts_in
+
+    def _normalize_text(value: str | None) -> str:
+        if not value:
+            return ""
+        cleaned = value.replace(".", " ").replace("-", " ").strip()
+        return re.sub(r"\s+", " ", cleaned).lower()
+
+    def normalize_display_name(value: str | None) -> str:
+        return _normalize_text(value)
+
+    normalized_person_name = normalize_display_name(
+        person_cfg.get("linear_display_name") or person_name
     )
+    inactive_project_statuses = {"Completed", "Incomplete", "Canceled"}
+    led_projects = [
+        project
+        for project in cycle_projects
+        if normalize_display_name(
+            (project.get("lead") or {}).get("displayName")
+        )
+        == normalized_person_name
+    ]
+    lead_completed_projects = sum(
+        1
+        for project in led_projects
+        if (project.get("status") or {}).get("name") == "Completed"
+    )
+    lead_incomplete_projects = sum(
+        1
+        for project in led_projects
+        if (project.get("status") or {}).get("name") == "Incomplete"
+    )
+    lead_current_projects = sum(
+        1
+        for project in led_projects
+        if (project.get("status") or {}).get("name") not in inactive_project_statuses
+    )
+    project_names = {
+        proj.get("name") for proj in cycle_projects if proj.get("name")
+    }
+
+    on_support = slug in get_support_slugs()
+    if on_support:
+        open_current_cycle = {
+            proj: issues
+            for proj, issues in open_by_project.items()
+            if proj in ["Customer Success", "No Project"]
+        }
+        open_other = {
+            proj: issues
+            for proj, issues in open_by_project.items()
+            if proj not in ["Customer Success", "No Project"]
+        }
+    else:
+        open_current_cycle = {
+            proj: issues
+            for proj, issues in open_by_project.items()
+            if proj in project_names
+        }
+        open_other = {
+            proj: issues
+            for proj, issues in open_by_project.items()
+            if proj not in project_names
+        }
+
+    work_by_platform = by_platform(open_items + completed_items)
+    platform_labels = list(work_by_platform.keys())
+    platform_values = [len(work_by_platform[label]) for label in platform_labels]
+
+    return {
+        "person_slug": slug,
+        "person_name": person_name,
+        "linear_username": login,
+        "github_username": github_username,
+        "days": days,
+        "open_current_cycle": open_current_cycle,
+        "open_other": open_other,
+        "completed_by_project": completed_by_project,
+        "on_call_support": on_support,
+        "work_by_platform": work_by_platform,
+        "prs_merged": prs_merged,
+        "prs_reviewed": prs_reviewed,
+        "priority_bug_avg_time_to_fix": avg_priority_bug_fix,
+        "priority_bugs_fixed": priority_bugs_fixed,
+        "all_work_done": all_work_done,
+        "avg_all_time_to_fix": avg_all_time_to_fix,
+        "lead_completed_projects": lead_completed_projects,
+        "lead_current_projects": lead_current_projects,
+        "lead_incomplete_projects": lead_incomplete_projects,
+        "platform_labels": platform_labels,
+        "platform_values": platform_values,
+    }
 
 
 if __name__ == "__main__":

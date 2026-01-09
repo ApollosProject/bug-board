@@ -1,0 +1,49 @@
+{% set score_rules_tooltip = [
+  "Urgent issues: 20 pts",
+  "High issues: 10 pts",
+  "Medium issues: 5 pts",
+  "Low issues: 1 pt",
+  "PR reviews: 1 pt each",
+  "Merged PRs: 1 pt each",
+  "Completed project lead: 30 pts/week",
+  "Completed project member: 15 pts/week"
+] | join('\n') %}
+<h2>Leaderboard ({{ days }}d)</h2>
+<h4>
+  Scores
+  <small
+    id="score-tooltip"
+    data-tooltip="{{ score_rules_tooltip }}"
+    style="font-size: 0.8em;"
+    >ⓘ</small>
+</h4>
+<table>
+  <thead>
+    <tr>
+      <th scope="col">Person</th>
+      <th scope="col">Score</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% if leaderboard_entries %}
+      {% for entry in leaderboard_entries %}
+      <tr>
+        <td>
+          {% if entry.slug %}
+            <a href="{{ url_for('team_slug', slug=entry.slug, days=days) }}">
+              {{ entry.display_name|first_name }}
+            </a>
+          {% else %}
+            {{ entry.display_name|first_name }}
+          {% endif %}
+        </td>
+        <td class="score-breakdown" {% if entry.breakdown %}data-tooltip="{{ entry.breakdown }}"{% endif %}>{{ entry.score }}</td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr>
+        <td colspan="2">No leaderboard activity yet.</td>
+      </tr>
+    {% endif %}
+  </tbody>
+</table>
