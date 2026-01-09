@@ -387,6 +387,16 @@ def by_platform(issues):
 
 
 def get_time_data(issues):
+    def summarize_times(values):
+        if not values:
+            return {"avg": 0, "p95": 0}
+        values_sorted = sorted(values)
+        p95_index = min(int(len(values_sorted) * 0.95), len(values_sorted) - 1)
+        return {
+            "avg": int(sum(values_sorted) / len(values_sorted)),
+            "p95": int(values_sorted[p95_index]),
+        }
+
     lead_times = []
     queue_times = []
     work_times = []
@@ -402,18 +412,9 @@ def get_time_data(issues):
             work_time = (completed_at - started_at).days
             work_times.append(work_time)
     data = {
-        "lead": {
-            "avg": int(sum(lead_times) / len(lead_times)),
-            "p95": int(sorted(lead_times)[int(len(lead_times) * 0.95)]),
-        },
-        "queue": {
-            "avg": int(sum(queue_times) / len(queue_times)),
-            "p95": int(sorted(queue_times)[int(len(queue_times) * 0.95)]),
-        },
-        "work": {
-            "avg": int(sum(work_times) / len(work_times)),
-            "p95": int(sorted(work_times)[int(len(work_times) * 0.95)]),
-        },
+        "lead": summarize_times(lead_times),
+        "queue": summarize_times(queue_times),
+        "work": summarize_times(work_times),
     }
     return data
 
