@@ -281,348 +281,351 @@ def _get_priority_bugs_from_futures(
 
 @lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
 def _build_index_context(days: int, _cache_epoch: int) -> dict:
-    with ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS) as executor:
+    executor = ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS)
+    try:
         futures = _submit_index_futures(executor, days)
 
-    (
-        created_priority_bugs,
-        open_priority_bugs,
-        completed_priority_bugs,
-    ) = _get_priority_bugs_from_futures(
-        futures["created_priority"],
-        futures["open_priority"],
-        futures["completed_priority"],
-    )
-    completed_bugs_result = get_future_result_with_timeout(
-        futures["completed_bugs"], []
-    )
-    completed_bugs = [
-        issue
-        for issue in completed_bugs_result
-        if not issue.get("project")
-    ]
-    completed_new_features_result = get_future_result_with_timeout(
-        futures["completed_new_features"], []
-    )
-    completed_new_features = [
-        issue
-        for issue in completed_new_features_result
-        if not issue.get("project")
-    ]
-    completed_technical_changes_result = get_future_result_with_timeout(
-        futures["completed_technical_changes"], []
-    )
-    completed_technical_changes = [
-        issue
-        for issue in completed_technical_changes_result
-        if not issue.get("project")
-    ]
-    open_bugs_result = get_future_result_with_timeout(futures["open_bugs"], [])
-    open_new_features_result = get_future_result_with_timeout(
-        futures["open_new_features"], []
-    )
-    open_technical_changes_result = get_future_result_with_timeout(
-        futures["open_technical_changes"], []
-    )
-    open_work = (
-        open_bugs_result
-        + open_new_features_result
-        + open_technical_changes_result
-    )
-    time_data = get_time_data(completed_priority_bugs)
-    fixes_per_day = (
-        len(completed_bugs + completed_new_features + completed_technical_changes)
-        / days
-    )
-
-    config_data = load_config()
-    people_config = config_data.get("people", {})
-    apollos_team_slugs = {
-        slug
-        for slug, info in people_config.items()
-        if info.get("team") == "apollos_engineering"
-    }
-
-    alias_to_slug = {}
-    github_to_slug = {}
-    display_name_overrides = {}
-
-    for slug, info in people_config.items():
-        linear_username = info.get("linear_username") or slug
-        display_name_overrides[slug] = format_display_name(linear_username)
-        for alias in {
-            slug,
-            linear_username,
-            display_name_overrides[slug],
-        }:
-            normalized = normalize_identity(alias)
-            if normalized:
-                alias_to_slug[normalized] = slug
-        github_username = info.get("github_username")
-        if github_username:
-            github_to_slug[normalize_identity(github_username)] = slug
-
-    def resolve_slug(*identities: str | None) -> str | None:
-        for identity in identities:
-            normalized = normalize_identity(identity)
-            if normalized and normalized in alias_to_slug:
-                return alias_to_slug[normalized]
-        return None
-
-    scores_by_slug: dict[str, int] = {}
-    scores_by_external: dict[str, int] = {}
-    names_by_external: dict[str, str] = {}
-    names_by_slug: dict[str, str] = {}
-    points_breakdown_by_slug: dict[str, dict[str, int]] = {}
-    points_breakdown_by_external: dict[str, dict[str, int]] = {}
-    count_breakdown_by_slug: dict[str, dict[str, int]] = {}
-    count_breakdown_by_external: dict[str, dict[str, int]] = {}
-
-    completed_work = (
-        completed_bugs + completed_new_features + completed_technical_changes
-    )
-
-    for issue in completed_work:
-        assignee = issue.get("assignee")
-        if not assignee:
-            continue
-        raw_identity = assignee.get("name") or assignee.get("displayName") or ""
-        display_name = assignee.get("displayName") or format_display_name(
-            raw_identity
+        (
+            created_priority_bugs,
+            open_priority_bugs,
+            completed_priority_bugs,
+        ) = _get_priority_bugs_from_futures(
+            futures["created_priority"],
+            futures["open_priority"],
+            futures["completed_priority"],
         )
-        slug = resolve_slug(assignee.get("name"), assignee.get("displayName"))
-        priority = issue.get("priority")
-        points = PRIORITY_TO_SCORE.get(priority, 0)
-        category_key = PRIORITY_BREAKDOWN_KEYS.get(priority)
-        if slug:
-            scores_by_slug[slug] = scores_by_slug.get(slug, 0) + points
-            names_by_slug.setdefault(
+        completed_bugs_result = get_future_result_with_timeout(
+            futures["completed_bugs"], []
+        )
+        completed_bugs = [
+            issue
+            for issue in completed_bugs_result
+            if not issue.get("project")
+        ]
+        completed_new_features_result = get_future_result_with_timeout(
+            futures["completed_new_features"], []
+        )
+        completed_new_features = [
+            issue
+            for issue in completed_new_features_result
+            if not issue.get("project")
+        ]
+        completed_technical_changes_result = get_future_result_with_timeout(
+            futures["completed_technical_changes"], []
+        )
+        completed_technical_changes = [
+            issue
+            for issue in completed_technical_changes_result
+            if not issue.get("project")
+        ]
+        open_bugs_result = get_future_result_with_timeout(futures["open_bugs"], [])
+        open_new_features_result = get_future_result_with_timeout(
+            futures["open_new_features"], []
+        )
+        open_technical_changes_result = get_future_result_with_timeout(
+            futures["open_technical_changes"], []
+        )
+        open_work = (
+            open_bugs_result
+            + open_new_features_result
+            + open_technical_changes_result
+        )
+        time_data = get_time_data(completed_priority_bugs)
+        fixes_per_day = (
+            len(completed_bugs + completed_new_features + completed_technical_changes)
+            / days
+        )
+
+        config_data = load_config()
+        people_config = config_data.get("people", {})
+        apollos_team_slugs = {
+            slug
+            for slug, info in people_config.items()
+            if info.get("team") == "apollos_engineering"
+        }
+
+        alias_to_slug = {}
+        github_to_slug = {}
+        display_name_overrides = {}
+
+        for slug, info in people_config.items():
+            linear_username = info.get("linear_username") or slug
+            display_name_overrides[slug] = format_display_name(linear_username)
+            for alias in {
                 slug,
-                display_name or display_name_overrides.get(slug, display_name),
+                linear_username,
+                display_name_overrides[slug],
+            }:
+                normalized = normalize_identity(alias)
+                if normalized:
+                    alias_to_slug[normalized] = slug
+            github_username = info.get("github_username")
+            if github_username:
+                github_to_slug[normalize_identity(github_username)] = slug
+
+        def resolve_slug(*identities: str | None) -> str | None:
+            for identity in identities:
+                normalized = normalize_identity(identity)
+                if normalized and normalized in alias_to_slug:
+                    return alias_to_slug[normalized]
+            return None
+
+        scores_by_slug: dict[str, int] = {}
+        scores_by_external: dict[str, int] = {}
+        names_by_external: dict[str, str] = {}
+        names_by_slug: dict[str, str] = {}
+        points_breakdown_by_slug: dict[str, dict[str, int]] = {}
+        points_breakdown_by_external: dict[str, dict[str, int]] = {}
+        count_breakdown_by_slug: dict[str, dict[str, int]] = {}
+        count_breakdown_by_external: dict[str, dict[str, int]] = {}
+
+        completed_work = (
+            completed_bugs + completed_new_features + completed_technical_changes
+        )
+
+        for issue in completed_work:
+            assignee = issue.get("assignee")
+            if not assignee:
+                continue
+            raw_identity = assignee.get("name") or assignee.get("displayName") or ""
+            display_name = assignee.get("displayName") or format_display_name(
+                raw_identity
             )
-            if category_key:
+            slug = resolve_slug(assignee.get("name"), assignee.get("displayName"))
+            priority = issue.get("priority")
+            points = PRIORITY_TO_SCORE.get(priority, 0)
+            category_key = PRIORITY_BREAKDOWN_KEYS.get(priority)
+            if slug:
+                scores_by_slug[slug] = scores_by_slug.get(slug, 0) + points
+                names_by_slug.setdefault(
+                    slug,
+                    display_name or display_name_overrides.get(slug, display_name),
+                )
+                if category_key:
+                    record_breakdown(
+                        points_breakdown_by_slug,
+                        count_breakdown_by_slug,
+                        slug,
+                        category_key,
+                        points,
+                        1,
+                    )
+            else:
+                key = normalize_identity(display_name) or normalize_identity(raw_identity)
+                if not key:
+                    continue
+                scores_by_external[key] = scores_by_external.get(key, 0) + points
+                names_by_external.setdefault(key, display_name or raw_identity)
+                if category_key:
+                    record_breakdown(
+                        points_breakdown_by_external,
+                        count_breakdown_by_external,
+                        key,
+                        category_key,
+                        points,
+                        1,
+                    )
+
+        merged_reviews = get_future_result_with_timeout(futures["merged_prs_by_reviewer"], {})
+        merged_authored_prs = get_future_result_with_timeout(futures["merged_prs_by_author"], {})
+
+        for reviewer, prs in merged_reviews.items():
+            review_points = len(prs)
+            if review_points == 0:
+                continue
+            slug = github_to_slug.get(normalize_identity(reviewer))
+            if slug:
+                scores_by_slug[slug] = scores_by_slug.get(slug, 0) + review_points
+                names_by_slug.setdefault(
+                    slug, display_name_overrides.get(slug, format_display_name(reviewer))
+                )
                 record_breakdown(
                     points_breakdown_by_slug,
                     count_breakdown_by_slug,
                     slug,
-                    category_key,
-                    points,
-                    1,
+                    "reviews",
+                    review_points,
+                    review_points,
                 )
-        else:
-            key = normalize_identity(display_name) or normalize_identity(raw_identity)
-            if not key:
-                continue
-            scores_by_external[key] = scores_by_external.get(key, 0) + points
-            names_by_external.setdefault(key, display_name or raw_identity)
-            if category_key:
+            else:
+                key = normalize_identity(reviewer)
+                if not key:
+                    continue
+                scores_by_external[key] = scores_by_external.get(key, 0) + review_points
+                names_by_external.setdefault(key, format_display_name(reviewer))
                 record_breakdown(
                     points_breakdown_by_external,
                     count_breakdown_by_external,
                     key,
-                    category_key,
-                    points,
-                    1,
+                    "reviews",
+                    review_points,
+                    review_points,
                 )
 
-    merged_reviews = get_future_result_with_timeout(futures["merged_prs_by_reviewer"], {})
-    merged_authored_prs = get_future_result_with_timeout(futures["merged_prs_by_author"], {})
-
-    for reviewer, prs in merged_reviews.items():
-        review_points = len(prs)
-        if review_points == 0:
-            continue
-        slug = github_to_slug.get(normalize_identity(reviewer))
-        if slug:
-            scores_by_slug[slug] = scores_by_slug.get(slug, 0) + review_points
-            names_by_slug.setdefault(
-                slug, display_name_overrides.get(slug, format_display_name(reviewer))
-            )
-            record_breakdown(
-                points_breakdown_by_slug,
-                count_breakdown_by_slug,
-                slug,
-                "reviews",
-                review_points,
-                review_points,
-            )
-        else:
-            key = normalize_identity(reviewer)
-            if not key:
+        for author, prs in merged_authored_prs.items():
+            pr_points = len(prs)
+            if pr_points == 0:
                 continue
-            scores_by_external[key] = scores_by_external.get(key, 0) + review_points
-            names_by_external.setdefault(key, format_display_name(reviewer))
-            record_breakdown(
-                points_breakdown_by_external,
-                count_breakdown_by_external,
-                key,
-                "reviews",
-                review_points,
-                review_points,
-            )
+            slug = github_to_slug.get(normalize_identity(author))
+            if slug:
+                scores_by_slug[slug] = scores_by_slug.get(slug, 0) + pr_points
+                names_by_slug.setdefault(
+                    slug, display_name_overrides.get(slug, format_display_name(author))
+                )
+                record_breakdown(
+                    points_breakdown_by_slug,
+                    count_breakdown_by_slug,
+                    slug,
+                    "prs",
+                    pr_points,
+                    pr_points,
+                )
+            else:
+                key = normalize_identity(author)
+                if not key:
+                    continue
+                scores_by_external[key] = scores_by_external.get(key, 0) + pr_points
+                names_by_external.setdefault(key, format_display_name(author))
+                record_breakdown(
+                    points_breakdown_by_external,
+                    count_breakdown_by_external,
+                    key,
+                    "prs",
+                    pr_points,
+                    pr_points,
+                )
 
-    for author, prs in merged_authored_prs.items():
-        pr_points = len(prs)
-        if pr_points == 0:
-            continue
-        slug = github_to_slug.get(normalize_identity(author))
-        if slug:
-            scores_by_slug[slug] = scores_by_slug.get(slug, 0) + pr_points
-            names_by_slug.setdefault(
-                slug, display_name_overrides.get(slug, format_display_name(author))
-            )
-            record_breakdown(
-                points_breakdown_by_slug,
-                count_breakdown_by_slug,
-                slug,
-                "prs",
-                pr_points,
-                pr_points,
-            )
-        else:
-            key = normalize_identity(author)
-            if not key:
-                continue
-            scores_by_external[key] = scores_by_external.get(key, 0) + pr_points
-            names_by_external.setdefault(key, format_display_name(author))
-            record_breakdown(
-                points_breakdown_by_external,
-                count_breakdown_by_external,
-                key,
-                "prs",
-                pr_points,
-                pr_points,
-            )
+        cycle_lead_points = calculate_cycle_project_lead_points(days)
+        for lead_name, points in cycle_lead_points.items():
+            slug = resolve_slug(lead_name, format_display_name(lead_name))
+            if slug:
+                scores_by_slug[slug] = scores_by_slug.get(slug, 0) + points
+                names_by_slug.setdefault(
+                    slug, display_name_overrides.get(slug, format_display_name(lead_name))
+                )
+                record_breakdown(
+                    points_breakdown_by_slug,
+                    count_breakdown_by_slug,
+                    slug,
+                    "cycle_lead",
+                    points,
+                )
+            else:
+                key = normalize_identity(lead_name)
+                if not key:
+                    continue
+                scores_by_external[key] = scores_by_external.get(key, 0) + points
+                names_by_external.setdefault(key, format_display_name(lead_name))
+                record_breakdown(
+                    points_breakdown_by_external,
+                    count_breakdown_by_external,
+                    key,
+                    "cycle_lead",
+                    points,
+                )
 
-    cycle_lead_points = calculate_cycle_project_lead_points(days)
-    for lead_name, points in cycle_lead_points.items():
-        slug = resolve_slug(lead_name, format_display_name(lead_name))
-        if slug:
-            scores_by_slug[slug] = scores_by_slug.get(slug, 0) + points
-            names_by_slug.setdefault(
-                slug, display_name_overrides.get(slug, format_display_name(lead_name))
-            )
-            record_breakdown(
-                points_breakdown_by_slug,
-                count_breakdown_by_slug,
-                slug,
-                "cycle_lead",
-                points,
-            )
-        else:
-            key = normalize_identity(lead_name)
-            if not key:
-                continue
-            scores_by_external[key] = scores_by_external.get(key, 0) + points
-            names_by_external.setdefault(key, format_display_name(lead_name))
-            record_breakdown(
-                points_breakdown_by_external,
-                count_breakdown_by_external,
-                key,
-                "cycle_lead",
-                points,
-            )
+        cycle_member_points = calculate_cycle_project_member_points(days)
+        for member_name, points in cycle_member_points.items():
+            slug = resolve_slug(member_name, format_display_name(member_name))
+            if slug:
+                scores_by_slug[slug] = scores_by_slug.get(slug, 0) + points
+                names_by_slug.setdefault(
+                    slug, display_name_overrides.get(slug, format_display_name(member_name))
+                )
+                record_breakdown(
+                    points_breakdown_by_slug,
+                    count_breakdown_by_slug,
+                    slug,
+                    "cycle_member",
+                    points,
+                )
+            else:
+                key = normalize_identity(member_name)
+                if not key:
+                    continue
+                scores_by_external[key] = scores_by_external.get(key, 0) + points
+                names_by_external.setdefault(key, format_display_name(member_name))
+                record_breakdown(
+                    points_breakdown_by_external,
+                    count_breakdown_by_external,
+                    key,
+                    "cycle_member",
+                    points,
+                )
 
-    cycle_member_points = calculate_cycle_project_member_points(days)
-    for member_name, points in cycle_member_points.items():
-        slug = resolve_slug(member_name, format_display_name(member_name))
-        if slug:
-            scores_by_slug[slug] = scores_by_slug.get(slug, 0) + points
-            names_by_slug.setdefault(
-                slug, display_name_overrides.get(slug, format_display_name(member_name))
-            )
-            record_breakdown(
-                points_breakdown_by_slug,
-                count_breakdown_by_slug,
-                slug,
-                "cycle_member",
-                points,
-            )
-        else:
-            key = normalize_identity(member_name)
-            if not key:
-                continue
-            scores_by_external[key] = scores_by_external.get(key, 0) + points
-            names_by_external.setdefault(key, format_display_name(member_name))
-            record_breakdown(
-                points_breakdown_by_external,
-                count_breakdown_by_external,
-                key,
-                "cycle_member",
-                points,
-            )
-
-    leaderboard_entries: list[LeaderboardEntry] = [
-        {
-            "slug": slug,
-            "display_name": names_by_slug.get(slug) or display_name_overrides.get(slug),
-            "score": score,
-            "breakdown": format_breakdown_text(
-                points_breakdown_by_slug.get(slug),
-                count_breakdown_by_slug.get(slug),
-            )
-            or None,
-        }
-        for slug, score in scores_by_slug.items()
-    ]
-    leaderboard_entries.extend(
-        [
+        leaderboard_entries: list[LeaderboardEntry] = [
             {
-                "slug": None,
-                "display_name": names_by_external[key],
+                "slug": slug,
+                "display_name": names_by_slug.get(slug) or display_name_overrides.get(slug),
                 "score": score,
                 "breakdown": format_breakdown_text(
-                    points_breakdown_by_external.get(key),
-                    count_breakdown_by_external.get(key),
+                    points_breakdown_by_slug.get(slug),
+                    count_breakdown_by_slug.get(slug),
                 )
                 or None,
             }
-            for key, score in scores_by_external.items()
+            for slug, score in scores_by_slug.items()
         ]
-    )
-
-    leaderboard_entries = [
-        entry
-        for entry in leaderboard_entries
-        if (slug := entry.get("slug")) is not None and slug in apollos_team_slugs
-    ]
-
-    leaderboard_entries.sort(key=lambda entry: entry["score"], reverse=True)
-
-    total_completed_issues = len(
-        completed_bugs + completed_new_features + completed_technical_changes
-    )
-
-    if total_completed_issues:
-        priority_percentage = int(
-            round(len(completed_priority_bugs) / total_completed_issues * 100)
-        )
-    else:
-        priority_percentage = 0
-
-    return {
-        "days": days,
-        "priority_issues": sorted(
-            open_priority_bugs, key=lambda x: x["createdAt"]
-        ),
-        "issue_count": len(created_priority_bugs),
-        "priority_percentage": priority_percentage,
-        "leaderboard_entries": leaderboard_entries,
-        "all_issues": created_priority_bugs + open_priority_bugs,
-        "issues_by_platform": by_platform(created_priority_bugs),
-        "lead_time_data": time_data["lead"],
-        "queue_time_data": time_data["queue"],
-        "open_assigned_work": sorted(
+        leaderboard_entries.extend(
             [
-                issue
-                for issue in open_work
-                if issue["assignee"] is not None and issue["priority"] > 2
-            ],
-            key=lambda x: x["createdAt"],
-            reverse=True,
-        ),
-        "fixes_per_day": fixes_per_day,
-    }
+                {
+                    "slug": None,
+                    "display_name": names_by_external[key],
+                    "score": score,
+                    "breakdown": format_breakdown_text(
+                        points_breakdown_by_external.get(key),
+                        count_breakdown_by_external.get(key),
+                    )
+                    or None,
+                }
+                for key, score in scores_by_external.items()
+            ]
+        )
+
+        leaderboard_entries = [
+            entry
+            for entry in leaderboard_entries
+            if (slug := entry.get("slug")) is not None and slug in apollos_team_slugs
+        ]
+
+        leaderboard_entries.sort(key=lambda entry: entry["score"], reverse=True)
+
+        total_completed_issues = len(
+            completed_bugs + completed_new_features + completed_technical_changes
+        )
+
+        if total_completed_issues:
+            priority_percentage = int(
+                round(len(completed_priority_bugs) / total_completed_issues * 100)
+            )
+        else:
+            priority_percentage = 0
+
+        return {
+            "days": days,
+            "priority_issues": sorted(
+                open_priority_bugs, key=lambda x: x["createdAt"]
+            ),
+            "issue_count": len(created_priority_bugs),
+            "priority_percentage": priority_percentage,
+            "leaderboard_entries": leaderboard_entries,
+            "all_issues": created_priority_bugs + open_priority_bugs,
+            "issues_by_platform": by_platform(created_priority_bugs),
+            "lead_time_data": time_data["lead"],
+            "queue_time_data": time_data["queue"],
+            "open_assigned_work": sorted(
+                [
+                    issue
+                    for issue in open_work
+                    if issue["assignee"] is not None and issue["priority"] > 2
+                ],
+                key=lambda x: x["createdAt"],
+                reverse=True,
+            ),
+            "fixes_per_day": fixes_per_day,
+        }
+    finally:
+        executor.shutdown(wait=False)
 
 
 # use a query string parameter for days on the index route
