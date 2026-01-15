@@ -9,16 +9,6 @@ people:
     slack_id: U01865757S9
     linear_username: michael.neeley
     github_username: redreceipt
-  rajuran:
-    team: apollos_engineering
-    slack_id: U063W0SFJ5A
-    linear_username: rajuran
-    github_username: rajuu89
-  jimmy:
-    team: apollos_engineering
-    slack_id: U019TA865C2
-    linear_username: jimmy
-    github_username: jimmyhogoboom
   andy:
     team: apollos_engineering
     slack_id: U080E70RQ4U
@@ -49,11 +39,6 @@ people:
     slack_id: U03RUFCJRNF
     linear_username: jordan.furdock
     github_username: jfurdock
-  cameron:
-    team: apollos_engineering
-    slack_id: U034L9QHG4C
-    linear_username: cameron.llewellyn
-    github_username: camrun91
   austin:
     team: apollos_engineering
     slack_id: U082ES6NT52
@@ -89,26 +74,11 @@ people:
     slack_id: U03LD9MJLNP
     linear_username: dylan
     github_username: dylan-manchester
-  dennis:
-    team: apollos_engineering
-    slack_id: U03KDSLUW7L
-    linear_username: dennis
-    github_username: dsilva609
-  john:
-    team: apollos_engineering
-    slack_id: UJ0AHPX6J
-    linear_username: john
-    github_username: jcanver
   gerry:
     team: unassigned
     slack_id: U025403GG
     linear_username: gerry
     github_username: hellogerard
-  rumesh:
-    team: apollos_engineering
-    slack_id: U054D068S4W
-    linear_username: rumesh.lahiru
-    github_username: rumesh-di
   zach:
     team: unassigned
     slack_id: U0BLNNPAB
@@ -121,58 +91,35 @@ platforms:
     lead: dylan
     developers:
       - vitor
-      - dennis
-      - john
   mobile:
     lead: darryl
     developers:
-      - jimmy
       - vitor
-      - john
-      - rumesh
   tv:
     lead: darryl
     developers:
-      - jimmy
       - vitor
-      - john
   roku:
     lead: andy
-    developers:
-      - jimmy
+    developers: []
   web:
     lead: nathan
-    developers:
-      - jimmy
-      - dennis
+    developers: []
   admin:
     lead: nathan
     developers:
-      - jimmy
       - austin
-      - dennis
-      - rumesh
   cluster:
     lead: vincent
     developers:
-      - jimmy
-      - cameron
       - darryl
       - vitor
-      - dennis
   rock-plugin:
-    lead: dennis
-    developers:
-      - dennis
-      - cameron
+    lead: vincent
+    developers: []
   shovel:
     lead: vincent
-    developers:
-      - rajuran
-      - jimmy
-      - cameron
+    developers: []
   transcriptions:
     lead: vincent
-    developers:
-      - jimmy
-      - dennis
+    developers: []
