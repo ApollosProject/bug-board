@@ -306,7 +306,7 @@ def get_prs_waiting_for_review_by_reviewer():
     """Return PRs waiting on review, grouped by reviewer.
 
     Includes pull requests with an open review request that was made more
-    than 12 hours ago, even if the PR has previously been reviewed. Only
+    than 24 hours ago, even if the PR has previously been reviewed. Only
     includes PRs with fewer than 200 lines added.
     """
     all_prs = _get_all_prs(["OPEN"])
@@ -329,7 +329,7 @@ def get_prs_waiting_for_review_by_reviewer():
             if (
                 review["requestedReviewer"]
                 and review["createdAt"]
-                < (datetime.now() - timedelta(hours=12)).isoformat()
+                < (datetime.now() - timedelta(hours=24)).isoformat()
             ):
                 reviewer = review["requestedReviewer"]["login"]
                 open_review_requests = [
