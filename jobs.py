@@ -748,13 +748,13 @@ if os.getenv("DEBUG") == "true":
     post_upcoming_projects()
     post_friday_deadlines()
 else:
-    schedule.every().friday.at("13:00").do(post_inactive_engineers)
-    schedule.every(1).days.at("12:00").do(post_priority_bugs)
-    schedule.every().friday.at("20:00").do(post_leaderboard)
-    schedule.every().thursday.at("19:00").do(post_weekly_changelog)
-    schedule.every(1).days.at("14:00").do(post_stale)
-    schedule.every().friday.at("12:00").do(post_upcoming_projects)
-    schedule.every().monday.at("12:00").do(post_friday_deadlines)
+    # schedule.every().friday.at("13:00").do(post_inactive_engineers)
+    # schedule.every(1).days.at("12:00").do(post_priority_bugs)
+    # schedule.every().friday.at("20:00").do(post_leaderboard)
+    # schedule.every().thursday.at("19:00").do(post_weekly_changelog)
+    # schedule.every(1).days.at("14:00").do(post_stale)
+    # schedule.every().friday.at("12:00").do(post_upcoming_projects)
+    # schedule.every().monday.at("12:00").do(post_friday_deadlines)
 
     while True:
         schedule.run_pending()
