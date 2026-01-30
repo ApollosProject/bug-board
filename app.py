@@ -3,7 +3,7 @@ import time
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
 from datetime import datetime
 from functools import lru_cache
-from typing import TypedDict, TypeVar
+from typing import Any, TypedDict, TypeVar
 
 from flask import Flask, abort, render_template, request
 
@@ -881,7 +881,6 @@ def team_slug(slug):
         abort(404)
     login = person_cfg.get("linear_username", slug)
     person_name = login.replace(".", " ").replace("-", " ").title()
-    github_username = person_cfg.get("github_username")
     return render_template(
         "person.html",
         person_slug=slug,
@@ -1010,7 +1009,7 @@ def _build_team_context(_cache_epoch: int) -> dict:
         proj["starts_in"] = starts_in
 
     # group projects by initiatives
-    projects_by_initiative = {}
+    projects_by_initiative: dict[str, list[dict[str, Any]]] = {}
     seen_project_ids = set()
     for project in cycle_projects:
         project_id = project.get("id") or project.get("name")
@@ -1052,7 +1051,7 @@ def _build_team_context(_cache_epoch: int) -> dict:
     ]
 
     cycle_member_slugs = set()
-    member_projects = {}
+    member_projects: dict[str, set[tuple[str, str]]] = {}
     for project in active_projects:
         # Only include projects that have started (start date today or earlier)
         starts_in = project.get("starts_in")
@@ -1066,13 +1065,17 @@ def _build_team_context(_cache_epoch: int) -> dict:
         for name in participants:
             slug = slug_for_name(name)
             if slug and slug in apollos_team_slugs:
+                project_name = project.get("name")
+                project_url = project.get("url")
+                if not isinstance(project_name, str) or not isinstance(project_url, str):
+                    continue
                 cycle_member_slugs.add(slug)
                 member_projects.setdefault(slug, set()).add(
-                    (project.get("name"), project.get("url"))
+                    (project_name, project_url)
                 )
 
     # Convert sets back to sorted lists of dicts
-    member_projects = {
+    member_projects_list = {
         slug: [
             {"name": name, "url": url}
             for name, url in sorted(projects, key=lambda x: x[0])
@@ -1106,7 +1109,7 @@ def _build_team_context(_cache_epoch: int) -> dict:
     return {
         "platform_teams": platform_teams,
         "developers": developers,
-        "developer_projects": member_projects,
+        "developer_projects": member_projects_list,
         "cycle_projects_by_initiative": projects_by_initiative,
         "completed_cycle_projects": completed_projects,
         "on_call_support": on_call_support,
@@ -1120,7 +1123,12 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
     person_cfg = config.get("people", {}).get(slug) or {}
     login = person_cfg.get("linear_username", slug)
     person_name = login.replace(".", " ").replace("-", " ").title()
-    github_username = person_cfg.get("github_username")
+    raw_github_username = person_cfg.get("github_username")
+    github_username = (
+        raw_github_username
+        if isinstance(raw_github_username, str) and raw_github_username
+        else None
+    )
     with ThreadPoolExecutor(max_workers=TEAM_THREADPOOL_MAX_WORKERS) as executor:
         open_future = executor.submit(get_open_issues_for_person, login)
         completed_future = executor.submit(get_completed_issues_for_person, login, days)
@@ -1142,7 +1150,7 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
             key=lambda x: x["completedAt"],
             reverse=True,
         )
-        if github_future:
+        if github_future and github_username:
             author_map, reviewer_map = github_future.result(timeout=EXECUTOR_TIMEOUT_SECONDS)
             prs_merged = len(author_map.get(github_username, []))
             prs_reviewed = len(reviewer_map.get(github_username, []))
