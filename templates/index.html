@@ -17,6 +17,7 @@
 {% block header_nav %}{% endblock %}
 
 {% block content %}
+    {#
     <h2>Priority Bug Stats</h2>
     <form method="get" style="display:inline-block; margin-bottom: 0.5em;">
       <select name="days" onchange="this.form.submit()">
@@ -26,6 +27,7 @@
       </select>
     </form>
     <div id="priority-stats" aria-busy="true"></div>
+    #}
     <section id="open-items" aria-busy="true"></section>
     <section id="leaderboard" aria-busy="true"></section>
 {% endblock %}
@@ -108,11 +110,12 @@
     });
   }
 
-  loadSection(
-    'priority-stats',
-    `/partials/index/priority-stats?days=${days}`,
-    renderPlatformChart
-  );
+  // Priority bug stats section intentionally disabled while we evaluate alternatives.
+  // loadSection(
+  //   'priority-stats',
+  //   `/partials/index/priority-stats?days=${days}`,
+  //   renderPlatformChart
+  // );
   loadSection('open-items', `/partials/index/open-items?days=${days}`);
   loadSection('leaderboard', `/partials/index/leaderboard?days=${days}`);
 </script>
