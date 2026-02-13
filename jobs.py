@@ -422,6 +422,7 @@ def post_recon_issues():
     lines: list[str] = []
     lines.append("*RECON Issues Daily*")
     project_url = project.get("url")
+    lines.append("--------------------------------")
     lines.append("")
 
     if open_count == 0:
