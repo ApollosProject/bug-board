@@ -79,6 +79,11 @@ people:
     slack_id: U0BLNNPAB
     linear_username: zach
     github_username: solideo-gloria
+  tyler:
+    team: unassigned
+    slack_id: U05TMBF5G5A
+    linear_username: tyler.vance
+    github_username:
 
 
 platforms:
