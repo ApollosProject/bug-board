@@ -484,14 +484,18 @@ def post_recon_issues():
             ident = issue.get("identifier")
             title = issue.get("title")
             url = issue.get("url")
-            breached = " (SLA BREACHED)" if issue_is_sla_breached(issue) else ""
+            if issue_is_sla_breached(issue):
+                breached = " \U0001f6a8 SLA BREACHED \U0001f6a8"
+            else:
+                breached = ""
             if not breached:
                 for child in (issue.get("children") or {}).get("nodes", []) or []:
                     child_state = (child.get("state") or {}).get("name")
                     if not is_open_state(child_state):
                         continue
                     if issue_is_sla_breached(child):
-                        breached = " (SUB-ISSUE SLA BREACHED)"
+                        child_title = child.get("title") or "Sub-issue SLA breached"
+                        breached = f" \U0001f6a8 {child_title} \U0001f6a8"
                         break
             age = f" (+{age_days}d)" if age_days is not None else ""
             if ident:
