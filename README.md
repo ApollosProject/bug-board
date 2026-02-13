@@ -33,20 +33,6 @@ These can be placed in a `.env` file or exported in your shell.
 
 3. Edit `config.yml` to configure team members and platform ownership.
 
-## RECON Daily Post
-
-The worker posts a daily RECON Issues summary to Slack at **9:00am ET** by default.
-
-Optional environment variables:
-
-- `RECON_PROJECT_NAME` – Linear project name to report on (default: `RECON Issues`)
-- `RECON_TIMEZONE` – Time zone used for scheduling + day counters (default: `America/New_York`)
-- `RECON_CC_SLUGS` – Comma-separated `config.yml` people slugs to CC on SLA breach (default: `gerry,tyler`)
-
-State notes:
-
-- `Days since last open issue` is derived from the most recently resolved *parent* issue in the RECON project (Done/Canceled/Duplicate) and is only displayed when there are currently 0 open parent issues.
-
 ## Running
 
 Start the web server with:
