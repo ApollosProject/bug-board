@@ -68,15 +68,9 @@ def _parse_linear_dt(value: str | None) -> datetime | None:
 def _get_recon_cc_mentions() -> list[str]:
     """Return Slack mentions to CC when an SLA is breached.
 
-    Priority is:
-    1) RECON_CC_SLACK_IDS env var (comma-separated Slack user IDs)
-    2) config.yml people entries for slugs in RECON_CC_SLUGS (default: gerry,tyler)
+    Source:
+    - config.yml people entries for slugs in RECON_CC_SLUGS (default: gerry,tyler)
     """
-    ids_env = os.getenv("RECON_CC_SLACK_IDS")
-    if ids_env:
-        ids = [s.strip() for s in ids_env.split(",") if s.strip()]
-        return [f"<@{sid}>" for sid in ids]
-
     slugs_env = os.getenv("RECON_CC_SLUGS", "gerry,tyler")
     slugs = [s.strip() for s in slugs_env.split(",") if s.strip()]
     config = load_config()
