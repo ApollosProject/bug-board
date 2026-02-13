@@ -31,10 +31,7 @@ from linear.issues import (
     get_recently_resolved_parent_issues_in_project,
     get_stale_issues_by_assignee,
 )
-from linear.projects import (
-    get_project_by_name,
-    get_projects,
-)
+from linear.projects import get_project_by_name, get_projects
 from openai_client import get_chat_function_call
 from support import get_support_slugs
 
@@ -982,7 +979,7 @@ else:
     # schedule.every(1).days.at("14:00").do(post_stale)
     # schedule.every().friday.at("12:00").do(post_upcoming_projects)
     # schedule.every().monday.at("12:00").do(post_friday_deadlines)
-    # schedule.every().day.at("09:00").do(post_recon_issues)
+    schedule.every().day.at("09:00").do(post_recon_issues)
 
     while True:
         schedule.run_pending()
