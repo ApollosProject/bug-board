@@ -2,7 +2,7 @@ import logging
 import os
 import re
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, tzinfo
 from zoneinfo import ZoneInfo
 
 import requests
@@ -47,6 +47,7 @@ RECON_TZ = os.getenv("RECON_TIMEZONE", "America/New_York")
 
 
 def _today_in_tz(tz_name: str) -> date:
+    tz: tzinfo
     try:
         tz = ZoneInfo(tz_name)
     except Exception:
