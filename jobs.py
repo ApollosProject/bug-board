@@ -422,7 +422,7 @@ def post_recon_issues():
     lines: list[str] = []
     project_url = project.get("url")
     if project_url:
-        lines.append(f"*RECON Issues Daily* (<{project_url}|{RECON_PROJECT_NAME}>)")
+        lines.append(f"*<{project_url}|RECON Issues Daily>*")
     else:
         lines.append("*RECON Issues Daily*")
     lines.append("--------------------------------")
