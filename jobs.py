@@ -420,8 +420,11 @@ def post_recon_issues():
 
     # Format Slack post
     lines: list[str] = []
-    lines.append("*RECON Issues Daily*")
     project_url = project.get("url")
+    if project_url:
+        lines.append(f"*RECON Issues Daily* (<{project_url}|{RECON_PROJECT_NAME}>)")
+    else:
+        lines.append("*RECON Issues Daily*")
     lines.append("--------------------------------")
     lines.append("")
 
@@ -459,12 +462,7 @@ def post_recon_issues():
         lines.append("")
         lines.append("🎉🎉🎉")
     else:
-        if project_url:
-            lines.append(
-                f"*Open issues ({open_count})* (<{project_url}|{RECON_PROJECT_NAME}>)"
-            )
-        else:
-            lines.append(f"*Open issues ({open_count})*")
+        lines.append(f"*Open issues ({open_count})*")
         lines.append("")
 
         # Sort oldest first for readability.
