@@ -526,7 +526,7 @@ def post_recon_issues():
                     if _temp_force_child_breach(child) or issue_is_sla_breached(child):
                         breached = " \U0001f6a8 SLA Breached \U0001f6a8"
                         break
-            age = f" (+{age_days}d)" if age_days is not None else ""
+            age = f"+{age_days}d" if age_days is not None else None
             if ident:
                 label = f"{ident}: {title}"
             else:
@@ -549,9 +549,14 @@ def post_recon_issues():
                 parent_assignee = (issue.get("assignee") or {}).get("displayName")
                 assignees_text = slack_mention_or_name(parent_assignee)
 
-            lines.append(
-                f"- <{url}|{label}>{age} Assignees: {assignees_text}{breached}"
-            )
+            meta_parts = []
+            if age:
+                meta_parts.append(age)
+            if assignees_text:
+                meta_parts.append(assignees_text)
+            meta = f" ({', '.join(meta_parts)})" if meta_parts else ""
+
+            lines.append(f"- <{url}|{label}>{meta}{breached}")
 
     # Put CC at the bottom, separated by a blank line.
     if cc_mentions:
