@@ -43,7 +43,6 @@ Optional environment variables:
 - `RECON_TIMEZONE` – Time zone used for scheduling + day counters (default: `America/New_York`)
 - `RECON_CC_SLUGS` – Comma-separated `config.yml` people slugs to CC on SLA breach (default: `gerry,tyler`)
 - `RECON_CC_SLACK_IDS` – Comma-separated Slack user IDs to CC (overrides `RECON_CC_SLUGS`)
-- `RECON_DRY_RUN` – If `true`, do not post to Slack (logs the message instead)
 
 State notes:
 

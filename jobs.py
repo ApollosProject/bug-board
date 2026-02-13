@@ -522,11 +522,6 @@ def post_recon_issues():
                 f"- <{url}|{label}>{age} Assignees: {assignees_text}{breached}"
             )
 
-    if os.getenv("RECON_DRY_RUN") == "true":
-        logging.info("RECON_DRY_RUN=true; skipping Slack post.")
-        logging.info("RECON message:\n%s", "\n".join(lines))
-        return
-
     post_to_slack("\n".join(lines))
 
 
