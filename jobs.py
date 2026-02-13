@@ -390,6 +390,37 @@ def post_recon_issues():
     def is_open_state(state_name: str | None) -> bool:
         return state_name not in {"Done", "Canceled", "Duplicate"}
 
+    # TEMP SIMULATION (do not commit):
+    # Set `RECON_TEMP_SIMULATE=true` to force:
+    # - parent age to display as (+2d)
+    # - only the child issue whose title/identifier contains "RESOLVE" to render as breached
+    _temp_simulate = os.getenv("RECON_TEMP_SIMULATE") == "true"
+    _temp_parent_age_days = 5
+    _temp_breached_child_match = "RESOLVE"
+    _temp_breach_all_children_after_days = 5
+    _temp_resolved_days: int | None = None
+    if _temp_simulate and os.getenv("RECON_TEMP_SIMULATE_RESOLVED_DAYS"):
+        try:
+            _temp_resolved_days = int(os.getenv("RECON_TEMP_SIMULATE_RESOLVED_DAYS", ""))
+        except ValueError:
+            _temp_resolved_days = None
+
+    # If set, force the "resolved" scenario (no open parent issues) and skip
+    # querying resolved issues for the metric.
+    if _temp_simulate and _temp_resolved_days is not None:
+        parent_issues = []
+        open_count = 0
+
+    def _temp_force_child_breach(child: dict) -> bool:
+        if not _temp_simulate:
+            return False
+        if _temp_parent_age_days >= _temp_breach_all_children_after_days:
+            return True
+        title = (child.get("title") or "").upper()
+        ident = (child.get("identifier") or "").upper()
+        needle = _temp_breached_child_match.upper()
+        return needle in title or needle in ident
+
     def slack_mention_or_name(display_name: str | None) -> str:
         if not display_name:
             return "Unassigned"
@@ -413,7 +444,7 @@ def post_recon_issues():
             child_state = child.get("state") or {}
             if not is_open_state((child_state or {}).get("name")):
                 continue
-            if issue_is_sla_breached(child):
+            if _temp_force_child_breach(child) or issue_is_sla_breached(child):
                 breached_items.append(child)
 
     cc_mentions = _get_recon_cc_mentions() if breached_items else []
@@ -426,45 +457,41 @@ def post_recon_issues():
     lines.append("")
 
     if open_count == 0:
-        resolved = get_recently_resolved_parent_issues_in_project(RECON_PROJECT_NAME)
-
-        def resolved_at(it: dict) -> datetime | None:
-            return (
-                _parse_linear_dt(it.get("completedAt"))
-                or _parse_linear_dt(it.get("canceledAt"))
-                or _parse_linear_dt(it.get("updatedAt"))
-            )
-
-        latest = None
-        for it in resolved:
-            dt = resolved_at(it)
-            if not dt:
-                continue
-            if latest is None or dt > latest:
-                latest = dt
-
-        if latest is None:
-            lines.append("Days since last open issue: unknown")
+        if _temp_simulate and _temp_resolved_days is not None:
+            lines.append(f"Days since last open issue: {_temp_resolved_days}")
         else:
-            try:
-                tz = ZoneInfo(RECON_TZ)
-            except Exception:
-                tz = timezone.utc
-            latest_date = latest.astimezone(tz).date()
-            days = (today - latest_date).days
-            if days < 0:
-                days = 0
-            lines.append(f"Days since last open issue: {days}")
+            resolved = get_recently_resolved_parent_issues_in_project(RECON_PROJECT_NAME)
+
+            def resolved_at(it: dict) -> datetime | None:
+                return (
+                    _parse_linear_dt(it.get("completedAt"))
+                    or _parse_linear_dt(it.get("canceledAt"))
+                    or _parse_linear_dt(it.get("updatedAt"))
+                )
+
+            latest = None
+            for it in resolved:
+                dt = resolved_at(it)
+                if not dt:
+                    continue
+                if latest is None or dt > latest:
+                    latest = dt
+
+            if latest is None:
+                lines.append("Days since last open issue: unknown")
+            else:
+                try:
+                    tz = ZoneInfo(RECON_TZ)
+                except Exception:
+                    tz = timezone.utc
+                latest_date = latest.astimezone(tz).date()
+                days = (today - latest_date).days
+                if days < 0:
+                    days = 0
+                lines.append(f"Days since last open issue: {days}")
 
         lines.append("")
-        if project_url:
-            lines.append(
-                f"*Open issues (0)* (<{project_url}|{RECON_PROJECT_NAME}>)"
-            )
-        else:
-            lines.append("*Open issues (0)*")
-        lines.append("")
-        lines.append("- None")
+        lines.append("🎉🎉🎉")
     else:
         if project_url:
             lines.append(
@@ -480,7 +507,10 @@ def post_recon_issues():
 
         for issue in sorted(parent_issues, key=created_key):
             created = _parse_linear_dt(issue.get("createdAt"))
-            age_days = (now - created).days if created else None
+            if _temp_simulate:
+                age_days = _temp_parent_age_days
+            else:
+                age_days = (now - created).days if created else None
             ident = issue.get("identifier")
             title = issue.get("title")
             url = issue.get("url")
@@ -493,9 +523,8 @@ def post_recon_issues():
                     child_state = (child.get("state") or {}).get("name")
                     if not is_open_state(child_state):
                         continue
-                    if issue_is_sla_breached(child):
-                        child_title = child.get("title") or "Sub-issue SLA breached"
-                        breached = f" \U0001f6a8 {child_title} \U0001f6a8"
+                    if _temp_force_child_breach(child) or issue_is_sla_breached(child):
+                        breached = " \U0001f6a8 SLA Breached \U0001f6a8"
                         break
             age = f" (+{age_days}d)" if age_days is not None else ""
             if ident:
