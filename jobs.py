@@ -390,6 +390,28 @@ def post_recon_issues():
     def is_open_state(state_name: str | None) -> bool:
         return state_name not in {"Done", "Canceled", "Duplicate"}
 
+    # Simulation knobs for previewing Slack output (no-op unless enabled).
+    # Example:
+    #   RECON_DRY_RUN=true RECON_SIMULATE=true RECON_SIMULATE_PARENT_AGE_DAYS=2 \\
+    #   RECON_SIMULATE_BREACHED_CHILD_MATCH=RESOLVE ./venv/bin/python -c \\
+    #   'from jobs import post_recon_issues; post_recon_issues()'
+    simulate = os.getenv("RECON_SIMULATE") == "true"
+    simulate_parent_age_days: int | None = None
+    if simulate and os.getenv("RECON_SIMULATE_PARENT_AGE_DAYS"):
+        try:
+            simulate_parent_age_days = int(os.getenv("RECON_SIMULATE_PARENT_AGE_DAYS", ""))
+        except ValueError:
+            simulate_parent_age_days = None
+    simulate_breached_child_match = os.getenv("RECON_SIMULATE_BREACHED_CHILD_MATCH", "RESOLVE") if simulate else ""
+
+    def is_simulated_breached_child(child: dict) -> bool:
+        if not simulate or not simulate_breached_child_match:
+            return False
+        title = (child.get("title") or "").upper()
+        ident = (child.get("identifier") or "").upper()
+        needle = simulate_breached_child_match.upper()
+        return needle in title or needle in ident
+
     def slack_mention_or_name(display_name: str | None) -> str:
         if not display_name:
             return "Unassigned"
@@ -413,7 +435,7 @@ def post_recon_issues():
             child_state = child.get("state") or {}
             if not is_open_state((child_state or {}).get("name")):
                 continue
-            if issue_is_sla_breached(child):
+            if is_simulated_breached_child(child) or (not simulate and issue_is_sla_breached(child)):
                 breached_items.append(child)
 
     cc_mentions = _get_recon_cc_mentions() if breached_items else []
@@ -482,7 +504,10 @@ def post_recon_issues():
 
         for issue in sorted(parent_issues, key=created_key):
             created = _parse_linear_dt(issue.get("createdAt"))
-            age_days = (now - created).days if created else None
+            if simulate_parent_age_days is not None:
+                age_days = simulate_parent_age_days
+            else:
+                age_days = (now - created).days if created else None
             ident = issue.get("identifier")
             title = issue.get("title")
             url = issue.get("url")
@@ -492,7 +517,7 @@ def post_recon_issues():
                     child_state = (child.get("state") or {}).get("name")
                     if not is_open_state(child_state):
                         continue
-                    if issue_is_sla_breached(child):
+                    if is_simulated_breached_child(child) or (not simulate and issue_is_sla_breached(child)):
                         breached = " (SUB-ISSUE SLA BREACHED)"
                         break
             age = f" (+{age_days}d)" if age_days is not None else ""
