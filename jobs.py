@@ -422,9 +422,6 @@ def post_recon_issues():
     sep = "--------------------------------"
     lines: list[str] = []
     lines.append("*RECON Issues Daily*")
-    if cc_mentions:
-        lines.append("cc: " + " ".join(cc_mentions))
-
     project_url = project.get("url")
     lines.append(sep)
 
@@ -521,6 +518,11 @@ def post_recon_issues():
             lines.append(
                 f"- <{url}|{label}>{age} Assignees: {assignees_text}{breached}"
             )
+
+    # Put CC at the bottom, separated by a line.
+    if cc_mentions:
+        lines.append(sep)
+        lines.append("cc: " + " ".join(cc_mentions))
 
     post_to_slack("\n".join(lines))
 
