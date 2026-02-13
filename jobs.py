@@ -419,11 +419,10 @@ def post_recon_issues():
     cc_mentions = _get_recon_cc_mentions() if breached_items else []
 
     # Format Slack post
-    sep = "--------------------------------"
     lines: list[str] = []
     lines.append("*RECON Issues Daily*")
     project_url = project.get("url")
-    lines.append(sep)
+    lines.append("")
 
     if open_count == 0:
         resolved = get_recently_resolved_parent_issues_in_project(RECON_PROJECT_NAME)
@@ -456,13 +455,14 @@ def post_recon_issues():
                 days = 0
             lines.append(f"Days since last open issue: {days}")
 
+        lines.append("")
         if project_url:
             lines.append(
                 f"*Open issues (0)* (<{project_url}|{RECON_PROJECT_NAME}>)"
             )
         else:
             lines.append("*Open issues (0)*")
-        lines.append(sep)
+        lines.append("")
         lines.append("- None")
     else:
         if project_url:
@@ -471,7 +471,7 @@ def post_recon_issues():
             )
         else:
             lines.append(f"*Open issues ({open_count})*")
-        lines.append(sep)
+        lines.append("")
 
         # Sort oldest first for readability.
         def created_key(it: dict) -> str:
@@ -519,9 +519,9 @@ def post_recon_issues():
                 f"- <{url}|{label}>{age} Assignees: {assignees_text}{breached}"
             )
 
-    # Put CC at the bottom, separated by a line.
+    # Put CC at the bottom, separated by a blank line.
     if cc_mentions:
-        lines.append(sep)
+        lines.append("")
         lines.append("cc: " + " ".join(cc_mentions))
 
     post_to_slack("\n".join(lines))
