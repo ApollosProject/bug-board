@@ -959,14 +959,6 @@ if os.getenv("DEBUG") == "true":
     # post_friday_deadlines()
     post_recon_issues()
 else:
-    # Ensure the worker is using the expected timezone for daily schedules.
-    os.environ.setdefault("TZ", RECON_TZ)
-    if hasattr(time, "tzset"):
-        try:
-            time.tzset()
-        except Exception:
-            pass
-
     # schedule.every().friday.at("13:00").do(post_inactive_engineers)
     # schedule.every(1).days.at("12:00").do(post_priority_bugs)
     # schedule.every().friday.at("20:00").do(post_leaderboard)
@@ -974,7 +966,9 @@ else:
     # schedule.every(1).days.at("14:00").do(post_stale)
     # schedule.every().friday.at("12:00").do(post_upcoming_projects)
     # schedule.every().monday.at("12:00").do(post_friday_deadlines)
-    schedule.every().day.at("09:00").do(post_recon_issues)
+    # Run on UTC time like the other scheduled jobs. 14:00 UTC is 9:00am ET during
+    # standard time (UTC-5).
+    schedule.every().day.at("14:00").do(post_recon_issues)
 
     while True:
         schedule.run_pending()
