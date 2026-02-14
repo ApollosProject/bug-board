@@ -45,7 +45,7 @@ typing_extensions==4.15.0
 urllib3==2.6.3
 websockets==11.0.3
 Werkzeug==3.1.5
-yarl==1.18.3
+yarl==1.22.0
 openai==1.97.0
 mypy==1.17.0
 types-PyYAML
