@@ -539,11 +539,36 @@ def get_open_issues_in_projects(project_names):
           ) {
             nodes {
               id
+              identifier
               title
               url
               updatedAt
+              createdAt
+              dueDate
+              slaType
+              slaStartedAt
+              slaMediumRiskAt
+              slaHighRiskAt
+              slaBreachesAt
               assignee { displayName }
               project { name }
+              parent { id }
+              children(first: 50) {
+                nodes {
+                  id
+                  identifier
+                  title
+                  url
+                  state { name }
+                  assignee { displayName }
+                  dueDate
+                  slaType
+                  slaStartedAt
+                  slaMediumRiskAt
+                  slaHighRiskAt
+                  slaBreachesAt
+                }
+              }
             }
             pageInfo { hasNextPage endCursor }
           }
@@ -564,6 +589,68 @@ def get_open_issues_in_projects(project_names):
         if not data["issues"]["pageInfo"]["hasNextPage"]:
             break
         cursor = data["issues"]["pageInfo"]["endCursor"]
+    return issues
+
+
+def get_recently_resolved_parent_issues_in_project(project_name: str, limit: int = 50):
+    """Return recently resolved *parent* issues for a project.
+
+    This is used for computing 'days since last open issue' when there are
+    currently no open issues. We consider Done/Canceled/Duplicate resolved.
+    """
+    team_key = get_linear_team_key()
+    query = gql(
+        """
+        query ResolvedIssuesInProject(
+          $projectName: String!,
+          $team_key: String!,
+          $cursor: String
+        ) {
+          issues(
+            first: 50
+            after: $cursor
+            filter: {
+              team: { key: { eq: $team_key } }
+              project: { name: { eq: $projectName } }
+              parent: { null: true }
+              state: { name: { in: ["Done", "Canceled", "Duplicate"] } }
+            }
+            orderBy: updatedAt
+          ) {
+            nodes {
+              id
+              identifier
+              title
+              url
+              updatedAt
+              completedAt
+              canceledAt
+              state { name }
+            }
+            pageInfo { hasNextPage endCursor }
+          }
+        }
+        """,
+    )
+
+    cursor = None
+    issues = []
+    while True:
+        data = _execute(
+            query,
+            variable_values={
+                "projectName": project_name,
+                "team_key": team_key,
+                "cursor": cursor,
+            },
+        )
+        payload = data["issues"]
+        issues.extend(payload["nodes"])
+        if len(issues) >= limit:
+            return issues[:limit]
+        if not payload["pageInfo"]["hasNextPage"]:
+            break
+        cursor = payload["pageInfo"]["endCursor"]
     return issues
 
 
