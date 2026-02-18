@@ -532,7 +532,7 @@ def get_open_issues_in_projects(project_names):
             after: $cursor
             filter: {
               team: { key: { eq: $team_key } }
-              state: { name: { nin: [\"Done\", \"Canceled\", \"Duplicate\"] } }
+              state: { type: { nin: [\"completed\", \"canceled\"] } }
               project: { name: { in: $projectNames } }
             }
             orderBy: updatedAt
@@ -550,6 +550,7 @@ def get_open_issues_in_projects(project_names):
               slaMediumRiskAt
               slaHighRiskAt
               slaBreachesAt
+              state { name type }
               assignee { displayName }
               project { name }
               parent { id }
@@ -559,7 +560,7 @@ def get_open_issues_in_projects(project_names):
                   identifier
                   title
                   url
-                  state { name }
+                  state { name type }
                   assignee { displayName }
                   dueDate
                   slaType

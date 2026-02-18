@@ -379,7 +379,14 @@ def post_recon_issues():
 
     now = datetime.now(timezone.utc)
 
-    def is_open_state(state_name: str | None) -> bool:
+    def is_open_state(state: dict | None) -> bool:
+        state = state or {}
+        # Linear workflow names are customizable (e.g. "Released"), so use
+        # state type when available.
+        state_type = (state.get("type") or "").lower()
+        if state_type:
+            return state_type not in {"completed", "canceled"}
+        state_name = state.get("name")
         return state_name not in {"Done", "Canceled", "Duplicate"}
 
     def slack_mention_or_name(display_name: str | None) -> str:
@@ -402,8 +409,7 @@ def post_recon_issues():
             breached_items.append(issue)
             continue
         for child in (issue.get("children") or {}).get("nodes", []) or []:
-            child_state = child.get("state") or {}
-            if not is_open_state((child_state or {}).get("name")):
+            if not is_open_state(child.get("state")):
                 continue
             if issue_is_sla_breached(child):
                 breached_items.append(child)
@@ -473,8 +479,7 @@ def post_recon_issues():
                 breached = ""
             if not breached:
                 for child in (issue.get("children") or {}).get("nodes", []) or []:
-                    child_state = (child.get("state") or {}).get("name")
-                    if not is_open_state(child_state):
+                    if not is_open_state(child.get("state")):
                         continue
                     if issue_is_sla_breached(child):
                         breached = " \U0001f6a8 SLA Breached \U0001f6a8"
@@ -488,8 +493,7 @@ def post_recon_issues():
             # Show sub-issue assignees (deduped), not the parent assignee.
             assignees: set[str] = set()
             for child in (issue.get("children") or {}).get("nodes", []) or []:
-                child_state = (child.get("state") or {}).get("name")
-                if not is_open_state(child_state):
+                if not is_open_state(child.get("state")):
                     continue
                 child_assignee = (child.get("assignee") or {}).get("displayName")
                 if child_assignee:

@@ -90,6 +90,11 @@ people:
     linear_username: casey
     github_username:
 
+  justin:
+    team: unassigned
+    slack_id: U08UMCQ511D
+    linear_username: justin.isenhart
+    github_username:
 
 platforms:
   crossroads:
