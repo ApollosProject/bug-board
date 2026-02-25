@@ -597,7 +597,8 @@ def get_recently_resolved_parent_issues_in_project(project_name: str, limit: int
     """Return recently resolved *parent* issues for a project.
 
     This is used for computing 'days since last open issue' when there are
-    currently no open issues. We consider Done/Canceled/Duplicate resolved.
+    currently no open issues. Use Linear state *type* (not customizable name)
+    so custom workflows like "Released" are treated correctly.
     """
     team_key = get_linear_team_key()
     query = gql(
@@ -614,7 +615,7 @@ def get_recently_resolved_parent_issues_in_project(project_name: str, limit: int
               team: { key: { eq: $team_key } }
               project: { name: { eq: $projectName } }
               parent: { null: true }
-              state: { name: { in: ["Done", "Canceled", "Duplicate"] } }
+              state: { type: { in: ["completed", "canceled"] } }
             }
             orderBy: updatedAt
           ) {
@@ -626,7 +627,7 @@ def get_recently_resolved_parent_issues_in_project(project_name: str, limit: int
               updatedAt
               completedAt
               canceledAt
-              state { name }
+              state { name type }
             }
             pageInfo { hasNextPage endCursor }
           }
