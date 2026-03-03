@@ -62,8 +62,6 @@ def evaluate_fleet_health() -> tuple[dict[str, Any], int]:
         "failed_runs": stats.failed_runs,
         "failure_ratio": stats.failure_ratio,
         "threshold_ratio": FAILURE_THRESHOLD_RATIO,
-        "min_terminal_runs": MIN_EVALUATED_DAGS,
-        "insufficient_volume": stats.insufficient_volume,
         "top_failed_dags": [
             {"dag_id": dag_id, "state": "failed"}
             for dag_id in stats.failed_dags[:TOP_FAILED_DAGS_LIMIT]
