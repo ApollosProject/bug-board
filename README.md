@@ -28,6 +28,9 @@ mypy .
 - `APP_URL` – Public URL where the app is hosted
 - `DEBUG` – set to `true` to run the scheduled jobs immediately
 - `OPENAI_API_KEY` – API key used to generate weekly changelogs
+- `AIRFLOW_API_BASE_URL` – Base URL for Airflow REST API (for example: `https://airflow.example.com`)
+- `AIRFLOW_API_TOKEN` – Bearer token for Airflow API
+- `AIRFLOW_FLEET_MONITOR_TOKEN` – Optional token required by `/airflow-fleet-health`
 
 These can be placed in a `.env` file or exported in your shell.
 
@@ -49,3 +52,24 @@ python jobs.py
 
 
 The `Procfile` defines both commands for platforms such as Heroku.
+
+## Airflow fleet outage monitor
+
+This app exposes `GET /airflow-fleet-health` for Better Stack to detect broad DAG failures
+without relying on Airflow DAG execution itself.
+
+The endpoint:
+
+- Calls the Airflow REST API and inspects each active DAG's latest run state
+- Computes failed/evaluated ratio across active DAGs (not time-window based)
+- Returns `503` when failure ratio is `>= 0.35` (with at least 20 DAGs evaluated), otherwise `200`
+
+This checker is intentionally not highly configurable. It uses fixed settings:
+
+- failure threshold ratio: `0.35`
+- minimum evaluated DAGs: `20`
+
+If `AIRFLOW_FLEET_MONITOR_TOKEN` is set, Better Stack must send either:
+
+- `Authorization: Bearer <token>` header, or
+- `?token=<token>` query param
