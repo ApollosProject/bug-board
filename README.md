@@ -32,6 +32,7 @@ mypy .
 - `AIRFLOW_API_TOKEN` – Bearer token for Airflow API
 - `AIRFLOW_FLEET_MONITOR_TOKEN` – Optional token required by `/airflow-fleet-health`
 - `REDIS_URL` – Optional Redis connection string for cached `/airflow-fleet-health` responses
+- `REDIS_SSL_CERT_REQS` – Optional TLS cert verification mode for `rediss://` (`none`, `optional`, `required`; default for `rediss://` is `none` unless `REDIS_URL` already sets `ssl_cert_reqs`)
 - `AIRFLOW_FLEET_HEALTH_REFRESH_SECONDS` – Optional worker refresh interval for cached fleet health (default: `60`)
 - `AIRFLOW_FLEET_HEALTH_MAX_STALE_SECONDS` – Optional max age accepted by the web endpoint when reading cached data (default: `180`)
 - `AIRFLOW_FLEET_HEALTH_REDIS_TTL_SECONDS` – Optional Redis TTL for cached fleet health record (default: `900`)
