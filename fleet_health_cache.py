@@ -4,6 +4,7 @@ import os
 import time
 from functools import lru_cache
 from typing import Any
+from urllib.parse import parse_qsl, urlsplit
 
 try:
     import redis
@@ -14,6 +15,7 @@ except ImportError:  # pragma: no cover - optional dependency for cache deployme
 FLEET_HEALTH_CACHE_KEY = "airflow:fleet_health:latest"
 DEFAULT_MAX_STALE_SECONDS = 180
 DEFAULT_REDIS_TTL_SECONDS = 900
+DEFAULT_REDIS_SSL_CERT_REQS = "none"
 
 
 def should_use_redis_cache() -> bool:
@@ -117,15 +119,37 @@ def _get_redis_client() -> Any | None:
         return None
 
     try:
-        return redis.Redis.from_url(
-            redis_url,
-            decode_responses=True,
-            socket_connect_timeout=2,
-            socket_timeout=2,
-        )
+        return redis.Redis.from_url(redis_url, **_build_redis_client_kwargs(redis_url))
     except Exception:
         logging.exception("Failed to initialize Redis client for airflow fleet health cache")
         return None
+
+
+def _build_redis_client_kwargs(redis_url: str) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {
+        "decode_responses": True,
+        "socket_connect_timeout": 2,
+        "socket_timeout": 2,
+    }
+    if not redis_url.startswith("rediss://"):
+        return kwargs
+
+    query = dict(parse_qsl(urlsplit(redis_url).query, keep_blank_values=True))
+    if "ssl_cert_reqs" in query:
+        return kwargs
+
+    raw_cert_reqs = os.getenv("REDIS_SSL_CERT_REQS", "").strip().lower()
+    if raw_cert_reqs in {"none", "optional", "required"}:
+        kwargs["ssl_cert_reqs"] = raw_cert_reqs
+        return kwargs
+    if raw_cert_reqs:
+        logging.warning(
+            "Ignoring invalid REDIS_SSL_CERT_REQS=%r; expected one of: none, optional, required",
+            raw_cert_reqs,
+        )
+
+    kwargs["ssl_cert_reqs"] = DEFAULT_REDIS_SSL_CERT_REQS
+    return kwargs
 
 
 def _read_non_negative_int_env(name: str, default: int) -> int:
