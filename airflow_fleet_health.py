@@ -28,6 +28,7 @@ class FleetStats:
     checked_at: datetime
     active_dags_total: int
     evaluated_dags: int
+    failed_fetches: int
     dags_without_runs: int
     non_terminal_dags: int
     failed_dags: list[str]
@@ -43,8 +44,12 @@ def evaluate_fleet_health() -> tuple[dict[str, Any], int]:
 
     session = _build_session(api_token)
     active_dags = _fetch_active_dags(session, base_url)
-    latest_state_by_dag = _fetch_latest_states_by_dag(base_url, api_token, active_dags)
-    stats = _build_stats(active_dags, latest_state_by_dag)
+    latest_state_by_dag, failed_fetches = _fetch_latest_states_by_dag(
+        base_url, api_token, active_dags
+    )
+    if active_dags and not latest_state_by_dag:
+        raise AirflowFleetHealthError("Failed to fetch latest runs for all DAGs.")
+    stats = _build_stats(active_dags, latest_state_by_dag, failed_fetches)
 
     is_degraded = (
         not stats.insufficient_volume and stats.failure_ratio >= FAILURE_THRESHOLD_RATIO
@@ -57,6 +62,7 @@ def evaluate_fleet_health() -> tuple[dict[str, Any], int]:
         "checked_at": stats.checked_at.isoformat(),
         "active_dags_total": stats.active_dags_total,
         "evaluated_dags": stats.evaluated_dags,
+        "failed_fetches": stats.failed_fetches,
         "dags_without_runs": stats.dags_without_runs,
         "non_terminal_dags": stats.non_terminal_dags,
         "failed_runs": stats.failed_runs,
@@ -103,9 +109,9 @@ def _fetch_active_dags(session: requests.Session, base_url: str) -> set[str]:
 
 def _fetch_latest_states_by_dag(
     base_url: str, api_token: str, active_dags: set[str]
-) -> dict[str, str]:
+) -> tuple[dict[str, str], int]:
     if not active_dags:
-        return {}
+        return {}, 0
 
     latest_state_by_dag: dict[str, str] = {}
     failures = 0
@@ -126,12 +132,7 @@ def _fetch_latest_states_by_dag(
             if state:
                 latest_state_by_dag[dag_id] = state
 
-    if failures:
-        raise AirflowFleetHealthError(
-            f"Failed to fetch latest runs for {failures} DAG(s)."
-        )
-
-    return latest_state_by_dag
+    return latest_state_by_dag, failures
 
 
 def _fetch_last_state_for_dag(base_url: str, api_token: str, dag_id: str) -> str:
@@ -148,7 +149,9 @@ def _fetch_last_state_for_dag(base_url: str, api_token: str, dag_id: str) -> str
     return _extract_state(dag_runs[0])
 
 
-def _build_stats(active_dags: set[str], latest_state_by_dag: dict[str, str]) -> FleetStats:
+def _build_stats(
+    active_dags: set[str], latest_state_by_dag: dict[str, str], failed_fetches: int
+) -> FleetStats:
     evaluated_dags = len(latest_state_by_dag)
     failed_dags = sorted(
         dag_id for dag_id, state in latest_state_by_dag.items() if state == "failed"
@@ -164,6 +167,7 @@ def _build_stats(active_dags: set[str], latest_state_by_dag: dict[str, str]) -> 
         checked_at=datetime.now(timezone.utc),
         active_dags_total=len(active_dags),
         evaluated_dags=evaluated_dags,
+        failed_fetches=failed_fetches,
         dags_without_runs=max(0, len(active_dags) - evaluated_dags),
         non_terminal_dags=non_terminal_dags,
         failed_dags=failed_dags,
