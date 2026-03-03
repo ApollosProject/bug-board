@@ -1,3 +1,4 @@
+import logging
 import re
 import time
 import os
@@ -59,8 +60,9 @@ def airflow_fleet_health():
 
     try:
         payload, status = evaluate_fleet_health()
-    except AirflowFleetHealthError as err:
-        payload = {"status": "unknown", "error": str(err)}
+    except AirflowFleetHealthError:
+        logging.exception("Airflow fleet health evaluation failed")
+        payload = {"status": "unknown"}
         status = 503
 
     response = jsonify(payload)
