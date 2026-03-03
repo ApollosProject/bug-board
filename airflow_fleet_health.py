@@ -194,7 +194,12 @@ def _request_json(
     except requests.RequestException as exc:
         raise AirflowFleetHealthError(f"Airflow API request failed for {url}") from exc
 
-    payload = response.json()
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise AirflowFleetHealthError(
+            f"Airflow API returned invalid JSON for {url}"
+        ) from exc
     if not isinstance(payload, dict):
         raise AirflowFleetHealthError(f"Unexpected Airflow API response type for {url}")
     return payload
