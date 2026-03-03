@@ -29,9 +29,7 @@ mypy .
 - `DEBUG` – set to `true` to run the scheduled jobs immediately
 - `OPENAI_API_KEY` – API key used to generate weekly changelogs
 - `AIRFLOW_API_BASE_URL` – Base URL for Airflow REST API (for example: `https://airflow.example.com`)
-- `AIRFLOW_API_TOKEN` – Bearer token for Airflow API (or use username/password below)
-- `AIRFLOW_API_USERNAME` – Optional Airflow API username when not using token auth
-- `AIRFLOW_API_PASSWORD` – Optional Airflow API password when not using token auth
+- `AIRFLOW_API_TOKEN` – Bearer token for Airflow API
 - `AIRFLOW_FLEET_MONITOR_TOKEN` – Optional token required by `/airflow-fleet-health`
 
 These can be placed in a `.env` file or exported in your shell.
@@ -69,15 +67,12 @@ The endpoint:
 
 Optional tuning env vars:
 
-- `AIRFLOW_FLEET_FAILURE_THRESHOLD_RATIO` (default: `0.35`)
-- `AIRFLOW_FLEET_MIN_TERMINAL_RUNS` (default: `20`)
-- `AIRFLOW_FLEET_TRIGGER_BAD_WINDOWS` (default: `2`)
-- `AIRFLOW_FLEET_RESOLVE_GOOD_WINDOWS` (default: `3`)
-- `AIRFLOW_FLEET_EXCLUDED_DAGS` (comma-separated DAG IDs)
-- `AIRFLOW_FLEET_STATE_FILE` (default: `/tmp/airflow_fleet_state.json`)
-- `AIRFLOW_FLEET_REQUEST_TIMEOUT_SECONDS` (default: `20`)
-- `AIRFLOW_FLEET_DAG_RUNS_PAGE_SIZE` (default: `200`)
-- `AIRFLOW_FLEET_DAG_QUERY_WORKERS` (default: `30`)
+This checker is intentionally not highly configurable. It uses fixed settings:
+
+- failure threshold ratio: `0.35`
+- minimum evaluated DAGs: `20`
+- trigger after `2` bad checks
+- resolve after `3` good checks
 
 If `AIRFLOW_FLEET_MONITOR_TOKEN` is set, Better Stack must send either:
 

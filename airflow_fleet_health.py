@@ -11,6 +11,17 @@ import requests
 
 TERMINAL_STATES = {"success", "failed"}
 DAGS_ENDPOINT = "/dags"
+STATE_FILE_PATH = "/tmp/airflow_fleet_state.json"
+
+# Intentionally fixed settings to keep this checker simple.
+REQUEST_TIMEOUT_SECONDS = 20
+DAG_PAGE_SIZE = 200
+DAG_QUERY_WORKERS = 30
+FAILURE_THRESHOLD_RATIO = 0.35
+MIN_EVALUATED_DAGS = 20
+TRIGGER_BAD_WINDOWS = 2
+RESOLVE_GOOD_WINDOWS = 3
+TOP_FAILED_DAGS_LIMIT = 10
 
 
 class AirflowFleetHealthError(RuntimeError):
@@ -18,59 +29,15 @@ class AirflowFleetHealthError(RuntimeError):
 
 
 @dataclass(frozen=True)
-class FleetConfig:
-    base_url: str
-    api_token: str | None
-    api_username: str | None
-    api_password: str | None
-    request_timeout_seconds: int
-    threshold_ratio: float
-    min_terminal_runs: int
-    trigger_bad_windows: int
-    resolve_good_windows: int
-    excluded_dags: set[str]
-    state_file_path: str
-    dag_runs_page_size: int
-    dag_query_workers: int
-
-    @classmethod
-    def from_env(cls) -> "FleetConfig":
-        base_url = os.getenv("AIRFLOW_API_BASE_URL", "").strip().rstrip("/")
-        if not base_url:
-            raise AirflowFleetHealthError("AIRFLOW_API_BASE_URL is not configured.")
-        return cls(
-            base_url=base_url,
-            api_token=_optional_env("AIRFLOW_API_TOKEN"),
-            api_username=_optional_env("AIRFLOW_API_USERNAME"),
-            api_password=_optional_env("AIRFLOW_API_PASSWORD"),
-            request_timeout_seconds=_int_env(
-                "AIRFLOW_FLEET_REQUEST_TIMEOUT_SECONDS", 20
-            ),
-            threshold_ratio=_float_env("AIRFLOW_FLEET_FAILURE_THRESHOLD_RATIO", 0.35),
-            min_terminal_runs=_int_env("AIRFLOW_FLEET_MIN_TERMINAL_RUNS", 20),
-            trigger_bad_windows=_int_env("AIRFLOW_FLEET_TRIGGER_BAD_WINDOWS", 2),
-            resolve_good_windows=_int_env("AIRFLOW_FLEET_RESOLVE_GOOD_WINDOWS", 3),
-            excluded_dags=_csv_env("AIRFLOW_FLEET_EXCLUDED_DAGS"),
-            state_file_path=os.getenv(
-                "AIRFLOW_FLEET_STATE_FILE",
-                "/tmp/airflow_fleet_state.json",
-            ),
-            dag_runs_page_size=_int_env("AIRFLOW_FLEET_DAG_RUNS_PAGE_SIZE", 200),
-            dag_query_workers=_int_env("AIRFLOW_FLEET_DAG_QUERY_WORKERS", 30),
-        )
-
-
-@dataclass(frozen=True)
-class WindowStats:
+class FleetStats:
     checked_at: datetime
-    source: str
     active_dags_total: int
     evaluated_dags: int
     dags_without_runs: int
     non_terminal_dags: int
+    failed_dags: list[str]
     failed_runs: int
     failure_ratio: float
-    top_failed_dags: list[dict[str, Any]]
 
 
 @dataclass
@@ -83,13 +50,18 @@ class DetectorState:
 
 def evaluate_fleet_health() -> tuple[dict[str, Any], int]:
     """Compute current Airflow fleet health and return (payload, http_status)."""
-    config = FleetConfig.from_env()
+    base_url = _require_env("AIRFLOW_API_BASE_URL").rstrip("/")
+    api_token = _require_env("AIRFLOW_API_TOKEN")
     checked_at = _now_utc()
 
-    stats = _collect_latest_run_stats(config, checked_at)
-    state = _load_state(config.state_file_path)
-    next_state, transition, insufficient = _advance_state(state, stats, config)
-    _save_state(config.state_file_path, next_state)
+    session = _build_session(api_token)
+    active_dags = _fetch_active_dags(session, base_url)
+    latest_state_by_dag = _fetch_latest_states_by_dag(base_url, api_token, active_dags)
+    stats = _build_stats(checked_at, active_dags, latest_state_by_dag)
+
+    state = _load_state(STATE_FILE_PATH)
+    next_state, transition, insufficient = _advance_state(state, stats)
+    _save_state(STATE_FILE_PATH, next_state)
 
     payload = {
         "mode": "active_dags_latest_run",
@@ -97,71 +69,73 @@ def evaluate_fleet_health() -> tuple[dict[str, Any], int]:
         "transition": transition,
         "last_transition_at": next_state.last_transition_at,
         "checked_at": stats.checked_at.isoformat(),
-        "source": stats.source,
+        "source": "per_dag_runs_endpoint",
         "active_dags_total": stats.active_dags_total,
         "evaluated_dags": stats.evaluated_dags,
         "dags_without_runs": stats.dags_without_runs,
         "non_terminal_dags": stats.non_terminal_dags,
         "failed_runs": stats.failed_runs,
         "failure_ratio": stats.failure_ratio,
-        "threshold_ratio": config.threshold_ratio,
-        "min_terminal_runs": config.min_terminal_runs,
+        "threshold_ratio": FAILURE_THRESHOLD_RATIO,
+        "min_terminal_runs": MIN_EVALUATED_DAGS,
         "insufficient_volume": insufficient,
         "consecutive_bad_windows": next_state.consec_bad,
         "consecutive_good_windows": next_state.consec_good,
-        "trigger_after_bad_windows": config.trigger_bad_windows,
-        "resolve_after_good_windows": config.resolve_good_windows,
-        "top_failed_dags": stats.top_failed_dags,
+        "trigger_after_bad_windows": TRIGGER_BAD_WINDOWS,
+        "resolve_after_good_windows": RESOLVE_GOOD_WINDOWS,
+        "top_failed_dags": [
+            {"dag_id": dag_id, "state": "failed"}
+            for dag_id in stats.failed_dags[:TOP_FAILED_DAGS_LIMIT]
+        ],
     }
     http_status = 503 if next_state.status == "degraded" else 200
     return payload, http_status
 
 
-def _collect_latest_run_stats(config: FleetConfig, checked_at: datetime) -> WindowStats:
-    session = _build_session(config)
-    active_dags = _fetch_active_dags(session, config)
-    latest_state_by_dag = _fetch_latest_states_by_dag(config, active_dags)
-    source = "per_dag_runs_endpoint"
+def _fetch_active_dags(session: requests.Session, base_url: str) -> set[str]:
+    dags: set[str] = set()
+    offset = 0
 
-    evaluated_dags = len(latest_state_by_dag)
-    failed_dags = sorted(
-        dag_id
-        for dag_id, state in latest_state_by_dag.items()
-        if state == "failed"
-    )
-    failed_runs = len(failed_dags)
-    non_terminal_dags = sum(
-        1 for state in latest_state_by_dag.values() if state not in TERMINAL_STATES
-    )
-    failure_ratio = failed_runs / evaluated_dags if evaluated_dags else 0.0
-    top_failed_dags = [
-        {"dag_id": dag_id, "state": "failed"}
-        for dag_id in failed_dags[:10]
-    ]
+    while True:
+        payload = _request_json(
+            session,
+            f"{base_url}{DAGS_ENDPOINT}",
+            params={"limit": DAG_PAGE_SIZE, "offset": offset, "only_active": "true"},
+        )
+        batch = payload.get("dags")
+        if not isinstance(batch, list) or not batch:
+            break
 
-    return WindowStats(
-        checked_at=checked_at,
-        source=source,
-        active_dags_total=len(active_dags),
-        evaluated_dags=evaluated_dags,
-        dags_without_runs=max(0, len(active_dags) - evaluated_dags),
-        non_terminal_dags=non_terminal_dags,
-        failed_runs=failed_runs,
-        failure_ratio=failure_ratio,
-        top_failed_dags=top_failed_dags,
-    )
+        for dag in batch:
+            if not isinstance(dag, dict):
+                continue
+            dag_id = dag.get("dag_id")
+            if not isinstance(dag_id, str) or not dag_id:
+                continue
+            if bool(dag.get("is_paused", False)):
+                continue
+            dags.add(dag_id)
+
+        if not _has_more(batch, payload, offset, DAG_PAGE_SIZE):
+            break
+        offset += DAG_PAGE_SIZE
+
+    return dags
 
 
 def _fetch_latest_states_by_dag(
-    config: FleetConfig, active_dags: set[str]
+    base_url: str, api_token: str, active_dags: set[str]
 ) -> dict[str, str]:
+    if not active_dags:
+        return {}
+
     latest_state_by_dag: dict[str, str] = {}
-    failed_fetches: list[str] = []
-    worker_count = max(1, min(config.dag_query_workers, len(active_dags) or 1))
+    failures = 0
+    worker_count = min(DAG_QUERY_WORKERS, len(active_dags))
 
     with ThreadPoolExecutor(max_workers=worker_count) as executor:
         futures = {
-            executor.submit(_fetch_last_state_for_dag, config, dag_id): dag_id
+            executor.submit(_fetch_last_state_for_dag, base_url, api_token, dag_id): dag_id
             for dag_id in active_dags
         }
         for future in as_completed(futures):
@@ -169,62 +143,26 @@ def _fetch_latest_states_by_dag(
             try:
                 state = future.result()
             except AirflowFleetHealthError:
-                failed_fetches.append(dag_id)
+                failures += 1
                 continue
             if state:
                 latest_state_by_dag[dag_id] = state
 
-    if failed_fetches:
+    if failures:
         raise AirflowFleetHealthError(
-            f"Failed to fetch latest runs for {len(failed_fetches)} DAG(s)."
+            f"Failed to fetch latest runs for {failures} DAG(s)."
         )
+
     return latest_state_by_dag
 
 
-def _fetch_active_dags(
-    session: requests.Session, config: FleetConfig
-) -> set[str]:
-    dags: set[str] = set()
-    offset = 0
-    limit = config.dag_runs_page_size
-
-    while True:
-        payload = _request_json(
-            session,
-            f"{config.base_url}{DAGS_ENDPOINT}",
-            params={"limit": limit, "offset": offset, "only_active": "true"},
-            timeout=config.request_timeout_seconds,
-        )
-        batch = payload.get("dags")
-        if not isinstance(batch, list) or not batch:
-            break
-        for dag in batch:
-            if not isinstance(dag, dict):
-                continue
-            dag_id = dag.get("dag_id")
-            if not isinstance(dag_id, str) or not dag_id:
-                continue
-            is_paused = bool(dag.get("is_paused", False))
-            if is_paused or dag_id in config.excluded_dags:
-                continue
-            dags.add(dag_id)
-        if not _has_more(batch, payload, offset, limit):
-            break
-        offset += limit
-    return dags
-
-
-def _fetch_last_state_for_dag(
-    config: FleetConfig, dag_id: str
-) -> str:
-    session = _build_session(config)
+def _fetch_last_state_for_dag(base_url: str, api_token: str, dag_id: str) -> str:
+    session = _build_session(api_token)
     dag_id_encoded = quote(dag_id, safe="")
-    url = f"{config.base_url}{DAGS_ENDPOINT}/{dag_id_encoded}/dagRuns"
     payload = _request_json(
         session,
-        url,
+        f"{base_url}{DAGS_ENDPOINT}/{dag_id_encoded}/dagRuns",
         params={"limit": 1, "offset": 0, "order_by": "-logical_date"},
-        timeout=config.request_timeout_seconds,
     )
     dag_runs = _extract_dag_runs(payload)
     if not dag_runs:
@@ -232,12 +170,35 @@ def _fetch_last_state_for_dag(
     return _extract_state(dag_runs[0])
 
 
+def _build_stats(
+    checked_at: datetime, active_dags: set[str], latest_state_by_dag: dict[str, str]
+) -> FleetStats:
+    evaluated_dags = len(latest_state_by_dag)
+    failed_dags = sorted(
+        dag_id for dag_id, state in latest_state_by_dag.items() if state == "failed"
+    )
+    failed_runs = len(failed_dags)
+    non_terminal_dags = sum(
+        1 for state in latest_state_by_dag.values() if state not in TERMINAL_STATES
+    )
+    failure_ratio = failed_runs / evaluated_dags if evaluated_dags else 0.0
+
+    return FleetStats(
+        checked_at=checked_at,
+        active_dags_total=len(active_dags),
+        evaluated_dags=evaluated_dags,
+        dags_without_runs=max(0, len(active_dags) - evaluated_dags),
+        non_terminal_dags=non_terminal_dags,
+        failed_dags=failed_dags,
+        failed_runs=failed_runs,
+        failure_ratio=failure_ratio,
+    )
+
+
 def _advance_state(
-    state: DetectorState,
-    stats: WindowStats,
-    config: FleetConfig,
+    state: DetectorState, stats: FleetStats
 ) -> tuple[DetectorState, str | None, bool]:
-    insufficient = stats.evaluated_dags < config.min_terminal_runs
+    insufficient = stats.evaluated_dags < MIN_EVALUATED_DAGS
     transition: str | None = None
 
     if insufficient:
@@ -249,7 +210,7 @@ def _advance_state(
         )
         return next_state, transition, True
 
-    is_bad_window = stats.failure_ratio >= config.threshold_ratio
+    is_bad_window = stats.failure_ratio >= FAILURE_THRESHOLD_RATIO
     if is_bad_window:
         state.consec_bad += 1
         state.consec_good = 0
@@ -257,11 +218,11 @@ def _advance_state(
         state.consec_good += 1
         state.consec_bad = 0
 
-    if state.status != "degraded" and state.consec_bad >= config.trigger_bad_windows:
+    if state.status != "degraded" and state.consec_bad >= TRIGGER_BAD_WINDOWS:
         state.status = "degraded"
         state.last_transition_at = stats.checked_at.isoformat()
         transition = "triggered"
-    elif state.status == "degraded" and state.consec_good >= config.resolve_good_windows:
+    elif state.status == "degraded" and state.consec_good >= RESOLVE_GOOD_WINDOWS:
         state.status = "healthy"
         state.last_transition_at = stats.checked_at.isoformat()
         transition = "resolved"
@@ -269,21 +230,18 @@ def _advance_state(
     return state, transition, False
 
 
-def _build_session(config: FleetConfig) -> requests.Session:
+def _build_session(api_token: str) -> requests.Session:
     session = requests.Session()
-    if config.api_token:
-        session.headers["Authorization"] = f"Bearer {config.api_token}"
-    if config.api_username and config.api_password:
-        session.auth = (config.api_username, config.api_password)
+    session.headers["Authorization"] = f"Bearer {api_token}"
     session.headers["Accept"] = "application/json"
     return session
 
 
 def _request_json(
-    session: requests.Session, url: str, params: dict[str, Any], timeout: int
+    session: requests.Session, url: str, params: dict[str, Any]
 ) -> dict[str, Any]:
     try:
-        response = session.get(url, params=params, timeout=timeout)
+        response = session.get(url, params=params, timeout=REQUEST_TIMEOUT_SECONDS)
         response.raise_for_status()
     except requests.HTTPError as exc:
         status_code = exc.response.status_code if exc.response is not None else None
@@ -337,6 +295,7 @@ def _load_state(path: str) -> DetectorState:
 
     if not isinstance(payload, dict):
         return DetectorState()
+
     status = payload.get("status")
     if status not in {"healthy", "degraded"}:
         status = "healthy"
@@ -364,45 +323,19 @@ def _save_state(path: str, state: DetectorState) -> None:
         logging.exception("Could not save detector state file: %s", path)
 
 
-def _optional_env(name: str) -> str | None:
-    value = os.getenv(name)
-    if value is None:
-        return None
-    cleaned = value.strip()
-    return cleaned or None
-
-
-def _csv_env(name: str) -> set[str]:
-    value = os.getenv(name, "")
-    return {item.strip() for item in value.split(",") if item.strip()}
-
-
-def _int_env(name: str, default: int) -> int:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    try:
-        return int(value)
-    except ValueError:
-        return default
-
-
-def _float_env(name: str, default: float) -> float:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    try:
-        return float(value)
-    except ValueError:
-        return default
-
-
 def _safe_int(value: Any, default: int) -> int:
     try:
         parsed = int(value)
     except (TypeError, ValueError):
         return default
     return parsed if parsed >= 0 else default
+
+
+def _require_env(name: str) -> str:
+    value = os.getenv(name, "").strip()
+    if not value:
+        raise AirflowFleetHealthError(f"{name} is not configured.")
+    return value
 
 
 def _now_utc() -> datetime:
