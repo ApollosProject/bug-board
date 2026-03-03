@@ -62,17 +62,12 @@ The endpoint:
 
 - Calls the Airflow REST API and inspects each active DAG's latest run state
 - Computes failed/evaluated ratio across active DAGs (not time-window based)
-- Applies stateful transitions (`2` bad windows to trigger degraded, `3` good windows to resolve)
-- Returns `503` while degraded, otherwise `200`
-
-Optional tuning env vars:
+- Returns `503` when failure ratio is `>= 0.35` (with at least 20 DAGs evaluated), otherwise `200`
 
 This checker is intentionally not highly configurable. It uses fixed settings:
 
 - failure threshold ratio: `0.35`
 - minimum evaluated DAGs: `20`
-- trigger after `2` bad checks
-- resolve after `3` good checks
 
 If `AIRFLOW_FLEET_MONITOR_TOKEN` is set, Better Stack must send either:
 

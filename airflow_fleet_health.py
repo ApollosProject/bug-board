@@ -1,5 +1,3 @@
-import json
-import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -11,16 +9,13 @@ import requests
 
 TERMINAL_STATES = {"success", "failed"}
 DAGS_ENDPOINT = "/dags"
-STATE_FILE_PATH = "/tmp/airflow_fleet_state.json"
 
-# Intentionally fixed settings to keep this checker simple.
+# Fixed settings for a simple checker.
 REQUEST_TIMEOUT_SECONDS = 20
 DAG_PAGE_SIZE = 200
 DAG_QUERY_WORKERS = 30
 FAILURE_THRESHOLD_RATIO = 0.35
 MIN_EVALUATED_DAGS = 20
-TRIGGER_BAD_WINDOWS = 2
-RESOLVE_GOOD_WINDOWS = 3
 TOP_FAILED_DAGS_LIMIT = 10
 
 
@@ -38,36 +33,28 @@ class FleetStats:
     failed_dags: list[str]
     failed_runs: int
     failure_ratio: float
-
-
-@dataclass
-class DetectorState:
-    status: str = "healthy"
-    consec_bad: int = 0
-    consec_good: int = 0
-    last_transition_at: str | None = None
+    insufficient_volume: bool
 
 
 def evaluate_fleet_health() -> tuple[dict[str, Any], int]:
     """Compute current Airflow fleet health and return (payload, http_status)."""
     base_url = _require_env("AIRFLOW_API_BASE_URL").rstrip("/")
     api_token = _require_env("AIRFLOW_API_TOKEN")
-    checked_at = _now_utc()
 
     session = _build_session(api_token)
     active_dags = _fetch_active_dags(session, base_url)
     latest_state_by_dag = _fetch_latest_states_by_dag(base_url, api_token, active_dags)
-    stats = _build_stats(checked_at, active_dags, latest_state_by_dag)
+    stats = _build_stats(active_dags, latest_state_by_dag)
 
-    state = _load_state(STATE_FILE_PATH)
-    next_state, transition, insufficient = _advance_state(state, stats)
-    _save_state(STATE_FILE_PATH, next_state)
+    is_degraded = (
+        not stats.insufficient_volume and stats.failure_ratio >= FAILURE_THRESHOLD_RATIO
+    )
+    status = "degraded" if is_degraded else "healthy"
+    http_status = 503 if is_degraded else 200
 
     payload = {
         "mode": "active_dags_latest_run",
-        "status": next_state.status,
-        "transition": transition,
-        "last_transition_at": next_state.last_transition_at,
+        "status": status,
         "checked_at": stats.checked_at.isoformat(),
         "source": "per_dag_runs_endpoint",
         "active_dags_total": stats.active_dags_total,
@@ -78,17 +65,12 @@ def evaluate_fleet_health() -> tuple[dict[str, Any], int]:
         "failure_ratio": stats.failure_ratio,
         "threshold_ratio": FAILURE_THRESHOLD_RATIO,
         "min_terminal_runs": MIN_EVALUATED_DAGS,
-        "insufficient_volume": insufficient,
-        "consecutive_bad_windows": next_state.consec_bad,
-        "consecutive_good_windows": next_state.consec_good,
-        "trigger_after_bad_windows": TRIGGER_BAD_WINDOWS,
-        "resolve_after_good_windows": RESOLVE_GOOD_WINDOWS,
+        "insufficient_volume": stats.insufficient_volume,
         "top_failed_dags": [
             {"dag_id": dag_id, "state": "failed"}
             for dag_id in stats.failed_dags[:TOP_FAILED_DAGS_LIMIT]
         ],
     }
-    http_status = 503 if next_state.status == "degraded" else 200
     return payload, http_status
 
 
@@ -170,9 +152,7 @@ def _fetch_last_state_for_dag(base_url: str, api_token: str, dag_id: str) -> str
     return _extract_state(dag_runs[0])
 
 
-def _build_stats(
-    checked_at: datetime, active_dags: set[str], latest_state_by_dag: dict[str, str]
-) -> FleetStats:
+def _build_stats(active_dags: set[str], latest_state_by_dag: dict[str, str]) -> FleetStats:
     evaluated_dags = len(latest_state_by_dag)
     failed_dags = sorted(
         dag_id for dag_id, state in latest_state_by_dag.items() if state == "failed"
@@ -182,9 +162,10 @@ def _build_stats(
         1 for state in latest_state_by_dag.values() if state not in TERMINAL_STATES
     )
     failure_ratio = failed_runs / evaluated_dags if evaluated_dags else 0.0
+    insufficient_volume = evaluated_dags < MIN_EVALUATED_DAGS
 
     return FleetStats(
-        checked_at=checked_at,
+        checked_at=datetime.now(timezone.utc),
         active_dags_total=len(active_dags),
         evaluated_dags=evaluated_dags,
         dags_without_runs=max(0, len(active_dags) - evaluated_dags),
@@ -192,42 +173,8 @@ def _build_stats(
         failed_dags=failed_dags,
         failed_runs=failed_runs,
         failure_ratio=failure_ratio,
+        insufficient_volume=insufficient_volume,
     )
-
-
-def _advance_state(
-    state: DetectorState, stats: FleetStats
-) -> tuple[DetectorState, str | None, bool]:
-    insufficient = stats.evaluated_dags < MIN_EVALUATED_DAGS
-    transition: str | None = None
-
-    if insufficient:
-        next_state = DetectorState(
-            status=state.status,
-            consec_bad=0,
-            consec_good=0,
-            last_transition_at=state.last_transition_at,
-        )
-        return next_state, transition, True
-
-    is_bad_window = stats.failure_ratio >= FAILURE_THRESHOLD_RATIO
-    if is_bad_window:
-        state.consec_bad += 1
-        state.consec_good = 0
-    else:
-        state.consec_good += 1
-        state.consec_bad = 0
-
-    if state.status != "degraded" and state.consec_bad >= TRIGGER_BAD_WINDOWS:
-        state.status = "degraded"
-        state.last_transition_at = stats.checked_at.isoformat()
-        transition = "triggered"
-    elif state.status == "degraded" and state.consec_good >= RESOLVE_GOOD_WINDOWS:
-        state.status = "healthy"
-        state.last_transition_at = stats.checked_at.isoformat()
-        transition = "resolved"
-
-    return state, transition, False
 
 
 def _build_session(api_token: str) -> requests.Session:
@@ -283,60 +230,8 @@ def _extract_state(run: dict[str, Any]) -> str:
     return ""
 
 
-def _load_state(path: str) -> DetectorState:
-    try:
-        with open(path, "r", encoding="utf-8") as state_file:
-            payload = json.load(state_file)
-    except FileNotFoundError:
-        return DetectorState()
-    except (OSError, json.JSONDecodeError):
-        logging.exception("Could not load detector state file: %s", path)
-        return DetectorState()
-
-    if not isinstance(payload, dict):
-        return DetectorState()
-
-    status = payload.get("status")
-    if status not in {"healthy", "degraded"}:
-        status = "healthy"
-    return DetectorState(
-        status=status,
-        consec_bad=_safe_int(payload.get("consec_bad"), 0),
-        consec_good=_safe_int(payload.get("consec_good"), 0),
-        last_transition_at=payload.get("last_transition_at"),
-    )
-
-
-def _save_state(path: str, state: DetectorState) -> None:
-    try:
-        with open(path, "w", encoding="utf-8") as state_file:
-            json.dump(
-                {
-                    "status": state.status,
-                    "consec_bad": state.consec_bad,
-                    "consec_good": state.consec_good,
-                    "last_transition_at": state.last_transition_at,
-                },
-                state_file,
-            )
-    except OSError:
-        logging.exception("Could not save detector state file: %s", path)
-
-
-def _safe_int(value: Any, default: int) -> int:
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError):
-        return default
-    return parsed if parsed >= 0 else default
-
-
 def _require_env(name: str) -> str:
     value = os.getenv(name, "").strip()
     if not value:
         raise AirflowFleetHealthError(f"{name} is not configured.")
     return value
-
-
-def _now_utc() -> datetime:
-    return datetime.now(timezone.utc)
