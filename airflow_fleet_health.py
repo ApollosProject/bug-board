@@ -53,10 +53,8 @@ def evaluate_fleet_health() -> tuple[dict[str, Any], int]:
     http_status = 503 if is_degraded else 200
 
     payload = {
-        "mode": "active_dags_latest_run",
         "status": status,
         "checked_at": stats.checked_at.isoformat(),
-        "source": "per_dag_runs_endpoint",
         "active_dags_total": stats.active_dags_total,
         "evaluated_dags": stats.evaluated_dags,
         "dags_without_runs": stats.dags_without_runs,
