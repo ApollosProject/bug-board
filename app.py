@@ -12,6 +12,10 @@ from flask import Flask, abort, jsonify, render_template, request
 from airflow_fleet_health import AirflowFleetHealthError, evaluate_fleet_health
 from config import load_config
 from constants import PRIORITY_TO_SCORE
+from fleet_health_cache import (
+    get_cached_fleet_health,
+    should_use_redis_cache,
+)
 from github import merged_prs_by_author, merged_prs_by_reviewer
 from linear.issues import (
     by_assignee,
@@ -58,12 +62,23 @@ def airflow_fleet_health():
         if bearer_token != expected_token and request_token != expected_token:
             abort(401)
 
-    try:
-        payload, status = evaluate_fleet_health()
-    except AirflowFleetHealthError:
-        logging.exception("Airflow fleet health evaluation failed")
-        payload = {"status": "unknown"}
-        status = 503
+    if should_use_redis_cache():
+        cached = get_cached_fleet_health()
+        if cached is not None:
+            payload, status = cached
+        else:
+            logging.warning(
+                "Airflow fleet health cache miss or stale value while REDIS_URL is configured"
+            )
+            payload = {"status": "unknown"}
+            status = 503
+    else:
+        try:
+            payload, status = evaluate_fleet_health()
+        except AirflowFleetHealthError:
+            logging.exception("Airflow fleet health evaluation failed")
+            payload = {"status": "unknown"}
+            status = 503
 
     response = jsonify(payload)
     response.headers["Cache-Control"] = "no-store"

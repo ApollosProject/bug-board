@@ -12,6 +12,7 @@ from tenacity import before_sleep_log, retry, stop_after_attempt, wait_fixed
 
 from config import load_config
 from constants import PRIORITY_TO_SCORE
+from fleet_health_cache import refresh_fleet_health_cache, should_use_redis_cache
 from github import (
     get_pr_diff,
     get_prs_waiting_for_review_by_reviewer,
@@ -44,6 +45,7 @@ MAX_DIFF_CHARS = 12000
 MAX_DIFF_FILES = 20
 RECON_PROJECT_NAME = os.getenv("RECON_PROJECT_NAME", "RECON Issues")
 RECON_TZ = os.getenv("RECON_TIMEZONE", "America/New_York")
+FLEET_HEALTH_REFRESH_DEFAULT_SECONDS = 60
 
 
 def _today_in_tz(tz_name: str) -> date:
@@ -53,6 +55,17 @@ def _today_in_tz(tz_name: str) -> date:
     except Exception:
         tz = timezone.utc
     return datetime.now(tz).date()
+
+
+def _read_positive_int_env(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return default
+    return parsed if parsed > 0 else default
 
 
 def _parse_linear_dt(value: str | None) -> datetime | None:
@@ -98,6 +111,16 @@ def post_to_slack(markdown: str):
     if response.status_code != 200:
         logging.error("Slack API returned %s: %s", response.status_code, response.text)
     response.raise_for_status()
+
+
+def refresh_airflow_fleet_health_cache_job():
+    payload, status = refresh_fleet_health_cache()
+    logging.info(
+        "Refreshed airflow fleet health cache (status=%s, http_status=%s, evaluated_dags=%s)",
+        payload.get("status"),
+        status,
+        payload.get("evaluated_dags"),
+    )
 
 
 def post_to_manager_slack(markdown: str):
@@ -954,6 +977,8 @@ def post_weekly_changelog():
 
 
 if os.getenv("DEBUG") == "true":
+    if should_use_redis_cache():
+        refresh_airflow_fleet_health_cache_job()
     # post_inactive_engineers()
     # post_priority_bugs()
     # post_leaderboard()
@@ -963,6 +988,22 @@ if os.getenv("DEBUG") == "true":
     # post_friday_deadlines()
     post_recon_issues()
 else:
+    if should_use_redis_cache():
+        refresh_interval_seconds = _read_positive_int_env(
+            "AIRFLOW_FLEET_HEALTH_REFRESH_SECONDS",
+            FLEET_HEALTH_REFRESH_DEFAULT_SECONDS,
+        )
+        schedule.every(refresh_interval_seconds).seconds.do(
+            refresh_airflow_fleet_health_cache_job
+        )
+        refresh_airflow_fleet_health_cache_job()
+        logging.info(
+            "Scheduled airflow fleet health cache refresh every %s seconds",
+            refresh_interval_seconds,
+        )
+    else:
+        logging.info("REDIS_URL not set; airflow fleet health cache refresh is disabled")
+
     # schedule.every().friday.at("13:00").do(post_inactive_engineers)
     # schedule.every(1).days.at("12:00").do(post_priority_bugs)
     # schedule.every().friday.at("20:00").do(post_leaderboard)

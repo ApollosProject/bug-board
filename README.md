@@ -31,6 +31,10 @@ mypy .
 - `AIRFLOW_API_BASE_URL` – Base URL for Airflow REST API (for example: `https://airflow.example.com`)
 - `AIRFLOW_API_TOKEN` – Bearer token for Airflow API
 - `AIRFLOW_FLEET_MONITOR_TOKEN` – Optional token required by `/airflow-fleet-health`
+- `REDIS_URL` – Optional Redis connection string for cached `/airflow-fleet-health` responses
+- `AIRFLOW_FLEET_HEALTH_REFRESH_SECONDS` – Optional worker refresh interval for cached fleet health (default: `60`)
+- `AIRFLOW_FLEET_HEALTH_MAX_STALE_SECONDS` – Optional max age accepted by the web endpoint when reading cached data (default: `180`)
+- `AIRFLOW_FLEET_HEALTH_REDIS_TTL_SECONDS` – Optional Redis TTL for cached fleet health record (default: `900`)
 
 These can be placed in a `.env` file or exported in your shell.
 
@@ -63,11 +67,17 @@ The endpoint:
 - Calls the Airflow REST API and inspects each active DAG's latest run state
 - Computes failed/evaluated ratio across active DAGs (not time-window based)
 - Returns `503` when failure ratio is `>= 0.35` (with at least 20 DAGs evaluated), otherwise `200`
+- When `REDIS_URL` is configured, reads fleet health from Redis for fast responses
+- When `REDIS_URL` is not configured, bypasses Redis and evaluates directly per request
+- With `REDIS_URL` configured, cache miss/stale returns `{"status":"unknown"}` with `503` until worker refresh succeeds
 
 This checker is intentionally not highly configurable. It uses fixed settings:
 
 - failure threshold ratio: `0.35`
 - minimum evaluated DAGs: `20`
+
+When Redis caching is enabled, run the worker process (`python jobs.py`) so it refreshes
+the cached fleet health value on the configured interval.
 
 If `AIRFLOW_FLEET_MONITOR_TOKEN` is set, Better Stack must send either:
 
