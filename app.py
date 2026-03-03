@@ -1,12 +1,14 @@
 import re
 import time
+import os
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
 from datetime import datetime
 from functools import lru_cache
 from typing import Any, TypedDict, TypeVar
 
-from flask import Flask, abort, render_template, request
+from flask import Flask, abort, jsonify, render_template, request
 
+from airflow_fleet_health import AirflowFleetHealthError, evaluate_fleet_health
 from config import load_config
 from constants import PRIORITY_TO_SCORE
 from github import merged_prs_by_author, merged_prs_by_reviewer
@@ -44,6 +46,26 @@ app = Flask(__name__)
 # Maximum number of distinct _build_index_context results to cache.
 # This can be increased or made configurable based on production usage patterns.
 INDEX_CONTEXT_CACHE_MAXSIZE = 16
+
+
+@app.route("/airflow-fleet-health")
+def airflow_fleet_health():
+    expected_token = os.getenv("AIRFLOW_FLEET_MONITOR_TOKEN")
+    if expected_token:
+        bearer_token = request.headers.get("Authorization", "").removeprefix("Bearer ")
+        request_token = request.args.get("token", default="", type=str)
+        if bearer_token != expected_token and request_token != expected_token:
+            abort(401)
+
+    try:
+        payload, status = evaluate_fleet_health()
+    except AirflowFleetHealthError as err:
+        payload = {"status": "unknown", "error": str(err)}
+        status = 503
+
+    response = jsonify(payload)
+    response.headers["Cache-Control"] = "no-store"
+    return response, status
 
 
 def record_breakdown(
