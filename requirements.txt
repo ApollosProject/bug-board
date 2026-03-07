@@ -26,7 +26,7 @@ MarkupSafe==3.0.3
 mccabe==0.7.0
 multidict==6.1.0
 mypy-extensions==1.0.0
-packaging==24.2
+packaging==26.0
 pathspec==0.12.1
 platformdirs==4.5.1
 propcache==0.4.1
