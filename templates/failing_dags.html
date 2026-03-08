@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}Failing DAGs{% endblock %}
+
+{% block extra_head %}
+<style>
+  .status-pill {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .status-pill--healthy {
+    background: rgba(46, 125, 50, 0.15);
+    color: #1b5e20;
+  }
+
+  .status-pill--degraded,
+  .status-pill--unknown {
+    background: rgba(183, 28, 28, 0.12);
+    color: #8e0000;
+  }
+
+  .metric-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    margin-bottom: 1.5rem;
+  }
+
+  .metric-card p:last-child,
+  .empty-state p:last-child {
+    margin-bottom: 0;
+  }
+
+  .dag-table code {
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<section>
+  <div class="section-header">
+    <div>
+      <h1>Failing DAGs</h1>
+      <p>Latest Airflow fleet snapshot for active DAGs.</p>
+    </div>
+    <p>
+      <a href="{{ astro_failed_dags_url }}" target="_blank" rel="noopener noreferrer">
+        Open in Astro
+      </a>
+    </p>
+  </div>
+
+  <article>
+    <p>
+      <span class="status-pill status-pill--{{ status }}">{{ status }}</span>
+    </p>
+    <p>
+      {% if checked_at %}
+        Last checked {{ checked_at }}
+      {% else %}
+        No successful check timestamp is available.
+      {% endif %}
+      {% if http_status == 503 %}
+        The underlying fleet check is currently returning HTTP 503.
+      {% endif %}
+    </p>
+  </article>
+
+  <div class="metric-grid">
+    <article class="metric-card">
+      <header><strong>Failing DAGs</strong></header>
+      <p>{{ failed_dag_count }}</p>
+    </article>
+    <article class="metric-card">
+      <header><strong>Active DAGs</strong></header>
+      <p>{{ total_active_dags if total_active_dags is not none else "Unavailable" }}</p>
+    </article>
+    <article class="metric-card">
+      <header><strong>Evaluated DAGs</strong></header>
+      <p>{{ evaluated_dags if evaluated_dags is not none else "Unavailable" }}</p>
+    </article>
+    <article class="metric-card">
+      <header><strong>Failure Ratio</strong></header>
+      <p>
+        {% if failure_ratio is not none and threshold_ratio is not none %}
+          {{ "%.1f"|format(failure_ratio * 100) }}% of {{ "%.1f"|format(threshold_ratio * 100) }}% threshold
+        {% else %}
+          Unavailable
+        {% endif %}
+      </p>
+    </article>
+    <article class="metric-card">
+      <header><strong>Missing Latest Run</strong></header>
+      <p>{{ dags_without_runs if dags_without_runs is not none else "Unavailable" }}</p>
+    </article>
+    <article class="metric-card">
+      <header><strong>Failed Fetches</strong></header>
+      <p>{{ failed_fetches if failed_fetches is not none else "Unavailable" }}</p>
+    </article>
+    <article class="metric-card">
+      <header><strong>Non-Terminal DAGs</strong></header>
+      <p>{{ non_terminal_dags if non_terminal_dags is not none else "Unavailable" }}</p>
+    </article>
+  </div>
+
+  {% if failed_dags %}
+    <article>
+      <header>
+        <strong>DAG List</strong>
+      </header>
+      {% if is_partial_failed_dag_list %}
+        <p>
+          This cache entry only contains a partial DAG list. Refresh the worker to
+          repopulate the full failing DAG set.
+        </p>
+      {% endif %}
+      <div class="overflow-auto">
+        <table class="dag-table">
+          <thead>
+            <tr>
+              <th scope="col">DAG ID</th>
+              <th scope="col">State</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for dag in failed_dags %}
+              <tr>
+                <td><code>{{ dag.dag_id }}</code></td>
+                <td>{{ dag.state }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </article>
+  {% elif status == "healthy" %}
+    <article class="empty-state">
+      <p>No failing DAGs were found in the latest snapshot.</p>
+    </article>
+  {% else %}
+    <article class="empty-state">
+      <p>Failing DAG data is currently unavailable.</p>
+    </article>
+  {% endif %}
+</section>
+{% endblock %}
