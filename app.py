@@ -51,38 +51,128 @@ app = Flask(__name__)
 # Maximum number of distinct _build_index_context results to cache.
 # This can be increased or made configurable based on production usage patterns.
 INDEX_CONTEXT_CACHE_MAXSIZE = 16
+ASTRO_FAILED_DAGS_URL = (
+    "https://cloud.astronomer.io/cljsvo8d800yz01giqt70a7e7/"
+    "dags?status=failed&state=active"
+)
+
+
+def _get_airflow_fleet_health_payload() -> tuple[dict[str, Any], int]:
+    if should_use_redis_cache():
+        cached = get_cached_fleet_health()
+        if cached is not None:
+            return cached
+        logging.warning(
+            "Airflow fleet health cache miss or stale value while REDIS_URL is configured"
+        )
+        return {"status": "unknown"}, 503
+
+    try:
+        return evaluate_fleet_health()
+    except AirflowFleetHealthError:
+        logging.exception("Airflow fleet health evaluation failed")
+        return {"status": "unknown"}, 503
+
+
+def _coerce_failed_dag_entries(value: Any) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+
+    entries: list[dict[str, str]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        dag_id = item.get("dag_id")
+        if not isinstance(dag_id, str) or not dag_id:
+            continue
+        state = item.get("state")
+        entries.append(
+            {
+                "dag_id": dag_id,
+                "state": state if isinstance(state, str) and state else "unknown",
+            }
+        )
+    return entries
+
+
+def _get_failed_dag_entries(payload: dict[str, Any]) -> tuple[list[dict[str, str]], bool]:
+    failed_dags = _coerce_failed_dag_entries(payload.get("failed_dags"))
+    if failed_dags:
+        return failed_dags, False
+
+    top_failed_dags = _coerce_failed_dag_entries(payload.get("top_failed_dags"))
+    failed_runs = payload.get("failed_runs")
+    is_partial = (
+        bool(top_failed_dags)
+        and isinstance(failed_runs, int)
+        and len(top_failed_dags) < failed_runs
+    )
+    return top_failed_dags, is_partial
+
+
+def _format_checked_at(value: Any) -> str | None:
+    if not isinstance(value, str) or not value:
+        return None
+
+    normalized = value.replace("Z", "+00:00")
+    try:
+        checked_at = datetime.fromisoformat(normalized)
+    except ValueError:
+        return value
+
+    if checked_at.tzinfo is None:
+        return checked_at.strftime("%Y-%m-%d %I:%M:%S %p")
+    return checked_at.astimezone().strftime("%Y-%m-%d %I:%M:%S %p %Z")
+
+
+def _require_airflow_fleet_monitor_token() -> None:
+    expected_token = os.getenv("AIRFLOW_FLEET_MONITOR_TOKEN")
+    if not expected_token:
+        return
+
+    bearer_token = request.headers.get("Authorization", "").removeprefix("Bearer ")
+    request_token = request.args.get("token", default="", type=str)
+    if bearer_token != expected_token and request_token != expected_token:
+        abort(401)
 
 
 @app.route("/airflow-fleet-health")
 def airflow_fleet_health():
-    expected_token = os.getenv("AIRFLOW_FLEET_MONITOR_TOKEN")
-    if expected_token:
-        bearer_token = request.headers.get("Authorization", "").removeprefix("Bearer ")
-        request_token = request.args.get("token", default="", type=str)
-        if bearer_token != expected_token and request_token != expected_token:
-            abort(401)
+    _require_airflow_fleet_monitor_token()
 
-    if should_use_redis_cache():
-        cached = get_cached_fleet_health()
-        if cached is not None:
-            payload, status = cached
-        else:
-            logging.warning(
-                "Airflow fleet health cache miss or stale value while REDIS_URL is configured"
-            )
-            payload = {"status": "unknown"}
-            status = 503
-    else:
-        try:
-            payload, status = evaluate_fleet_health()
-        except AirflowFleetHealthError:
-            logging.exception("Airflow fleet health evaluation failed")
-            payload = {"status": "unknown"}
-            status = 503
+    payload, status = _get_airflow_fleet_health_payload()
 
     response = jsonify(payload)
     response.headers["Cache-Control"] = "no-store"
     return response, status
+
+
+@app.route("/failing-dags")
+def failing_dags_dashboard():
+    _require_airflow_fleet_monitor_token()
+    payload, status = _get_airflow_fleet_health_payload()
+    failed_dags, is_partial_list = _get_failed_dag_entries(payload)
+    failed_runs = payload.get("failed_runs")
+
+    return render_template(
+        "failing_dags.html",
+        astro_failed_dags_url=ASTRO_FAILED_DAGS_URL,
+        checked_at=_format_checked_at(payload.get("checked_at")),
+        dags_without_runs=payload.get("dags_without_runs"),
+        evaluated_dags=payload.get("evaluated_dags"),
+        failed_dag_count=(
+            failed_runs if isinstance(failed_runs, int) else len(failed_dags)
+        ),
+        failed_dags=failed_dags,
+        failed_fetches=payload.get("failed_fetches"),
+        failure_ratio=payload.get("failure_ratio"),
+        http_status=status,
+        is_partial_failed_dag_list=is_partial_list,
+        non_terminal_dags=payload.get("non_terminal_dags"),
+        status=payload.get("status", "unknown"),
+        threshold_ratio=payload.get("threshold_ratio"),
+        total_active_dags=payload.get("active_dags_total"),
+    )
 
 
 def record_breakdown(
