@@ -125,14 +125,20 @@ def _format_checked_at(value: Any) -> str | None:
     return checked_at.astimezone().strftime("%Y-%m-%d %I:%M:%S %p %Z")
 
 
+def _require_airflow_fleet_monitor_token() -> None:
+    expected_token = os.getenv("AIRFLOW_FLEET_MONITOR_TOKEN")
+    if not expected_token:
+        return
+
+    bearer_token = request.headers.get("Authorization", "").removeprefix("Bearer ")
+    request_token = request.args.get("token", default="", type=str)
+    if bearer_token != expected_token and request_token != expected_token:
+        abort(401)
+
+
 @app.route("/airflow-fleet-health")
 def airflow_fleet_health():
-    expected_token = os.getenv("AIRFLOW_FLEET_MONITOR_TOKEN")
-    if expected_token:
-        bearer_token = request.headers.get("Authorization", "").removeprefix("Bearer ")
-        request_token = request.args.get("token", default="", type=str)
-        if bearer_token != expected_token and request_token != expected_token:
-            abort(401)
+    _require_airflow_fleet_monitor_token()
 
     payload, status = _get_airflow_fleet_health_payload()
 
@@ -143,6 +149,7 @@ def airflow_fleet_health():
 
 @app.route("/failing-dags")
 def failing_dags_dashboard():
+    _require_airflow_fleet_monitor_token()
     payload, status = _get_airflow_fleet_health_payload()
     failed_dags, is_partial_list = _get_failed_dag_entries(payload)
     failed_runs = payload.get("failed_runs")

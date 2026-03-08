@@ -156,6 +156,29 @@ class FailingDagsDashboardTest(unittest.TestCase):
         self.assertIn("beta_dag", body)
         self.assertIn("This cache entry only contains a partial DAG list.", body)
 
+    def test_dashboard_requires_monitor_token_when_configured(self):
+        with patch.dict(app_module.os.environ, {"AIRFLOW_FLEET_MONITOR_TOKEN": "secret"}):
+            response = self.client.get("/failing-dags")
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_dashboard_allows_query_token_when_monitor_token_configured(self):
+        payload = {
+            "status": "healthy",
+            "failed_runs": 0,
+            "failed_dags": [],
+        }
+
+        with patch.dict(app_module.os.environ, {"AIRFLOW_FLEET_MONITOR_TOKEN": "secret"}):
+            with patch.object(
+                app_module,
+                "_get_airflow_fleet_health_payload",
+                return_value=(payload, 200),
+            ):
+                response = self.client.get("/failing-dags?token=secret")
+
+        self.assertEqual(response.status_code, 200)
+
 
 if __name__ == "__main__":
     unittest.main()
