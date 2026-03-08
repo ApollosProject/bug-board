@@ -6,6 +6,7 @@ tracker:
   active_states:
     - Todo
     - In Progress
+    - Human Review
     - Merging
     - Rework
   terminal_states:
@@ -99,8 +100,15 @@ State handling:
 - When implementation is complete, validation passes, the PR is up, and there are no unresolved actionable review comments, move the issue to `Human Review`.
 - While an issue is in `Human Review`, do not code. Poll GitHub PR reviews and comments for the human decision.
 - If review feedback requires code changes, move the issue to `Rework` and treat it as a fresh implementation pass.
+- Do not add GitHub reviewers yourself. Do not infer reviewer choices from repo history, config, or recent activity. Leave reviewer requests empty unless GitHub repository automation adds them or a human explicitly requests specific reviewers.
 - A human must move the issue to `Merging` to authorize landing the PR.
 - Only merge while the issue is in `Merging`.
+- If a newer linked GitHub PR is a revert of this issue's shipped work, treat that revert PR as the source of truth for the ticket outcome instead of the earlier merged implementation PR.
+- If a linked revert PR is opened for this issue, immediately move the issue to `Rework`, record the revert PR in the workpad, and stop any "already merged, close the ticket" cleanup logic.
+- While a linked revert PR for this issue remains open, do not move the issue to `Done`, do not merge anything for the issue, and do not start a fresh implementation pass unless the revert PR has merged and the ticket is still expected to be re-fixed.
+- If the linked revert PR merges, keep the issue in `Rework`, sync to the new `origin/main`, and treat the ticket as needing a fresh implementation pass from the reverted baseline.
+- If the linked revert PR closes without merging, clear the rollback note from the workpad and resume the normal state flow based on the current code on `main`.
+- Never move the issue to `Done` while there is a newer open or merged revert PR linked to the issue unless that revert has itself been superseded by a later merged forward-fix PR for the same ticket.
 - After merge completes, move the issue to `Done`.
 
 Repo notes:
