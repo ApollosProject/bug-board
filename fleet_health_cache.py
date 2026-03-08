@@ -6,10 +6,15 @@ from functools import lru_cache
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
+redis_module: Any | None
+
 try:
-    import redis
+    import redis as redis_module
 except ImportError:  # pragma: no cover - optional dependency for cache deployments
-    redis = None
+    redis_module = None
+
+
+redis: Any | None = redis_module
 
 
 FLEET_HEALTH_CACHE_KEY = "airflow:fleet_health:latest"

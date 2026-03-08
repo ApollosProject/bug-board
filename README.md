@@ -68,9 +68,13 @@ The endpoint:
 - Calls the Airflow REST API and inspects each active DAG's latest run state
 - Computes failed/evaluated ratio across active DAGs (not time-window based)
 - Returns `503` when failure ratio is `>= 0.10` (with at least 20 DAGs evaluated), otherwise `200`
+- Includes both `top_failed_dags` and the full `failed_dags` list in the JSON payload
 - When `REDIS_URL` is configured, reads fleet health from Redis for fast responses
 - When `REDIS_URL` is not configured, bypasses Redis and evaluates directly per request
 - With `REDIS_URL` configured, cache miss/stale returns `{"status":"unknown"}` with `503` until worker refresh succeeds
+
+For humans, `GET /failing-dags` renders the same fleet-health data as an internal dashboard page
+and links back to the Astro filtered DAG view.
 
 This checker is intentionally not highly configurable. It uses fixed settings:
 
