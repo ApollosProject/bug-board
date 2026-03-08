@@ -3,13 +3,13 @@ import logging
 import os
 import time
 from functools import lru_cache
-from typing import Any
+from typing import Any, cast
 from urllib.parse import parse_qsl, urlsplit
 
 try:
     import redis
 except ImportError:  # pragma: no cover - optional dependency for cache deployments
-    redis = None
+    redis = cast(Any, None)
 
 
 FLEET_HEALTH_CACHE_KEY = "airflow:fleet_health:latest"
