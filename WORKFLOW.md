@@ -6,8 +6,11 @@ tracker:
   active_states:
     - Todo
     - In Progress
-    - In Review
+    - Merging
+    - Rework
   terminal_states:
+    - Closed
+    - Cancelled
     - Canceled
     - Duplicate
     - Done
@@ -85,16 +88,20 @@ Linear workflow conventions for the `SYM` team:
 - `Backlog` means out of scope for automation. Do not modify those issues.
 - `Todo` means queued. Move it to `In Progress` before active implementation work.
 - `In Progress` means active implementation.
-- `In Review` means a PR exists and the work is waiting on review or merge.
-- `Done`, `Canceled`, and `Duplicate` are terminal.
+- `Human Review` means a PR exists and the work is waiting on human approval.
+- `Merging` means a human approved the work and Symphony should land it.
+- `Rework` means review feedback requires another implementation pass.
+- `Done`, `Closed`, `Cancelled`, `Canceled`, and `Duplicate` are terminal.
 
 State handling:
 
 - When you start working on a `Todo` issue, move it to `In Progress`.
-- When implementation is complete, validation passes, the PR is up, and there are no unresolved actionable review comments, move the issue to `In Review`.
-- While an issue is in `In Review`, poll for PR reviews and comments.
-- If review feedback requires code changes, move the issue back to `In Progress`, address the feedback, revalidate, and return it to `In Review`.
-- If the PR is approved and checks are green, merge it, then move the issue to `Done`.
+- When implementation is complete, validation passes, the PR is up, and there are no unresolved actionable review comments, move the issue to `Human Review`.
+- While an issue is in `Human Review`, do not code. Poll GitHub PR reviews and comments for the human decision.
+- If review feedback requires code changes, move the issue to `Rework` and treat it as a fresh implementation pass.
+- A human must move the issue to `Merging` to authorize landing the PR.
+- Only merge while the issue is in `Merging`.
+- After merge completes, move the issue to `Done`.
 
 Repo notes:
 
