@@ -26,8 +26,9 @@
   }
 
   .status-pill--setup-required {
-    background: rgba(180, 111, 0, 0.14);
-    color: #8a5200;
+    background: #f3d8a8;
+    color: #613700;
+    border: 1px solid #d2a054;
   }
 
   .metric-grid {
@@ -56,30 +57,75 @@
   }
 
   .setup-state {
-    border: 1px solid rgba(180, 111, 0, 0.16);
+    --setup-bg-start: #fff7e8;
+    --setup-bg-end: #fff0d7;
+    --setup-border: #d2a054;
+    --setup-panel-bg: rgba(255, 253, 248, 0.96);
+    --setup-panel-border: #e3c28f;
+    --setup-ink: #432600;
+    --setup-muted: #6b4610;
+    --setup-code-bg: #f7e2bc;
+    --setup-code-border: #d9b16d;
+    border: 1px solid var(--setup-border);
     background: linear-gradient(
       135deg,
-      rgba(255, 246, 229, 0.96),
-      rgba(255, 251, 242, 0.98)
+      var(--setup-bg-start),
+      var(--setup-bg-end)
     );
+    color: var(--setup-ink);
+    box-shadow: 0 1rem 2.5rem rgba(97, 55, 0, 0.08);
   }
 
   .setup-state h2 {
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.35rem;
+    color: var(--setup-ink);
+  }
+
+  .setup-state p,
+  .setup-state li {
+    color: var(--setup-muted);
+  }
+
+  .setup-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-bottom: 0.75rem;
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid rgba(97, 55, 0, 0.14);
+    background: rgba(255, 255, 255, 0.58);
+    color: var(--setup-ink);
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .setup-lede {
+    font-size: 1.02rem;
+    line-height: 1.55;
   }
 
   .setup-grid {
     display: grid;
     gap: 1rem;
     grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-    margin-top: 1rem;
+    margin-top: 1.25rem;
   }
 
   .setup-panel {
     padding: 1rem;
     border-radius: 0.85rem;
-    border: 1px solid rgba(180, 111, 0, 0.14);
-    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid var(--setup-panel-border);
+    background: var(--setup-panel-bg);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  }
+
+  .setup-panel strong {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--setup-ink);
   }
 
   .setup-panel > *:last-child {
@@ -89,6 +135,45 @@
   .env-list {
     margin: 0;
     padding-left: 1.1rem;
+  }
+
+  .env-list li + li {
+    margin-top: 0.35rem;
+  }
+
+  .setup-state code {
+    display: inline-block;
+    padding: 0.15rem 0.4rem;
+    border-radius: 0.4rem;
+    border: 1px solid var(--setup-code-border);
+    background: var(--setup-code-bg);
+    color: var(--setup-ink);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .status-pill--setup-required {
+      background: #5d3b06;
+      color: #ffe2a8;
+      border-color: #9f6d1a;
+    }
+
+    .setup-state {
+      --setup-bg-start: #382403;
+      --setup-bg-end: #241700;
+      --setup-border: #8f6118;
+      --setup-panel-bg: rgba(36, 23, 0, 0.9);
+      --setup-panel-border: #6f4b14;
+      --setup-ink: #ffe4ae;
+      --setup-muted: #f4cf88;
+      --setup-code-bg: #533708;
+      --setup-code-border: #8f6118;
+      box-shadow: none;
+    }
+
+    .setup-kicker {
+      border-color: rgba(255, 228, 174, 0.16);
+      background: rgba(14, 9, 0, 0.24);
+    }
   }
 </style>
 {% endblock %}
@@ -112,14 +197,16 @@
       <span class="status-pill status-pill--{{ status_variant }}">{{ status_label }}</span>
     </p>
     {% if has_missing_airflow_credentials %}
-      <h2>Airflow access is not configured for this app.</h2>
-      <p>
-        This review app cannot load the failing DAG snapshot until the Airflow API
-        settings below are present.
+      <div class="setup-kicker">Review app setup</div>
+      <h2>Airflow credentials are missing for this app.</h2>
+      <p class="setup-lede">
+        This review app cannot load the failing DAG snapshot yet. Add the missing
+        Airflow API values below, then refresh the page to unlock the live
+        dashboard.
       </p>
       <div class="setup-grid">
         <div class="setup-panel">
-          <strong>Missing config vars</strong>
+          <strong>Required before this page can load</strong>
           <ul class="env-list">
             {% for env_name in missing_airflow_env_vars %}
               <li><code>{{ env_name }}</code></li>
@@ -127,10 +214,10 @@
           </ul>
         </div>
         <div class="setup-panel">
-          <strong>What happens after setup</strong>
+          <strong>What you will see after setup</strong>
           <p>
-            Add the missing values to the review app and refresh this page. The
-            latest fleet snapshot and failing DAG list will appear automatically.
+            Once these values are present, the next refresh will show the latest
+            fleet snapshot, health metrics, and failing DAG list automatically.
           </p>
         </div>
       </div>
