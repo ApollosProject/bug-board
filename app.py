@@ -197,7 +197,7 @@ def _require_airflow_fleet_monitor_token() -> None:
 def airflow_fleet_health():
     _require_airflow_fleet_monitor_token()
 
-    payload, status = _get_airflow_fleet_health_payload()
+    payload, status = _get_airflow_fleet_health_payload(allow_live_eval=False)
 
     response = jsonify(payload)
     response.headers["Cache-Control"] = "no-store"
