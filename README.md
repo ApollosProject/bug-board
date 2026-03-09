@@ -4,12 +4,13 @@ A small Flask application that displays Linear issues and GitHub pull request st
 
 ## Setup
 
-1. Create a virtual environment with Python 3.13 and install dependencies.
-   The repo pins `3.13` in `.python-version`, so make sure your shell honors
-   that version (for example via `pyenv`) before creating the venv:
+1. Create a virtual environment and install dependencies.
+   The repo currently pins Python `3.13` in `.python-version`, so make sure
+   your shell honors that version (for example via `pyenv`) before creating
+   the venv:
 
 ```bash
-python3.13 -m venv venv
+python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt  # includes flake8 for linting
 ```
