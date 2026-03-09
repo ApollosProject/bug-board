@@ -447,6 +447,75 @@ class FailingDagsDashboardTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 401)
 
+    def test_health_endpoint_skips_live_eval_without_redis(self):
+        with patch.dict(
+            app_module.os.environ,
+            {
+                "AIRFLOW_API_BASE_URL": "https://airflow.example.com",
+                "AIRFLOW_API_TOKEN": "token",
+            },
+            clear=False,
+        ):
+            app_module.os.environ.pop("AIRFLOW_FLEET_MONITOR_TOKEN", None)
+            app_module.os.environ.pop("REDIS_URL", None)
+
+            with patch.object(app_module, "should_use_redis_cache", return_value=False):
+                with patch.object(app_module, "evaluate_fleet_health") as evaluate_mock:
+                    response = self.client.get("/airflow-fleet-health")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.get_json(), {"status": "unknown"})
+        evaluate_mock.assert_not_called()
+
+    def test_health_endpoint_returns_setup_required_payload_without_redis_when_creds_missing(self):
+        with patch.dict(app_module.os.environ, {}, clear=False):
+            for env_name in (
+                "AIRFLOW_API_BASE_URL",
+                "AIRFLOW_API_TOKEN",
+                "AIRFLOW_FLEET_MONITOR_TOKEN",
+                "REDIS_URL",
+            ):
+                app_module.os.environ.pop(env_name, None)
+
+            with patch.object(app_module, "should_use_redis_cache", return_value=False):
+                with patch.object(app_module, "evaluate_fleet_health") as evaluate_mock:
+                    response = self.client.get("/airflow-fleet-health")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            response.get_json(),
+            {
+                "status": "unknown",
+                "error_type": "missing_airflow_credentials",
+                "missing_airflow_env_vars": [
+                    "AIRFLOW_API_BASE_URL",
+                    "AIRFLOW_API_TOKEN",
+                ],
+            },
+        )
+        evaluate_mock.assert_not_called()
+
+    def test_health_endpoint_skips_live_eval_when_cache_is_unavailable(self):
+        with patch.dict(
+            app_module.os.environ,
+            {
+                "AIRFLOW_API_BASE_URL": "https://airflow.example.com",
+                "AIRFLOW_API_TOKEN": "token",
+                "REDIS_URL": "redis://cache.example.com:6379/0",
+            },
+            clear=False,
+        ):
+            app_module.os.environ.pop("AIRFLOW_FLEET_MONITOR_TOKEN", None)
+
+            with patch.object(app_module, "should_use_redis_cache", return_value=True):
+                with patch.object(app_module, "get_cached_fleet_health", return_value=None):
+                    with patch.object(app_module, "evaluate_fleet_health") as evaluate_mock:
+                        response = self.client.get("/airflow-fleet-health")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.get_json(), {"status": "unknown"})
+        evaluate_mock.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
