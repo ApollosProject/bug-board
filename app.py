@@ -22,7 +22,7 @@ from linear.issues import (
     by_platform,
     by_project,
     get_completed_issues_summary,
-    get_completed_issues_for_person,
+    get_completed_issues_for_person_all_teams,
     get_created_issues,
     get_open_issues,
     get_open_issues_for_person,
@@ -79,6 +79,9 @@ def _add_missing_airflow_config_details(payload: dict[str, Any]) -> dict[str, An
         }
     )
     return updated_payload
+
+
+PERSON_PRIORITY_SUPPORT_TEAM_KEYS = {"SUP", "CUS"}
 
 
 def _get_airflow_fleet_health_payload(
@@ -1322,7 +1325,9 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
     )
     with ThreadPoolExecutor(max_workers=TEAM_THREADPOOL_MAX_WORKERS) as executor:
         open_future = executor.submit(get_open_issues_for_person, login)
-        completed_future = executor.submit(get_completed_issues_for_person, login, days)
+        completed_future = executor.submit(
+            get_completed_issues_for_person_all_teams, login, days
+        )
         github_future = None
         if github_username:
             github_future = executor.submit(
@@ -1351,8 +1356,15 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
     priority_fix_times = []
     priority_bugs_fixed = 0
     for issue in completed_items:
-        is_priority_bug = issue.get("priority", 5) <= 2 and any(
-            lbl.get("name") == "Bug" for lbl in issue.get("labels", {}).get("nodes", [])
+        priority = issue.get("priority", 0)
+        labels = {
+            lbl.get("name")
+            for lbl in issue.get("labels", {}).get("nodes", [])
+            if lbl.get("name")
+        }
+        team_key = (issue.get("team") or {}).get("key")
+        is_priority_bug = 1 <= priority <= 2 and (
+            "Bug" in labels or team_key in PERSON_PRIORITY_SUPPORT_TEAM_KEYS
         )
         if not is_priority_bug:
             continue
