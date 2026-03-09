@@ -739,6 +739,89 @@ def get_completed_issues_for_person(login: str, days=30):
     return issues
 
 
+def get_completed_issues_for_person_all_teams(login: str, days=30):
+    """Return completed issues for a user across all Linear teams."""
+    query = gql(
+        """
+        query CompletedIssuesAllTeams(
+          $login: String!,
+          $days: DateTimeOrDuration,
+          $cursor: String
+        ) {
+          issues(
+            first: 50
+            after: $cursor
+            filter: {
+              assignee: { displayName: { eq: $login } }
+              state: { name: { in: ["Done"] } }
+              completedAt: { gt: $days }
+            }
+            orderBy: updatedAt
+          ) {
+            nodes {
+              id
+              title
+              url
+              completedAt
+              team {
+                key
+                name
+              }
+              project { name }
+              labels {
+                nodes {
+                  name
+                }
+              }
+              priority
+              history {
+                edges {
+                  node {
+                    toAssignee {
+                      displayName
+                    }
+                    updatedAt
+                  }
+                }
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+        """,
+    )
+
+    cursor = None
+    issues = []
+    while True:
+        params = {
+            "login": login,
+            "days": f"-P{days}D",
+            "cursor": cursor,
+        }
+        data = _execute(query, variable_values=params)
+        issues += data["issues"]["nodes"]
+        if not data["issues"]["pageInfo"]["hasNextPage"]:
+            break
+        cursor = data["issues"]["pageInfo"]["endCursor"]
+    for issue in issues:
+        platforms = [
+            tag["name"]
+            for tag in issue.get("labels", {}).get("nodes", [])
+            if tag["name"].lower().replace(" ", "-") in get_platforms()
+        ]
+        issue["platform"] = platforms[0] if platforms else None
+        issue["daysCompleted"] = (
+            datetime.utcnow()
+            - datetime.strptime(issue["completedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
+        ).days
+        issue["assignee_time_to_fix"] = _compute_assignee_time_to_fix(issue, login)
+    return issues
+
+
 def by_project(issues):
     """Group issues by project name."""
     project_issues = {}
