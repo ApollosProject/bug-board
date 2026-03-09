@@ -25,6 +25,11 @@
     color: #8e0000;
   }
 
+  .status-pill--setup-required {
+    background: rgba(180, 111, 0, 0.14);
+    color: #8a5200;
+  }
+
   .metric-grid {
     display: grid;
     gap: 1rem;
@@ -49,6 +54,42 @@
     gap: 1rem;
     flex-wrap: wrap;
   }
+
+  .setup-state {
+    border: 1px solid rgba(180, 111, 0, 0.16);
+    background: linear-gradient(
+      135deg,
+      rgba(255, 246, 229, 0.96),
+      rgba(255, 251, 242, 0.98)
+    );
+  }
+
+  .setup-state h2 {
+    margin-bottom: 0.5rem;
+  }
+
+  .setup-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    margin-top: 1rem;
+  }
+
+  .setup-panel {
+    padding: 1rem;
+    border-radius: 0.85rem;
+    border: 1px solid rgba(180, 111, 0, 0.14);
+    background: rgba(255, 255, 255, 0.72);
+  }
+
+  .setup-panel > *:last-child {
+    margin-bottom: 0;
+  }
+
+  .env-list {
+    margin: 0;
+    padding-left: 1.1rem;
+  }
 </style>
 {% endblock %}
 
@@ -66,58 +107,85 @@
     </p>
   </div>
 
-  <article>
+  <article{% if has_missing_airflow_credentials %} class="setup-state"{% endif %}>
     <p>
-      <span class="status-pill status-pill--{{ status }}">{{ status }}</span>
+      <span class="status-pill status-pill--{{ status_variant }}">{{ status_label }}</span>
     </p>
-    <p>
-      {% if checked_at %}
-        Last checked {{ checked_at }}
-      {% else %}
-        No successful check timestamp is available.
-      {% endif %}
-      {% if http_status == 503 %}
-        The underlying fleet check is currently returning HTTP 503.
-      {% endif %}
-    </p>
-  </article>
-
-  <div class="metric-grid">
-    <article class="metric-card">
-      <header><strong>Failing DAGs</strong></header>
-      <p>{{ failed_dag_count }}</p>
-    </article>
-    <article class="metric-card">
-      <header><strong>Active DAGs</strong></header>
-      <p>{{ total_active_dags if total_active_dags is not none else "Unavailable" }}</p>
-    </article>
-    <article class="metric-card">
-      <header><strong>Evaluated DAGs</strong></header>
-      <p>{{ evaluated_dags if evaluated_dags is not none else "Unavailable" }}</p>
-    </article>
-    <article class="metric-card">
-      <header><strong>Failure Ratio</strong></header>
+    {% if has_missing_airflow_credentials %}
+      <h2>Airflow access is not configured for this app.</h2>
       <p>
-        {% if failure_ratio is not none and threshold_ratio is not none %}
-          {{ "%.1f"|format(failure_ratio * 100) }}% of {{ "%.1f"|format(threshold_ratio * 100) }}% threshold
+        This review app cannot load the failing DAG snapshot until the Airflow API
+        settings below are present.
+      </p>
+      <div class="setup-grid">
+        <div class="setup-panel">
+          <strong>Missing config vars</strong>
+          <ul class="env-list">
+            {% for env_name in missing_airflow_env_vars %}
+              <li><code>{{ env_name }}</code></li>
+            {% endfor %}
+          </ul>
+        </div>
+        <div class="setup-panel">
+          <strong>What happens after setup</strong>
+          <p>
+            Add the missing values to the review app and refresh this page. The
+            latest fleet snapshot and failing DAG list will appear automatically.
+          </p>
+        </div>
+      </div>
+    {% else %}
+      <p>
+        {% if checked_at %}
+          Last checked {{ checked_at }}
         {% else %}
-          Unavailable
+          No successful check timestamp is available.
+        {% endif %}
+        {% if http_status == 503 %}
+          The underlying fleet check is currently returning HTTP 503.
         {% endif %}
       </p>
-    </article>
-    <article class="metric-card">
-      <header><strong>Missing Latest Run</strong></header>
-      <p>{{ dags_without_runs if dags_without_runs is not none else "Unavailable" }}</p>
-    </article>
-    <article class="metric-card">
-      <header><strong>Failed Fetches</strong></header>
-      <p>{{ failed_fetches if failed_fetches is not none else "Unavailable" }}</p>
-    </article>
-    <article class="metric-card">
-      <header><strong>Non-Terminal DAGs</strong></header>
-      <p>{{ non_terminal_dags if non_terminal_dags is not none else "Unavailable" }}</p>
-    </article>
-  </div>
+    {% endif %}
+  </article>
+
+  {% if not has_missing_airflow_credentials %}
+    <div class="metric-grid">
+      <article class="metric-card">
+        <header><strong>Failing DAGs</strong></header>
+        <p>{{ failed_dag_count }}</p>
+      </article>
+      <article class="metric-card">
+        <header><strong>Active DAGs</strong></header>
+        <p>{{ total_active_dags if total_active_dags is not none else "Unavailable" }}</p>
+      </article>
+      <article class="metric-card">
+        <header><strong>Evaluated DAGs</strong></header>
+        <p>{{ evaluated_dags if evaluated_dags is not none else "Unavailable" }}</p>
+      </article>
+      <article class="metric-card">
+        <header><strong>Failure Ratio</strong></header>
+        <p>
+          {% if failure_ratio is not none and threshold_ratio is not none %}
+            {{ "%.1f"|format(failure_ratio * 100) }}% of {{ "%.1f"|format(threshold_ratio * 100) }}% threshold
+          {% else %}
+            Unavailable
+          {% endif %}
+        </p>
+      </article>
+      <article class="metric-card">
+        <header><strong>Missing Latest Run</strong></header>
+        <p>{{ dags_without_runs if dags_without_runs is not none else "Unavailable" }}</p>
+      </article>
+      <article class="metric-card">
+        <header><strong>Failed Fetches</strong></header>
+        <p>{{ failed_fetches if failed_fetches is not none else "Unavailable" }}</p>
+      </article>
+      <article class="metric-card">
+        <header><strong>Non-Terminal DAGs</strong></header>
+        <p>{{ non_terminal_dags if non_terminal_dags is not none else "Unavailable" }}</p>
+      </article>
+    </div>
+  {% endif %}
 
   {% if failed_dags %}
     <article>
@@ -149,11 +217,11 @@
         </table>
       </div>
     </article>
-  {% elif status == "healthy" %}
+  {% elif not has_missing_airflow_credentials and status == "healthy" %}
     <article class="empty-state">
       <p>No failing DAGs were found in the latest snapshot.</p>
     </article>
-  {% else %}
+  {% elif not has_missing_airflow_credentials %}
     <article class="empty-state">
       <p>Failing DAG data is currently unavailable.</p>
     </article>

@@ -55,6 +55,30 @@ ASTRO_FAILED_DAGS_URL = (
     "https://cloud.astronomer.io/cljsvo8d800yz01giqt70a7e7/"
     "dags?status=failed&state=active"
 )
+AIRFLOW_REQUIRED_ENV_VARS = ("AIRFLOW_API_BASE_URL", "AIRFLOW_API_TOKEN")
+
+
+def _get_missing_airflow_env_vars() -> list[str]:
+    return [
+        env_name
+        for env_name in AIRFLOW_REQUIRED_ENV_VARS
+        if not os.getenv(env_name, "").strip()
+    ]
+
+
+def _add_missing_airflow_config_details(payload: dict[str, Any]) -> dict[str, Any]:
+    missing_airflow_env_vars = _get_missing_airflow_env_vars()
+    if not missing_airflow_env_vars:
+        return payload
+
+    updated_payload = dict(payload)
+    updated_payload.update(
+        {
+            "error_type": "missing_airflow_credentials",
+            "missing_airflow_env_vars": missing_airflow_env_vars,
+        }
+    )
+    return updated_payload
 
 
 def _get_airflow_fleet_health_payload(
@@ -67,19 +91,29 @@ def _get_airflow_fleet_health_payload(
         logging.warning(
             "Airflow fleet health cache miss or stale value while REDIS_URL is configured"
         )
-        return {"status": "unknown"}, 503
+        return _add_missing_airflow_config_details({"status": "unknown"}), 503
 
     if not allow_live_eval:
         logging.warning(
             "Skipping live airflow fleet health evaluation because cached data is required"
         )
-        return {"status": "unknown"}, 503
+        return _add_missing_airflow_config_details({"status": "unknown"}), 503
 
     try:
         return evaluate_fleet_health()
-    except AirflowFleetHealthError:
-        logging.exception("Airflow fleet health evaluation failed")
-        return {"status": "unknown"}, 503
+    except AirflowFleetHealthError as exc:
+        payload = _add_missing_airflow_config_details(
+            {"status": "unknown", "error_message": str(exc)}
+        )
+        if payload.get("error_type") == "missing_airflow_credentials":
+            logging.warning(
+                "Airflow fleet health evaluation skipped because required env vars "
+                "are missing: %s",
+                ", ".join(payload["missing_airflow_env_vars"]),
+            )
+        else:
+            logging.exception("Airflow fleet health evaluation failed")
+        return payload, 503
 
 
 def _coerce_failed_dag_entries(value: Any) -> list[dict[str, str]]:
@@ -162,6 +196,20 @@ def failing_dags_dashboard():
     )
     failed_dags, is_partial_list = _get_failed_dag_entries(payload)
     failed_runs = payload.get("failed_runs")
+    missing_airflow_env_vars = [
+        env_name
+        for env_name in payload.get("missing_airflow_env_vars", [])
+        if isinstance(env_name, str) and env_name
+    ]
+    has_missing_airflow_credentials = bool(missing_airflow_env_vars)
+    status_variant = (
+        "setup-required" if has_missing_airflow_credentials else payload.get("status", "unknown")
+    )
+    status_label = (
+        "Setup required"
+        if has_missing_airflow_credentials
+        else str(payload.get("status", "unknown"))
+    )
 
     return render_template(
         "failing_dags.html",
@@ -175,10 +223,14 @@ def failing_dags_dashboard():
         failed_dags=failed_dags,
         failed_fetches=payload.get("failed_fetches"),
         failure_ratio=payload.get("failure_ratio"),
+        has_missing_airflow_credentials=has_missing_airflow_credentials,
         http_status=status,
         is_partial_failed_dag_list=is_partial_list,
+        missing_airflow_env_vars=missing_airflow_env_vars,
         non_terminal_dags=payload.get("non_terminal_dags"),
         status=payload.get("status", "unknown"),
+        status_label=status_label,
+        status_variant=status_variant,
         threshold_ratio=payload.get("threshold_ratio"),
         total_active_dags=payload.get("active_dags_total"),
     )
