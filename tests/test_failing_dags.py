@@ -149,6 +149,8 @@ class FailingDagsDashboardTest(unittest.TestCase):
             body,
         )
         self.assertNotIn("Astro Failed DAGs", body)
+        self.assertNotIn('scope="col">State</th>', body)
+        self.assertNotIn(">failed</td>", body)
         self.assertIn("The underlying fleet check is currently returning HTTP 503.", body)
 
     def test_dashboard_marks_legacy_top_failed_dags_payload_as_partial(self):
