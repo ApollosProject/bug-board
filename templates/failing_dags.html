@@ -290,14 +290,12 @@
           <thead>
             <tr>
               <th scope="col">DAG ID</th>
-              <th scope="col">State</th>
             </tr>
           </thead>
           <tbody>
             {% for dag in failed_dags %}
               <tr>
                 <td><code>{{ dag.dag_id }}</code></td>
-                <td>{{ dag.state }}</td>
               </tr>
             {% endfor %}
           </tbody>
