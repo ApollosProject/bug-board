@@ -137,6 +137,66 @@ class FetchActiveDagsPaginationTest(unittest.TestCase):
         self.assertEqual(len(dags), 5)
 
 
+class FetchActiveDagsTest(unittest.TestCase):
+    def test_fetch_active_dags_uses_returned_batch_size_for_offset(self):
+        pages = [
+            {
+                "dags": [
+                    {
+                        "dag_id": f"dag-{index:03d}",
+                        "is_paused": index % 9 == 0,
+                    }
+                    for index in range(0, 100)
+                ],
+                "total_entries": 250,
+            },
+            {
+                "dags": [
+                    {
+                        "dag_id": f"dag-{index:03d}",
+                        "is_paused": index % 9 == 0,
+                    }
+                    for index in range(100, 200)
+                ],
+                "total_entries": 250,
+            },
+            {
+                "dags": [
+                    {
+                        "dag_id": f"dag-{index:03d}",
+                        "is_paused": index % 9 == 0,
+                    }
+                    for index in range(200, 250)
+                ],
+                "total_entries": 250,
+            },
+        ]
+        seen_offsets: list[int] = []
+
+        def fake_request_json(session, url, params):
+            del session, url
+            seen_offsets.append(params["offset"])
+            return pages[len(seen_offsets) - 1]
+
+        with patch.object(
+            airflow_fleet_health,
+            "_request_json",
+            side_effect=fake_request_json,
+        ):
+            active_dags = airflow_fleet_health._fetch_active_dags(
+                object(), "https://airflow.example.com"
+            )
+
+        expected_dags = {
+            dag["dag_id"]
+            for page in pages
+            for dag in page["dags"]
+            if not dag["is_paused"]
+        }
+        self.assertEqual(seen_offsets, [0, 100, 200])
+        self.assertEqual(active_dags, expected_dags)
+
+
 class FailingDagsDashboardTest(unittest.TestCase):
     def setUp(self):
         self.client = app_module.app.test_client()
@@ -238,7 +298,7 @@ class FailingDagsDashboardTest(unittest.TestCase):
         self.assertNotIn("/dags/alpha_dag/grid?dag_run_id=", body)
         self.assertIn("This cache entry only contains a partial DAG list.", body)
 
-    def test_dashboard_explains_missing_airflow_credentials(self):
+    def test_dashboard_explains_missing_airflow_credentials_without_live_eval(self):
         with patch.dict(app_module.os.environ, {}, clear=False):
             for env_name in (
                 "AIRFLOW_API_BASE_URL",
@@ -249,13 +309,7 @@ class FailingDagsDashboardTest(unittest.TestCase):
                 app_module.os.environ.pop(env_name, None)
 
             with patch.object(app_module, "should_use_redis_cache", return_value=False):
-                with patch.object(
-                    app_module,
-                    "evaluate_fleet_health",
-                    side_effect=app_module.AirflowFleetHealthError(
-                        "AIRFLOW_API_BASE_URL is not configured."
-                    ),
-                ):
+                with patch.object(app_module, "evaluate_fleet_health") as evaluate_mock:
                     response = self.client.get("/failing-dags")
 
         body = response.get_data(as_text=True)
@@ -271,6 +325,7 @@ class FailingDagsDashboardTest(unittest.TestCase):
         self.assertNotIn("Failing DAG data is currently unavailable.", body)
         self.assertNotIn("The underlying fleet check is currently returning HTTP 503.", body)
         self.assertNotIn("<strong>Active DAGs</strong>", body)
+        evaluate_mock.assert_not_called()
 
     def test_dashboard_uses_cached_payload_without_token_when_configured(self):
         payload = {
@@ -325,6 +380,28 @@ class FailingDagsDashboardTest(unittest.TestCase):
         self.assertNotIn("Failing DAG data is currently unavailable.", body)
         evaluate_mock.assert_not_called()
 
+    def test_dashboard_skips_live_eval_without_cache_when_token_is_absent(self):
+        with patch.dict(
+            app_module.os.environ,
+            {
+                "AIRFLOW_API_BASE_URL": "https://airflow.example.com",
+                "AIRFLOW_API_TOKEN": "token",
+            },
+            clear=False,
+        ):
+            app_module.os.environ.pop("AIRFLOW_FLEET_MONITOR_TOKEN", None)
+            app_module.os.environ.pop("REDIS_URL", None)
+
+            with patch.object(app_module, "should_use_redis_cache", return_value=False):
+                with patch.object(app_module, "evaluate_fleet_health") as evaluate_mock:
+                    response = self.client.get("/failing-dags")
+
+        body = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Failing DAG data is currently unavailable.", body)
+        self.assertNotIn("Setup required", body)
+        evaluate_mock.assert_not_called()
+
     def test_dashboard_skips_live_eval_without_cache_when_token_is_configured(self):
         with patch.dict(
             app_module.os.environ,
@@ -343,7 +420,7 @@ class FailingDagsDashboardTest(unittest.TestCase):
         self.assertIn("Failing DAG data is currently unavailable.", body)
         evaluate_mock.assert_not_called()
 
-    def test_dashboard_keeps_generic_unavailable_state_when_live_eval_is_disabled(self):
+    def test_dashboard_shows_setup_required_when_live_eval_is_disabled_and_creds_missing(self):
         with patch.dict(
             app_module.os.environ,
             {"AIRFLOW_FLEET_MONITOR_TOKEN": "secret"},
@@ -358,10 +435,10 @@ class FailingDagsDashboardTest(unittest.TestCase):
 
         body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Failing DAG data is currently unavailable.", body)
-        self.assertNotIn("Setup required", body)
-        self.assertNotIn("AIRFLOW_API_BASE_URL", body)
-        self.assertNotIn("AIRFLOW_API_TOKEN", body)
+        self.assertIn("Setup required", body)
+        self.assertIn("AIRFLOW_API_BASE_URL", body)
+        self.assertIn("AIRFLOW_API_TOKEN", body)
+        self.assertNotIn("Failing DAG data is currently unavailable.", body)
         evaluate_mock.assert_not_called()
 
     def test_health_endpoint_requires_monitor_token_when_configured(self):

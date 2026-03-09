@@ -103,7 +103,7 @@ def _get_airflow_fleet_health_payload(
         logging.warning(
             "Skipping live airflow fleet health evaluation because cached data is required"
         )
-        return {"status": "unknown"}, 503
+        return _add_missing_airflow_config_details({"status": "unknown"}), 503
 
     try:
         return evaluate_fleet_health()
@@ -206,9 +206,7 @@ def airflow_fleet_health():
 
 @app.route("/failing-dags")
 def failing_dags_dashboard():
-    payload, status = _get_airflow_fleet_health_payload(
-        allow_live_eval=not bool(os.getenv("AIRFLOW_FLEET_MONITOR_TOKEN"))
-    )
+    payload, status = _get_airflow_fleet_health_payload(allow_live_eval=False)
     failed_dags, is_partial_list = _get_failed_dag_entries(payload)
     failed_runs = payload.get("failed_runs")
     missing_airflow_env_vars = [

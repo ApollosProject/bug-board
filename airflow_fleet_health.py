@@ -12,7 +12,8 @@ DAGS_ENDPOINT = "/dags"
 
 # Fixed settings for a simple checker.
 REQUEST_TIMEOUT_SECONDS = 20
-DAG_PAGE_SIZE = 200
+# Airflow caps /dags responses at 100 items even when a higher limit is requested.
+DAG_PAGE_SIZE = 100
 DAG_QUERY_WORKERS = 30
 FAILURE_THRESHOLD_RATIO = 0.10
 MIN_EVALUATED_DAGS = 20
