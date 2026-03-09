@@ -5,9 +5,8 @@ A small Flask application that displays Linear issues and GitHub pull request st
 ## Setup
 
 1. Create a virtual environment and install dependencies.
-   The repo currently pins Python `3.13` in `.python-version`, so make sure
-   your shell honors that version (for example via `pyenv`) before creating
-   the venv:
+   Before creating the venv, make sure your shell is using the interpreter
+   selected by `.python-version` (for example via `pyenv`):
 
 ```bash
 python -m venv venv
