@@ -57,13 +57,21 @@ ASTRO_FAILED_DAGS_URL = (
 )
 
 
-def _get_airflow_fleet_health_payload() -> tuple[dict[str, Any], int]:
+def _get_airflow_fleet_health_payload(
+    allow_live_eval: bool = True,
+) -> tuple[dict[str, Any], int]:
     if should_use_redis_cache():
         cached = get_cached_fleet_health()
         if cached is not None:
             return cached
         logging.warning(
             "Airflow fleet health cache miss or stale value while REDIS_URL is configured"
+        )
+        return {"status": "unknown"}, 503
+
+    if not allow_live_eval:
+        logging.warning(
+            "Skipping live airflow fleet health evaluation because cached data is required"
         )
         return {"status": "unknown"}, 503
 
@@ -149,7 +157,9 @@ def airflow_fleet_health():
 
 @app.route("/failing-dags")
 def failing_dags_dashboard():
-    payload, status = _get_airflow_fleet_health_payload()
+    payload, status = _get_airflow_fleet_health_payload(
+        allow_live_eval=not bool(os.getenv("AIRFLOW_FLEET_MONITOR_TOKEN"))
+    )
     failed_dags, is_partial_list = _get_failed_dag_entries(payload)
     failed_runs = payload.get("failed_runs")
 

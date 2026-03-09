@@ -156,7 +156,7 @@ class FailingDagsDashboardTest(unittest.TestCase):
         self.assertIn("beta_dag", body)
         self.assertIn("This cache entry only contains a partial DAG list.", body)
 
-    def test_dashboard_does_not_require_monitor_token_when_configured(self):
+    def test_dashboard_uses_cached_payload_without_token_when_configured(self):
         payload = {
             "status": "healthy",
             "failed_runs": 0,
@@ -164,14 +164,28 @@ class FailingDagsDashboardTest(unittest.TestCase):
         }
 
         with patch.dict(app_module.os.environ, {"AIRFLOW_FLEET_MONITOR_TOKEN": "secret"}):
-            with patch.object(
-                app_module,
-                "_get_airflow_fleet_health_payload",
-                return_value=(payload, 200),
-            ):
-                response = self.client.get("/failing-dags")
+            with patch.object(app_module, "should_use_redis_cache", return_value=True):
+                with patch.object(
+                    app_module,
+                    "get_cached_fleet_health",
+                    return_value=(payload, 200),
+                ):
+                    with patch.object(app_module, "evaluate_fleet_health") as evaluate_mock:
+                        response = self.client.get("/failing-dags")
 
         self.assertEqual(response.status_code, 200)
+        evaluate_mock.assert_not_called()
+
+    def test_dashboard_skips_live_eval_without_cache_when_token_is_configured(self):
+        with patch.dict(app_module.os.environ, {"AIRFLOW_FLEET_MONITOR_TOKEN": "secret"}):
+            with patch.object(app_module, "should_use_redis_cache", return_value=False):
+                with patch.object(app_module, "evaluate_fleet_health") as evaluate_mock:
+                    response = self.client.get("/failing-dags")
+
+        body = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Failing DAG data is currently unavailable.", body)
+        evaluate_mock.assert_not_called()
 
     def test_health_endpoint_requires_monitor_token_when_configured(self):
         with patch.dict(app_module.os.environ, {"AIRFLOW_FLEET_MONITOR_TOKEN": "secret"}):

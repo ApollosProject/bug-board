@@ -74,7 +74,9 @@ The endpoint:
 - With `REDIS_URL` configured, cache miss/stale returns `{"status":"unknown"}` with `503` until worker refresh succeeds
 
 For humans, `GET /failing-dags` renders the same fleet-health data as an internal dashboard page
-and links back to the Astro filtered DAG view.
+and links back to the Astro filtered DAG view. When `AIRFLOW_FLEET_MONITOR_TOKEN` is
+configured, the dashboard only serves cached fleet-health data so unauthenticated
+requests cannot trigger a live Airflow scan.
 
 This checker is intentionally not highly configurable. It uses fixed settings:
 
