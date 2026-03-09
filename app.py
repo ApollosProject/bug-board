@@ -22,10 +22,10 @@ from linear.issues import (
     by_platform,
     by_project,
     get_completed_issues_summary,
-    get_completed_issues_for_person,
+    get_completed_issues_for_person_all_teams,
     get_created_issues,
     get_open_issues,
-    get_open_issues_for_person,
+    get_open_issues_for_person_all_teams,
     get_time_data,
 )
 from linear.projects import get_projects
@@ -252,6 +252,7 @@ PRIORITY_BREAKDOWN_KEYS = {
     4: "low",
     5: "low",
 }
+PRIORITY_FIX_TEAM_KEYS = {"SUP", "CUS"}
 
 
 def format_breakdown_text(
@@ -274,6 +275,23 @@ def format_breakdown_text(
             line = f"{line} ({count} {label})"
         lines.append(line)
     return "\n".join(lines)
+
+
+def is_priority_fix_issue(issue: dict[str, Any]) -> bool:
+    priority = issue.get("priority")
+    if not isinstance(priority, int) or priority < 1 or priority > 2:
+        return False
+
+    labels = {
+        label.get("name")
+        for label in issue.get("labels", {}).get("nodes", [])
+        if isinstance(label, dict)
+    }
+    if "Bug" in labels:
+        return True
+
+    team_key = (issue.get("team") or {}).get("key")
+    return team_key in PRIORITY_FIX_TEAM_KEYS
 
 
 @app.template_filter("first_name")
@@ -1268,8 +1286,10 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
         else None
     )
     with ThreadPoolExecutor(max_workers=TEAM_THREADPOOL_MAX_WORKERS) as executor:
-        open_future = executor.submit(get_open_issues_for_person, login)
-        completed_future = executor.submit(get_completed_issues_for_person, login, days)
+        open_future = executor.submit(get_open_issues_for_person_all_teams, login)
+        completed_future = executor.submit(
+            get_completed_issues_for_person_all_teams, login, days
+        )
         github_future = None
         if github_username:
             github_future = executor.submit(
@@ -1298,10 +1318,7 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
     priority_fix_times = []
     priority_bugs_fixed = 0
     for issue in completed_items:
-        is_priority_bug = issue.get("priority", 5) <= 2 and any(
-            lbl.get("name") == "Bug" for lbl in issue.get("labels", {}).get("nodes", [])
-        )
-        if not is_priority_bug:
+        if not is_priority_fix_issue(issue):
             continue
         priority_bugs_fixed += 1
         if issue.get("assignee_time_to_fix") is not None:
