@@ -90,6 +90,53 @@ class EvaluateFleetHealthTest(unittest.TestCase):
         self.assertEqual(payload["failed_dags"][-1]["dag_run_id"], "run-dag-11")
 
 
+class FetchActiveDagsPaginationTest(unittest.TestCase):
+    def test_fetch_active_dags_uses_actual_batch_size_when_total_entries_exceeds_api_cap(self):
+        offsets_seen: list[int] = []
+        page_by_offset = {
+            0: {
+                "dags": [
+                    {"dag_id": "dag-001", "is_paused": False},
+                    {"dag_id": "dag-002", "is_paused": False},
+                ],
+                "total_entries": 5,
+            },
+            2: {
+                "dags": [
+                    {
+                        "dag_id": "fairhaven_wordpress_content_item_dag",
+                        "is_paused": False,
+                    },
+                    {"dag_id": "dag-004", "is_paused": False},
+                ],
+                "total_entries": 5,
+            },
+            4: {
+                "dags": [
+                    {"dag_id": "dag-005", "is_paused": False},
+                ],
+                "total_entries": 5,
+            },
+        }
+
+        def fake_request_json(session, url, params):
+            del session, url
+            offset = params["offset"]
+            offsets_seen.append(offset)
+            return page_by_offset[offset]
+
+        with patch.object(
+            airflow_fleet_health, "_request_json", side_effect=fake_request_json
+        ):
+            dags = airflow_fleet_health._fetch_active_dags(
+                object(), "https://airflow.example.com"
+            )
+
+        self.assertEqual(offsets_seen, [0, 2, 4])
+        self.assertIn("fairhaven_wordpress_content_item_dag", dags)
+        self.assertEqual(len(dags), 5)
+
+
 class FailingDagsDashboardTest(unittest.TestCase):
     def setUp(self):
         self.client = app_module.app.test_client()
@@ -141,11 +188,17 @@ class FailingDagsDashboardTest(unittest.TestCase):
         self.assertIn("beta_dag", body)
         self.assertIn("Open in Astro", body)
         self.assertIn(
-            'href="https://cloud.astronomer.io/cljsvo8d800yz01giqt70a7e7/dags/alpha_dag/grid?dag_run_id=run-alpha"',
+            (
+                'href="https://cloud.astronomer.io/cljsvo8d800yz01giqt70a7e7/'
+                'dags/alpha_dag/grid?dag_run_id=run-alpha"'
+            ),
             body,
         )
         self.assertIn(
-            'href="https://cloud.astronomer.io/cljsvo8d800yz01giqt70a7e7/dags/beta_dag/grid?dag_run_id=run-beta"',
+            (
+                'href="https://cloud.astronomer.io/cljsvo8d800yz01giqt70a7e7/'
+                'dags/beta_dag/grid?dag_run_id=run-beta"'
+            ),
             body,
         )
         self.assertNotIn("Astro Failed DAGs", body)

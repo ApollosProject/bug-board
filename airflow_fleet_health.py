@@ -98,6 +98,7 @@ def _fetch_active_dags(session: requests.Session, base_url: str) -> set[str]:
         if not isinstance(batch, list) or not batch:
             break
 
+        batch_size = len(batch)
         for dag in batch:
             if not isinstance(dag, dict):
                 continue
@@ -108,9 +109,9 @@ def _fetch_active_dags(session: requests.Session, base_url: str) -> set[str]:
                 continue
             dags.add(dag_id)
 
-        if not _has_more(batch, payload, offset, DAG_PAGE_SIZE):
+        if not _has_more(batch_size, payload, offset, DAG_PAGE_SIZE):
             break
-        offset += DAG_PAGE_SIZE
+        offset += batch_size
 
     return dags
 
@@ -245,12 +246,12 @@ def _extract_dag_runs(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _has_more(
-    batch: list[dict[str, Any]], payload: dict[str, Any], offset: int, limit: int
+    batch_size: int, payload: dict[str, Any], offset: int, requested_limit: int
 ) -> bool:
     total_entries = payload.get("total_entries")
     if isinstance(total_entries, int):
-        return offset + limit < total_entries
-    return len(batch) == limit
+        return offset + batch_size < total_entries
+    return batch_size == requested_limit
 
 
 def _extract_state(run: dict[str, Any]) -> str:
