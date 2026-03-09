@@ -296,7 +296,19 @@
           <tbody>
             {% for dag in failed_dags %}
               <tr>
-                <td><code>{{ dag.dag_id }}</code></td>
+                <td>
+                  <code>
+                    {% if dag.astro_run_url %}
+                      <a
+                        href="{{ dag.astro_run_url }}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >{{ dag.dag_id }}</a>
+                    {% else %}
+                      {{ dag.dag_id }}
+                    {% endif %}
+                  </code>
+                </td>
                 <td>{{ dag.state }}</td>
               </tr>
             {% endfor %}
