@@ -4,7 +4,9 @@ A small Flask application that displays Linear issues and GitHub pull request st
 
 ## Setup
 
-1. Create a virtual environment and install dependencies:
+1. Create a virtual environment and install dependencies.
+   Before creating the venv, make sure your shell is using the interpreter
+   selected by `.python-version` (for example via `pyenv`):
 
 ```bash
 python -m venv venv
