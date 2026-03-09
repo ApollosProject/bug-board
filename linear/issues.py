@@ -753,7 +753,7 @@ def get_completed_issues_for_person_all_teams(login: str, days=30):
             after: $cursor
             filter: {
               assignee: { displayName: { eq: $login } }
-              state: { name: { in: ["Done"] } }
+              state: { type: { in: ["completed"] } }
               completedAt: { gt: $days }
             }
             orderBy: updatedAt
