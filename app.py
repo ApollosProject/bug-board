@@ -87,7 +87,8 @@ def _get_airflow_fleet_health_payload(
     if should_use_redis_cache():
         cached = get_cached_fleet_health()
         if cached is not None:
-            return cached
+            payload, status = cached
+            return _add_missing_airflow_config_details(payload), status
         logging.warning(
             "Airflow fleet health cache miss or stale value while REDIS_URL is configured"
         )
