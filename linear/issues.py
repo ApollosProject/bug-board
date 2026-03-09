@@ -18,7 +18,7 @@ def get_open_issues(priority, label):
               team: { key: { eq: $team_key } }
               labels: { name: { eq: $label } }
               priority: { lte: $priority, gte: 1 }
-              state: { name: { nin: ["Done", "Canceled", "Duplicate"] } }
+              state: { type: { nin: ["completed", "canceled"] } }
               project: { null: true }
             }
             orderBy: createdAt
@@ -82,7 +82,7 @@ def get_completed_issues(priority, label, days=30):
               team: { key: { eq: $team_key } }
               labels: { name: { eq: $label } }
               priority: { lte: $priority, gte: 1 }
-              state: { name: { in: ["Done"] } }
+              state: { type: { in: ["completed"] } }
               completedAt: { gt: $days }
             }
             orderBy: updatedAt
@@ -181,7 +181,7 @@ def get_completed_issues_summary(priority, label, days=30):
               team: { key: { eq: $team_key } }
               labels: { name: { eq: $label } }
               priority: { lte: $priority, gte: 1 }
-              state: { name: { in: ["Done"] } }
+              state: { type: { in: ["completed"] } }
               completedAt: { gt: $days }
             }
             orderBy: updatedAt
@@ -456,7 +456,7 @@ def get_open_issues_for_person(login: str):
             filter: {
               team: { key: { eq: $team_key } }
               assignee: { displayName: { eq: $login } }
-              state: { name: { nin: ["Done", "Canceled", "Duplicate"] } }
+              state: { type: { nin: ["completed", "canceled"] } }
             }
             orderBy: updatedAt
           ) {
@@ -673,7 +673,7 @@ def get_completed_issues_for_person(login: str, days=30):
             filter: {
               team: { key: { eq: $team_key } }
               assignee: { displayName: { eq: $login } }
-              state: { name: { in: ["Done"] } }
+              state: { type: { in: ["completed"] } }
               completedAt: { gt: $days }
             }
             orderBy: updatedAt
