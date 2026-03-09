@@ -90,6 +90,66 @@ class EvaluateFleetHealthTest(unittest.TestCase):
         self.assertEqual(payload["failed_dags"][-1]["dag_run_id"], "run-dag-11")
 
 
+class FetchActiveDagsTest(unittest.TestCase):
+    def test_fetch_active_dags_uses_returned_batch_size_for_offset(self):
+        pages = [
+            {
+                "dags": [
+                    {
+                        "dag_id": f"dag-{index:03d}",
+                        "is_paused": index % 9 == 0,
+                    }
+                    for index in range(0, 100)
+                ],
+                "total_entries": 250,
+            },
+            {
+                "dags": [
+                    {
+                        "dag_id": f"dag-{index:03d}",
+                        "is_paused": index % 9 == 0,
+                    }
+                    for index in range(100, 200)
+                ],
+                "total_entries": 250,
+            },
+            {
+                "dags": [
+                    {
+                        "dag_id": f"dag-{index:03d}",
+                        "is_paused": index % 9 == 0,
+                    }
+                    for index in range(200, 250)
+                ],
+                "total_entries": 250,
+            },
+        ]
+        seen_offsets: list[int] = []
+
+        def fake_request_json(session, url, params):
+            del session, url
+            seen_offsets.append(params["offset"])
+            return pages[len(seen_offsets) - 1]
+
+        with patch.object(
+            airflow_fleet_health,
+            "_request_json",
+            side_effect=fake_request_json,
+        ):
+            active_dags = airflow_fleet_health._fetch_active_dags(
+                object(), "https://airflow.example.com"
+            )
+
+        expected_dags = {
+            dag["dag_id"]
+            for page in pages
+            for dag in page["dags"]
+            if not dag["is_paused"]
+        }
+        self.assertEqual(seen_offsets, [0, 100, 200])
+        self.assertEqual(active_dags, expected_dags)
+
+
 class FailingDagsDashboardTest(unittest.TestCase):
     def setUp(self):
         self.client = app_module.app.test_client()

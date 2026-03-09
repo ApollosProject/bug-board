@@ -12,7 +12,8 @@ DAGS_ENDPOINT = "/dags"
 
 # Fixed settings for a simple checker.
 REQUEST_TIMEOUT_SECONDS = 20
-DAG_PAGE_SIZE = 200
+# Airflow caps /dags responses at 100 items even when a higher limit is requested.
+DAG_PAGE_SIZE = 100
 DAG_QUERY_WORKERS = 30
 FAILURE_THRESHOLD_RATIO = 0.10
 MIN_EVALUATED_DAGS = 20
@@ -108,9 +109,10 @@ def _fetch_active_dags(session: requests.Session, base_url: str) -> set[str]:
                 continue
             dags.add(dag_id)
 
-        if not _has_more(batch, payload, offset, DAG_PAGE_SIZE):
+        page_size = len(batch)
+        if not _has_more(page_size, payload, offset, DAG_PAGE_SIZE):
             break
-        offset += DAG_PAGE_SIZE
+        offset += page_size
 
     return dags
 
@@ -245,12 +247,12 @@ def _extract_dag_runs(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _has_more(
-    batch: list[dict[str, Any]], payload: dict[str, Any], offset: int, limit: int
+    batch_size: int, payload: dict[str, Any], offset: int, limit: int
 ) -> bool:
     total_entries = payload.get("total_entries")
     if isinstance(total_entries, int):
-        return offset + limit < total_entries
-    return len(batch) == limit
+        return offset + batch_size < total_entries
+    return batch_size == limit
 
 
 def _extract_state(run: dict[str, Any]) -> str:
