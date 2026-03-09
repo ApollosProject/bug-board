@@ -98,7 +98,7 @@ def _get_airflow_fleet_health_payload(
         logging.warning(
             "Skipping live airflow fleet health evaluation because cached data is required"
         )
-        return _add_missing_airflow_config_details({"status": "unknown"}), 503
+        return {"status": "unknown"}, 503
 
     try:
         return evaluate_fleet_health()
