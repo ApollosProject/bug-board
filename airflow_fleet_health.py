@@ -2,7 +2,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, TypedDict
 from urllib.parse import quote
 
 import requests
@@ -19,6 +19,17 @@ MIN_EVALUATED_DAGS = 20
 TOP_FAILED_DAGS_LIMIT = 10
 
 
+class DagRunSummary(TypedDict):
+    state: str
+    dag_run_id: str
+
+
+class FailedDagEntry(TypedDict):
+    dag_id: str
+    state: str
+    dag_run_id: str
+
+
 class AirflowFleetHealthError(RuntimeError):
     """Raised when the Airflow fleet check cannot complete."""
 
@@ -31,7 +42,7 @@ class FleetStats:
     failed_fetches: int
     dags_without_runs: int
     non_terminal_dags: int
-    failed_dags: list[str]
+    failed_dags: list[FailedDagEntry]
     failed_runs: int
     failure_ratio: float
     insufficient_volume: bool
@@ -44,22 +55,18 @@ def evaluate_fleet_health() -> tuple[dict[str, Any], int]:
 
     session = _build_session(api_token)
     active_dags = _fetch_active_dags(session, base_url)
-    latest_state_by_dag, failed_fetches = _fetch_latest_states_by_dag(
+    latest_run_by_dag, failed_fetches = _fetch_latest_runs_by_dag(
         base_url, api_token, active_dags
     )
-    if active_dags and not latest_state_by_dag:
+    if active_dags and not latest_run_by_dag:
         raise AirflowFleetHealthError("Failed to fetch latest runs for all DAGs.")
-    stats = _build_stats(active_dags, latest_state_by_dag, failed_fetches)
+    stats = _build_stats(active_dags, latest_run_by_dag, failed_fetches)
 
     is_degraded = (
         not stats.insufficient_volume and stats.failure_ratio >= FAILURE_THRESHOLD_RATIO
     )
     status = "degraded" if is_degraded else "healthy"
     http_status = 503 if is_degraded else 200
-    failed_dag_entries = [
-        {"dag_id": dag_id, "state": "failed"} for dag_id in stats.failed_dags
-    ]
-
     payload = {
         "status": status,
         "checked_at": stats.checked_at.isoformat(),
@@ -71,8 +78,8 @@ def evaluate_fleet_health() -> tuple[dict[str, Any], int]:
         "failed_runs": stats.failed_runs,
         "failure_ratio": stats.failure_ratio,
         "threshold_ratio": FAILURE_THRESHOLD_RATIO,
-        "failed_dags": failed_dag_entries,
-        "top_failed_dags": failed_dag_entries[:TOP_FAILED_DAGS_LIMIT],
+        "failed_dags": stats.failed_dags,
+        "top_failed_dags": stats.failed_dags[:TOP_FAILED_DAGS_LIMIT],
     }
     return payload, http_status
 
@@ -108,35 +115,37 @@ def _fetch_active_dags(session: requests.Session, base_url: str) -> set[str]:
     return dags
 
 
-def _fetch_latest_states_by_dag(
+def _fetch_latest_runs_by_dag(
     base_url: str, api_token: str, active_dags: set[str]
-) -> tuple[dict[str, str], int]:
+) -> tuple[dict[str, DagRunSummary], int]:
     if not active_dags:
         return {}, 0
 
-    latest_state_by_dag: dict[str, str] = {}
+    latest_run_by_dag: dict[str, DagRunSummary] = {}
     failures = 0
     worker_count = min(DAG_QUERY_WORKERS, len(active_dags))
 
     with ThreadPoolExecutor(max_workers=worker_count) as executor:
         futures = {
-            executor.submit(_fetch_last_state_for_dag, base_url, api_token, dag_id): dag_id
+            executor.submit(_fetch_last_run_for_dag, base_url, api_token, dag_id): dag_id
             for dag_id in active_dags
         }
         for future in as_completed(futures):
             dag_id = futures[future]
             try:
-                state = future.result()
+                latest_run = future.result()
             except AirflowFleetHealthError:
                 failures += 1
                 continue
-            if state:
-                latest_state_by_dag[dag_id] = state
+            if latest_run["state"]:
+                latest_run_by_dag[dag_id] = latest_run
 
-    return latest_state_by_dag, failures
+    return latest_run_by_dag, failures
 
 
-def _fetch_last_state_for_dag(base_url: str, api_token: str, dag_id: str) -> str:
+def _fetch_last_run_for_dag(
+    base_url: str, api_token: str, dag_id: str
+) -> DagRunSummary:
     session = _build_session(api_token)
     dag_id_encoded = quote(dag_id, safe="")
     payload = _request_json(
@@ -146,20 +155,35 @@ def _fetch_last_state_for_dag(base_url: str, api_token: str, dag_id: str) -> str
     )
     dag_runs = _extract_dag_runs(payload)
     if not dag_runs:
-        return ""
-    return _extract_state(dag_runs[0])
+        return {"state": "", "dag_run_id": ""}
+
+    latest_run = dag_runs[0]
+    return {
+        "state": _extract_state(latest_run),
+        "dag_run_id": _extract_dag_run_id(latest_run),
+    }
 
 
 def _build_stats(
-    active_dags: set[str], latest_state_by_dag: dict[str, str], failed_fetches: int
+    active_dags: set[str],
+    latest_run_by_dag: dict[str, DagRunSummary],
+    failed_fetches: int,
 ) -> FleetStats:
-    evaluated_dags = len(latest_state_by_dag)
-    failed_dags = sorted(
-        dag_id for dag_id, state in latest_state_by_dag.items() if state == "failed"
-    )
+    evaluated_dags = len(latest_run_by_dag)
+    failed_dags: list[FailedDagEntry] = [
+        {
+            "dag_id": dag_id,
+            "state": "failed",
+            "dag_run_id": latest_run["dag_run_id"],
+        }
+        for dag_id, latest_run in sorted(latest_run_by_dag.items())
+        if latest_run["state"] == "failed"
+    ]
     failed_runs = len(failed_dags)
     non_terminal_dags = sum(
-        1 for state in latest_state_by_dag.values() if state not in TERMINAL_STATES
+        1
+        for latest_run in latest_run_by_dag.values()
+        if latest_run["state"] not in TERMINAL_STATES
     )
     failure_ratio = failed_runs / evaluated_dags if evaluated_dags else 0.0
     insufficient_volume = evaluated_dags < MIN_EVALUATED_DAGS
@@ -233,6 +257,18 @@ def _extract_state(run: dict[str, Any]) -> str:
     state = run.get("state")
     if isinstance(state, str):
         return state.lower()
+    return ""
+
+
+def _extract_dag_run_id(run: dict[str, Any]) -> str:
+    dag_run_id = run.get("dag_run_id")
+    if isinstance(dag_run_id, str):
+        return dag_run_id
+
+    run_id = run.get("run_id")
+    if isinstance(run_id, str):
+        return run_id
+
     return ""
 
 

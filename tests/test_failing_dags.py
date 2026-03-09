@@ -52,8 +52,11 @@ class FixedDateTime(datetime):
 class EvaluateFleetHealthTest(unittest.TestCase):
     def test_includes_full_failed_dag_list_and_truncated_top_list(self):
         active_dags = {f"dag-{index:02d}" for index in range(1, 22)}
-        latest_states = {
-            dag_id: "failed" if dag_id <= "dag-11" else "success"
+        latest_runs = {
+            dag_id: {
+                "state": "failed" if dag_id <= "dag-11" else "success",
+                "dag_run_id": f"run-{dag_id}",
+            }
             for dag_id in active_dags
         }
 
@@ -66,8 +69,8 @@ class EvaluateFleetHealthTest(unittest.TestCase):
                 ):
                     with patch.object(
                         airflow_fleet_health,
-                        "_fetch_latest_states_by_dag",
-                        return_value=(latest_states, 0),
+                        "_fetch_latest_runs_by_dag",
+                        return_value=(latest_runs, 0),
                     ):
                         with patch.object(
                             airflow_fleet_health,
@@ -82,7 +85,9 @@ class EvaluateFleetHealthTest(unittest.TestCase):
         self.assertEqual(len(payload["top_failed_dags"]), 10)
         self.assertEqual(payload["top_failed_dags"], payload["failed_dags"][:10])
         self.assertEqual(payload["failed_dags"][0]["dag_id"], "dag-01")
+        self.assertEqual(payload["failed_dags"][0]["dag_run_id"], "run-dag-01")
         self.assertEqual(payload["failed_dags"][-1]["dag_id"], "dag-11")
+        self.assertEqual(payload["failed_dags"][-1]["dag_run_id"], "run-dag-11")
 
 
 class FailingDagsDashboardTest(unittest.TestCase):
@@ -102,11 +107,23 @@ class FailingDagsDashboardTest(unittest.TestCase):
             "failure_ratio": 2 / 3,
             "threshold_ratio": 0.10,
             "failed_dags": [
-                {"dag_id": "alpha_dag", "state": "failed"},
-                {"dag_id": "beta_dag", "state": "failed"},
+                {
+                    "dag_id": "alpha_dag",
+                    "state": "failed",
+                    "dag_run_id": "run-alpha",
+                },
+                {
+                    "dag_id": "beta_dag",
+                    "state": "failed",
+                    "dag_run_id": "run-beta",
+                },
             ],
             "top_failed_dags": [
-                {"dag_id": "alpha_dag", "state": "failed"},
+                {
+                    "dag_id": "alpha_dag",
+                    "state": "failed",
+                    "dag_run_id": "run-alpha",
+                },
             ],
         }
 
@@ -123,6 +140,14 @@ class FailingDagsDashboardTest(unittest.TestCase):
         self.assertIn("alpha_dag", body)
         self.assertIn("beta_dag", body)
         self.assertIn("Open in Astro", body)
+        self.assertIn(
+            'href="https://cloud.astronomer.io/cljsvo8d800yz01giqt70a7e7/dags/alpha_dag/grid?dag_run_id=run-alpha"',
+            body,
+        )
+        self.assertIn(
+            'href="https://cloud.astronomer.io/cljsvo8d800yz01giqt70a7e7/dags/beta_dag/grid?dag_run_id=run-beta"',
+            body,
+        )
         self.assertNotIn("Astro Failed DAGs", body)
         self.assertNotIn('scope="col">State</th>', body)
         self.assertNotIn(">failed</td>", body)
@@ -157,6 +182,7 @@ class FailingDagsDashboardTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("alpha_dag", body)
         self.assertIn("beta_dag", body)
+        self.assertNotIn("/dags/alpha_dag/grid?dag_run_id=", body)
         self.assertIn("This cache entry only contains a partial DAG list.", body)
 
     def test_dashboard_explains_missing_airflow_credentials(self):
