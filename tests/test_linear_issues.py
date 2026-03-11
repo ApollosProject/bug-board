@@ -52,8 +52,9 @@ class GetCompletedIssuesForPersonTest(unittest.TestCase):
         self.assertEqual(captured["variables"]["login"], "michael.neeley")
         self.assertEqual(captured["variables"]["team_key"], "APO")
         self.assertEqual(captured["variables"]["days"], "-P7D")
-        self.assertIn('state: {type: {in: ["completed"]}}', captured["query"])
-        self.assertNotIn('state: {name: {in: ["Done"]}}', captured["query"])
+        normalized_query = " ".join(captured["query"].split())
+        self.assertIn('state: { type: { in: ["completed"] } }', normalized_query)
+        self.assertNotIn('state: { name: { in: ["Done"] } }', normalized_query)
 
 
 if __name__ == "__main__":

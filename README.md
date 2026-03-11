@@ -21,6 +21,12 @@ flake8 *.py
 mypy .
 ```
 
+To run unit tests locally:
+
+```bash
+python -m unittest discover -s tests -p 'test_*.py'
+```
+
 2. Provide the required environment variables. The application expects the following values:
 
 - `LINEAR_API_KEY` – API token for Linear
