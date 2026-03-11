@@ -5,7 +5,7 @@ anyio==4.8.0
 attrs==25.1.0
 black==25.11.0
 blinker==1.9.0
-botocore==1.36.12
+botocore==1.42.65
 certifi==2025.1.31
 charset-normalizer==3.4.4
 click==8.3.1
