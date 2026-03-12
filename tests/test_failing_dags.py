@@ -261,9 +261,11 @@ class FailingDagsDashboardTest(unittest.TestCase):
             ),
             body,
         )
+        self.assertIn('class="dag-list"', body)
+        self.assertIn("2 failing DAGs", body)
+        self.assertNotIn('class="dag-table"', body)
         self.assertNotIn("Astro Failed DAGs", body)
-        self.assertNotIn('scope="col">State</th>', body)
-        self.assertNotIn(">failed</td>", body)
+        self.assertNotIn('scope="col">DAG ID</th>', body)
         self.assertIn("The underlying fleet check is currently returning HTTP 503.", body)
 
     def test_dashboard_marks_legacy_top_failed_dags_payload_as_partial(self):
@@ -295,6 +297,7 @@ class FailingDagsDashboardTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("alpha_dag", body)
         self.assertIn("beta_dag", body)
+        self.assertIn("3 failing DAGs", body)
         self.assertNotIn("/dags/alpha_dag/grid?dag_run_id=", body)
         self.assertIn("This cache entry only contains a partial DAG list.", body)
 

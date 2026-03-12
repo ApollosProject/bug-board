@@ -43,9 +43,95 @@
     margin-bottom: 0;
   }
 
-  .dag-table code {
-    white-space: pre-wrap;
+  .dag-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .dag-count {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.7rem;
+    border-radius: 999px;
+    background: rgba(1, 114, 173, 0.12);
+    color: var(--pico-primary);
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+
+  .dag-list {
+    list-style: none;
+    margin: 1rem 0 0;
+    padding: 0;
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .dag-list-item {
+    margin: 0;
+  }
+
+  .dag-entry {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 0.9rem;
+    padding: 1rem 1.1rem;
+    border: 1px solid rgba(115, 130, 155, 0.18);
+    border-radius: 0.9rem;
+    background: linear-gradient(
+      135deg,
+      rgba(15, 23, 42, 0.05),
+      rgba(15, 23, 42, 0.02)
+    );
+    box-shadow: 0 0.65rem 1.5rem rgba(15, 23, 42, 0.05);
+  }
+
+  .dag-entry-index {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.25rem;
+    padding: 0.35rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.07);
+    color: var(--pico-muted-color);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .dag-entry-link,
+  .dag-entry-text {
+    min-width: 0;
+    margin: 0;
+    font-family: var(--pico-font-family-monospace);
+    font-size: 0.98rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
     word-break: break-word;
+  }
+
+  .dag-entry-link {
+    color: var(--pico-primary);
+    text-decoration-thickness: 0.08em;
+    text-underline-offset: 0.16em;
+  }
+
+  .dag-entry-link:hover {
+    color: color-mix(in srgb, var(--pico-primary) 78%, white);
+  }
+
+  @media (max-width: 640px) {
+    .dag-entry {
+      grid-template-columns: 1fr;
+      gap: 0.7rem;
+    }
   }
 
   .section-header {
@@ -174,6 +260,38 @@
       border-color: rgba(255, 228, 174, 0.16);
       background: rgba(14, 9, 0, 0.24);
     }
+
+    .dag-count {
+      background: rgba(0, 180, 255, 0.14);
+      color: #8bd7ff;
+    }
+
+    .dag-entry {
+      border-color: rgba(124, 149, 191, 0.22);
+      background: linear-gradient(
+        135deg,
+        rgba(17, 24, 39, 0.92),
+        rgba(15, 23, 42, 0.74)
+      );
+      box-shadow: 0 1rem 2rem rgba(2, 6, 23, 0.24);
+    }
+
+    .dag-entry-index {
+      background: rgba(124, 149, 191, 0.16);
+      color: #c7d7f2;
+    }
+
+    .dag-entry-link {
+      color: #2bb8ff;
+    }
+
+    .dag-entry-link:hover {
+      color: #7dd9ff;
+    }
+
+    .dag-entry-text {
+      color: #dbeafe;
+    }
   }
 </style>
 {% endblock %}
@@ -276,8 +394,9 @@
 
   {% if failed_dags %}
     <article>
-      <header>
+      <header class="dag-list-header">
         <strong>DAG List</strong>
+        <span class="dag-count">{{ failed_dag_count }} failing DAGs</span>
       </header>
       {% if is_partial_failed_dag_list %}
         <p>
@@ -285,34 +404,25 @@
           repopulate the full failing DAG set.
         </p>
       {% endif %}
-      <div class="overflow-auto">
-        <table class="dag-table">
-          <thead>
-            <tr>
-              <th scope="col">DAG ID</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for dag in failed_dags %}
-              <tr>
-                <td>
-                  <code>
-                    {% if dag.astro_run_url %}
-                      <a
-                        href="{{ dag.astro_run_url }}"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >{{ dag.dag_id }}</a>
-                    {% else %}
-                      {{ dag.dag_id }}
-                    {% endif %}
-                  </code>
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
+      <ol class="dag-list">
+        {% for dag in failed_dags %}
+          <li class="dag-list-item">
+            <div class="dag-entry">
+              <span class="dag-entry-index">{{ loop.index }}</span>
+              {% if dag.astro_run_url %}
+                <a
+                  class="dag-entry-link"
+                  href="{{ dag.astro_run_url }}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >{{ dag.dag_id }}</a>
+              {% else %}
+                <span class="dag-entry-text">{{ dag.dag_id }}</span>
+              {% endif %}
+            </div>
+          </li>
+        {% endfor %}
+      </ol>
     </article>
   {% elif not has_missing_airflow_credentials and status == "healthy" %}
     <article class="empty-state">
