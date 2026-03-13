@@ -25,6 +25,12 @@
     color: #8e0000;
   }
 
+  .status-pill--setup-required {
+    background: #f3d8a8;
+    color: #613700;
+    border: 1px solid #d2a054;
+  }
+
   .metric-grid {
     display: grid;
     gap: 1rem;
@@ -37,9 +43,95 @@
     margin-bottom: 0;
   }
 
-  .dag-table code {
-    white-space: pre-wrap;
+  .dag-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .dag-count {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.7rem;
+    border-radius: 999px;
+    background: rgba(1, 114, 173, 0.12);
+    color: var(--pico-primary);
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+
+  .dag-list {
+    list-style: none;
+    margin: 1rem 0 0;
+    padding: 0;
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .dag-list-item {
+    margin: 0;
+  }
+
+  .dag-entry {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 0.9rem;
+    padding: 1rem 1.1rem;
+    border: 1px solid rgba(115, 130, 155, 0.18);
+    border-radius: 0.9rem;
+    background: linear-gradient(
+      135deg,
+      rgba(15, 23, 42, 0.05),
+      rgba(15, 23, 42, 0.02)
+    );
+    box-shadow: 0 0.65rem 1.5rem rgba(15, 23, 42, 0.05);
+  }
+
+  .dag-entry-index {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.25rem;
+    padding: 0.35rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.07);
+    color: var(--pico-muted-color);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .dag-entry-link,
+  .dag-entry-text {
+    min-width: 0;
+    margin: 0;
+    font-family: var(--pico-font-family-monospace);
+    font-size: 0.98rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
     word-break: break-word;
+  }
+
+  .dag-entry-link {
+    color: var(--pico-primary);
+    text-decoration-thickness: 0.08em;
+    text-underline-offset: 0.16em;
+  }
+
+  .dag-entry-link:hover {
+    color: color-mix(in srgb, var(--pico-primary) 78%, white);
+  }
+
+  @media (max-width: 640px) {
+    .dag-entry {
+      grid-template-columns: 1fr;
+      gap: 0.7rem;
+    }
   }
 
   .section-header {
@@ -48,6 +140,158 @@
     align-items: baseline;
     gap: 1rem;
     flex-wrap: wrap;
+  }
+
+  .setup-state {
+    --setup-bg-start: #fff7e8;
+    --setup-bg-end: #fff0d7;
+    --setup-border: #d2a054;
+    --setup-panel-bg: rgba(255, 253, 248, 0.96);
+    --setup-panel-border: #e3c28f;
+    --setup-ink: #432600;
+    --setup-muted: #6b4610;
+    --setup-code-bg: #f7e2bc;
+    --setup-code-border: #d9b16d;
+    border: 1px solid var(--setup-border);
+    background: linear-gradient(
+      135deg,
+      var(--setup-bg-start),
+      var(--setup-bg-end)
+    );
+    color: var(--setup-ink);
+    box-shadow: 0 1rem 2.5rem rgba(97, 55, 0, 0.08);
+  }
+
+  .setup-state h2 {
+    margin-bottom: 0.35rem;
+    color: var(--setup-ink);
+  }
+
+  .setup-state p,
+  .setup-state li {
+    color: var(--setup-muted);
+  }
+
+  .setup-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-bottom: 0.75rem;
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid rgba(97, 55, 0, 0.14);
+    background: rgba(255, 255, 255, 0.58);
+    color: var(--setup-ink);
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .setup-lede {
+    font-size: 1.02rem;
+    line-height: 1.55;
+  }
+
+  .setup-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    margin-top: 1.25rem;
+  }
+
+  .setup-panel {
+    padding: 1rem;
+    border-radius: 0.85rem;
+    border: 1px solid var(--setup-panel-border);
+    background: var(--setup-panel-bg);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  }
+
+  .setup-panel strong {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--setup-ink);
+  }
+
+  .setup-panel > *:last-child {
+    margin-bottom: 0;
+  }
+
+  .env-list {
+    margin: 0;
+    padding-left: 1.1rem;
+  }
+
+  .env-list li + li {
+    margin-top: 0.35rem;
+  }
+
+  .setup-state code {
+    display: inline-block;
+    padding: 0.15rem 0.4rem;
+    border-radius: 0.4rem;
+    border: 1px solid var(--setup-code-border);
+    background: var(--setup-code-bg);
+    color: var(--setup-ink);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .status-pill--setup-required {
+      background: #5d3b06;
+      color: #ffe2a8;
+      border-color: #9f6d1a;
+    }
+
+    .setup-state {
+      --setup-bg-start: #382403;
+      --setup-bg-end: #241700;
+      --setup-border: #8f6118;
+      --setup-panel-bg: rgba(36, 23, 0, 0.9);
+      --setup-panel-border: #6f4b14;
+      --setup-ink: #ffe4ae;
+      --setup-muted: #f4cf88;
+      --setup-code-bg: #533708;
+      --setup-code-border: #8f6118;
+      box-shadow: none;
+    }
+
+    .setup-kicker {
+      border-color: rgba(255, 228, 174, 0.16);
+      background: rgba(14, 9, 0, 0.24);
+    }
+
+    .dag-count {
+      background: rgba(0, 180, 255, 0.14);
+      color: #8bd7ff;
+    }
+
+    .dag-entry {
+      border-color: rgba(124, 149, 191, 0.22);
+      background: linear-gradient(
+        135deg,
+        rgba(17, 24, 39, 0.92),
+        rgba(15, 23, 42, 0.74)
+      );
+      box-shadow: 0 1rem 2rem rgba(2, 6, 23, 0.24);
+    }
+
+    .dag-entry-index {
+      background: rgba(124, 149, 191, 0.16);
+      color: #c7d7f2;
+    }
+
+    .dag-entry-link {
+      color: #2bb8ff;
+    }
+
+    .dag-entry-link:hover {
+      color: #7dd9ff;
+    }
+
+    .dag-entry-text {
+      color: #dbeafe;
+    }
   }
 </style>
 {% endblock %}
@@ -66,63 +310,93 @@
     </p>
   </div>
 
-  <article>
+  <article{% if has_missing_airflow_credentials %} class="setup-state"{% endif %}>
     <p>
-      <span class="status-pill status-pill--{{ status }}">{{ status }}</span>
+      <span class="status-pill status-pill--{{ status_variant }}">{{ status_label }}</span>
     </p>
-    <p>
-      {% if checked_at %}
-        Last checked {{ checked_at }}
-      {% else %}
-        No successful check timestamp is available.
-      {% endif %}
-      {% if http_status == 503 %}
-        The underlying fleet check is currently returning HTTP 503.
-      {% endif %}
-    </p>
-  </article>
-
-  <div class="metric-grid">
-    <article class="metric-card">
-      <header><strong>Failing DAGs</strong></header>
-      <p>{{ failed_dag_count }}</p>
-    </article>
-    <article class="metric-card">
-      <header><strong>Active DAGs</strong></header>
-      <p>{{ total_active_dags if total_active_dags is not none else "Unavailable" }}</p>
-    </article>
-    <article class="metric-card">
-      <header><strong>Evaluated DAGs</strong></header>
-      <p>{{ evaluated_dags if evaluated_dags is not none else "Unavailable" }}</p>
-    </article>
-    <article class="metric-card">
-      <header><strong>Failure Ratio</strong></header>
+    {% if has_missing_airflow_credentials %}
+      <div class="setup-kicker">Review app setup</div>
+      <h2>Airflow credentials are missing for this app.</h2>
+      <p class="setup-lede">
+        This review app cannot load the failing DAG snapshot yet. Add the missing
+        Airflow API values below, then refresh the page to unlock the live
+        dashboard.
+      </p>
+      <div class="setup-grid">
+        <div class="setup-panel">
+          <strong>Required before this page can load</strong>
+          <ul class="env-list">
+            {% for env_name in missing_airflow_env_vars %}
+              <li><code>{{ env_name }}</code></li>
+            {% endfor %}
+          </ul>
+        </div>
+        <div class="setup-panel">
+          <strong>What you will see after setup</strong>
+          <p>
+            Once these values are present, the next refresh will show the latest
+            fleet snapshot, health metrics, and failing DAG list automatically.
+          </p>
+        </div>
+      </div>
+    {% else %}
       <p>
-        {% if failure_ratio is not none and threshold_ratio is not none %}
-          {{ "%.1f"|format(failure_ratio * 100) }}% of {{ "%.1f"|format(threshold_ratio * 100) }}% threshold
+        {% if checked_at %}
+          Last checked {{ checked_at }}
         {% else %}
-          Unavailable
+          No successful check timestamp is available.
+        {% endif %}
+        {% if http_status == 503 %}
+          The underlying fleet check is currently returning HTTP 503.
         {% endif %}
       </p>
-    </article>
-    <article class="metric-card">
-      <header><strong>Missing Latest Run</strong></header>
-      <p>{{ dags_without_runs if dags_without_runs is not none else "Unavailable" }}</p>
-    </article>
-    <article class="metric-card">
-      <header><strong>Failed Fetches</strong></header>
-      <p>{{ failed_fetches if failed_fetches is not none else "Unavailable" }}</p>
-    </article>
-    <article class="metric-card">
-      <header><strong>Non-Terminal DAGs</strong></header>
-      <p>{{ non_terminal_dags if non_terminal_dags is not none else "Unavailable" }}</p>
-    </article>
-  </div>
+    {% endif %}
+  </article>
+
+  {% if not has_missing_airflow_credentials %}
+    <div class="metric-grid">
+      <article class="metric-card">
+        <header><strong>Failing DAGs</strong></header>
+        <p>{{ failed_dag_count }}</p>
+      </article>
+      <article class="metric-card">
+        <header><strong>Active DAGs</strong></header>
+        <p>{{ total_active_dags if total_active_dags is not none else "Unavailable" }}</p>
+      </article>
+      <article class="metric-card">
+        <header><strong>Evaluated DAGs</strong></header>
+        <p>{{ evaluated_dags if evaluated_dags is not none else "Unavailable" }}</p>
+      </article>
+      <article class="metric-card">
+        <header><strong>Failure Ratio</strong></header>
+        <p>
+          {% if failure_ratio is not none and threshold_ratio is not none %}
+            {{ "%.1f"|format(failure_ratio * 100) }}% of {{ "%.1f"|format(threshold_ratio * 100) }}% threshold
+          {% else %}
+            Unavailable
+          {% endif %}
+        </p>
+      </article>
+      <article class="metric-card">
+        <header><strong>Missing Latest Run</strong></header>
+        <p>{{ dags_without_runs if dags_without_runs is not none else "Unavailable" }}</p>
+      </article>
+      <article class="metric-card">
+        <header><strong>Failed Fetches</strong></header>
+        <p>{{ failed_fetches if failed_fetches is not none else "Unavailable" }}</p>
+      </article>
+      <article class="metric-card">
+        <header><strong>Non-Terminal DAGs</strong></header>
+        <p>{{ non_terminal_dags if non_terminal_dags is not none else "Unavailable" }}</p>
+      </article>
+    </div>
+  {% endif %}
 
   {% if failed_dags %}
     <article>
-      <header>
+      <header class="dag-list-header">
         <strong>DAG List</strong>
+        <span class="dag-count">{{ failed_dag_count }} failing DAGs</span>
       </header>
       {% if is_partial_failed_dag_list %}
         <p>
@@ -130,30 +404,31 @@
           repopulate the full failing DAG set.
         </p>
       {% endif %}
-      <div class="overflow-auto">
-        <table class="dag-table">
-          <thead>
-            <tr>
-              <th scope="col">DAG ID</th>
-              <th scope="col">State</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for dag in failed_dags %}
-              <tr>
-                <td><code>{{ dag.dag_id }}</code></td>
-                <td>{{ dag.state }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
+      <ol class="dag-list">
+        {% for dag in failed_dags %}
+          <li class="dag-list-item">
+            <div class="dag-entry">
+              <span class="dag-entry-index">{{ loop.index }}</span>
+              {% if dag.astro_run_url %}
+                <a
+                  class="dag-entry-link"
+                  href="{{ dag.astro_run_url }}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >{{ dag.dag_id }}</a>
+              {% else %}
+                <span class="dag-entry-text">{{ dag.dag_id }}</span>
+              {% endif %}
+            </div>
+          </li>
+        {% endfor %}
+      </ol>
     </article>
-  {% elif status == "healthy" %}
+  {% elif not has_missing_airflow_credentials and status == "healthy" %}
     <article class="empty-state">
       <p>No failing DAGs were found in the latest snapshot.</p>
     </article>
-  {% else %}
+  {% elif not has_missing_airflow_credentials %}
     <article class="empty-state">
       <p>Failing DAG data is currently unavailable.</p>
     </article>

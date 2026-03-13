@@ -6,6 +6,7 @@ from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
 from datetime import datetime
 from functools import lru_cache
 from typing import Any, TypedDict, TypeVar
+from urllib.parse import quote, urlencode
 
 from flask import Flask, abort, jsonify, render_template, request
 
@@ -46,6 +47,43 @@ def format_display_name(linear_username: str) -> str:
     return re.sub(r"[._-]+", " ", linear_username).title()
 
 
+INACTIVE_PROJECT_STATUS_NAMES = {
+    "completed",
+    "incomplete",
+    "canceled",
+    "cancelled",
+    "released",
+}
+COMPLETED_PROJECT_STATUS_NAMES = {"completed", "released"}
+INCOMPLETE_PROJECT_STATUS_NAMES = {"incomplete"}
+CANCELED_PROJECT_STATUS_NAMES = {"canceled", "cancelled"}
+
+
+def get_project_status_name(project: dict[str, Any]) -> str:
+    status = project.get("status") or {}
+    name = status.get("name")
+    if not isinstance(name, str):
+        return ""
+    return name.strip().lower()
+
+
+def is_incomplete_project(project: dict[str, Any]) -> bool:
+    return get_project_status_name(project) in INCOMPLETE_PROJECT_STATUS_NAMES
+
+
+def is_completed_project(project: dict[str, Any]) -> bool:
+    status_name = get_project_status_name(project)
+    if status_name in INCOMPLETE_PROJECT_STATUS_NAMES | CANCELED_PROJECT_STATUS_NAMES:
+        return False
+    return bool(project.get("completedAt")) or status_name in COMPLETED_PROJECT_STATUS_NAMES
+
+
+def is_inactive_project(project: dict[str, Any]) -> bool:
+    return bool(project.get("completedAt")) or (
+        get_project_status_name(project) in INACTIVE_PROJECT_STATUS_NAMES
+    )
+
+
 app = Flask(__name__)
 
 # Maximum number of distinct _build_index_context results to cache.
@@ -55,6 +93,34 @@ ASTRO_FAILED_DAGS_URL = (
     "https://cloud.astronomer.io/cljsvo8d800yz01giqt70a7e7/"
     "dags?status=failed&state=active"
 )
+ASTRO_BASE_URL = "https://cloud.astronomer.io/cljsvo8d800yz01giqt70a7e7"
+AIRFLOW_REQUIRED_ENV_VARS = ("AIRFLOW_API_BASE_URL", "AIRFLOW_API_TOKEN")
+
+
+def _get_missing_airflow_env_vars() -> list[str]:
+    return [
+        env_name
+        for env_name in AIRFLOW_REQUIRED_ENV_VARS
+        if not os.getenv(env_name, "").strip()
+    ]
+
+
+def _add_missing_airflow_config_details(payload: dict[str, Any]) -> dict[str, Any]:
+    missing_airflow_env_vars = _get_missing_airflow_env_vars()
+    if not missing_airflow_env_vars:
+        return payload
+
+    updated_payload = dict(payload)
+    updated_payload.update(
+        {
+            "error_type": "missing_airflow_credentials",
+            "missing_airflow_env_vars": missing_airflow_env_vars,
+        }
+    )
+    return updated_payload
+
+
+PERSON_PRIORITY_SUPPORT_TEAM_KEYS = {"SUP", "CUS"}
 
 
 def _get_airflow_fleet_health_payload(
@@ -63,23 +129,34 @@ def _get_airflow_fleet_health_payload(
     if should_use_redis_cache():
         cached = get_cached_fleet_health()
         if cached is not None:
-            return cached
+            payload, status = cached
+            return _add_missing_airflow_config_details(payload), status
         logging.warning(
             "Airflow fleet health cache miss or stale value while REDIS_URL is configured"
         )
-        return {"status": "unknown"}, 503
+        return _add_missing_airflow_config_details({"status": "unknown"}), 503
 
     if not allow_live_eval:
         logging.warning(
             "Skipping live airflow fleet health evaluation because cached data is required"
         )
-        return {"status": "unknown"}, 503
+        return _add_missing_airflow_config_details({"status": "unknown"}), 503
 
     try:
         return evaluate_fleet_health()
-    except AirflowFleetHealthError:
-        logging.exception("Airflow fleet health evaluation failed")
-        return {"status": "unknown"}, 503
+    except AirflowFleetHealthError as exc:
+        payload = _add_missing_airflow_config_details(
+            {"status": "unknown", "error_message": str(exc)}
+        )
+        if payload.get("error_type") == "missing_airflow_credentials":
+            logging.warning(
+                "Airflow fleet health evaluation skipped because required env vars "
+                "are missing: %s",
+                ", ".join(payload["missing_airflow_env_vars"]),
+            )
+        else:
+            logging.exception("Airflow fleet health evaluation failed")
+        return payload, 503
 
 
 def _coerce_failed_dag_entries(value: Any) -> list[dict[str, str]]:
@@ -94,13 +171,22 @@ def _coerce_failed_dag_entries(value: Any) -> list[dict[str, str]]:
         if not isinstance(dag_id, str) or not dag_id:
             continue
         state = item.get("state")
-        entries.append(
-            {
-                "dag_id": dag_id,
-                "state": state if isinstance(state, str) and state else "unknown",
-            }
-        )
+        entry = {
+            "dag_id": dag_id,
+            "state": state if isinstance(state, str) and state else "unknown",
+        }
+        dag_run_id = item.get("dag_run_id")
+        if isinstance(dag_run_id, str) and dag_run_id:
+            entry["dag_run_id"] = dag_run_id
+            entry["astro_run_url"] = _build_astro_dag_run_url(dag_id, dag_run_id)
+        entries.append(entry)
     return entries
+
+
+def _build_astro_dag_run_url(dag_id: str, dag_run_id: str) -> str:
+    dag_id_encoded = quote(dag_id, safe="")
+    query = urlencode({"dag_run_id": dag_run_id})
+    return f"{ASTRO_BASE_URL}/dags/{dag_id_encoded}/grid?{query}"
 
 
 def _get_failed_dag_entries(payload: dict[str, Any]) -> tuple[list[dict[str, str]], bool]:
@@ -148,7 +234,7 @@ def _require_airflow_fleet_monitor_token() -> None:
 def airflow_fleet_health():
     _require_airflow_fleet_monitor_token()
 
-    payload, status = _get_airflow_fleet_health_payload()
+    payload, status = _get_airflow_fleet_health_payload(allow_live_eval=False)
 
     response = jsonify(payload)
     response.headers["Cache-Control"] = "no-store"
@@ -157,11 +243,23 @@ def airflow_fleet_health():
 
 @app.route("/failing-dags")
 def failing_dags_dashboard():
-    payload, status = _get_airflow_fleet_health_payload(
-        allow_live_eval=not bool(os.getenv("AIRFLOW_FLEET_MONITOR_TOKEN"))
-    )
+    payload, status = _get_airflow_fleet_health_payload(allow_live_eval=False)
     failed_dags, is_partial_list = _get_failed_dag_entries(payload)
     failed_runs = payload.get("failed_runs")
+    missing_airflow_env_vars = [
+        env_name
+        for env_name in payload.get("missing_airflow_env_vars", [])
+        if isinstance(env_name, str) and env_name
+    ]
+    has_missing_airflow_credentials = bool(missing_airflow_env_vars)
+    status_variant = (
+        "setup-required" if has_missing_airflow_credentials else payload.get("status", "unknown")
+    )
+    status_label = (
+        "Setup required"
+        if has_missing_airflow_credentials
+        else str(payload.get("status", "unknown"))
+    )
 
     return render_template(
         "failing_dags.html",
@@ -175,10 +273,14 @@ def failing_dags_dashboard():
         failed_dags=failed_dags,
         failed_fetches=payload.get("failed_fetches"),
         failure_ratio=payload.get("failure_ratio"),
+        has_missing_airflow_credentials=has_missing_airflow_credentials,
         http_status=status,
         is_partial_failed_dag_list=is_partial_list,
+        missing_airflow_env_vars=missing_airflow_env_vars,
         non_terminal_dags=payload.get("non_terminal_dags"),
         status=payload.get("status", "unknown"),
+        status_label=status_label,
+        status_variant=status_variant,
         threshold_ratio=payload.get("threshold_ratio"),
         total_active_dags=payload.get("active_dags_total"),
     )
@@ -1145,6 +1247,7 @@ def _build_team_context(_cache_epoch: int) -> dict:
                 app.logger.warning("Invalid startDate %r for project %r", start, proj.get("id"))
         proj["days_left"] = days_left
         proj["starts_in"] = starts_in
+        proj["is_inactive"] = is_inactive_project(proj)
 
     # group projects by initiatives
     projects_by_initiative: dict[str, list[dict[str, Any]]] = {}
@@ -1165,8 +1268,6 @@ def _build_team_context(_cache_epoch: int) -> dict:
         sorted(projects_by_initiative.items(), key=lambda x: x[0])
     )
 
-    inactive_project_statuses = {"Completed", "Incomplete", "Canceled"}
-
     # Separate completed or incomplete projects from the initiative buckets
     completed_projects = []
     for name, projects in list(projects_by_initiative.items()):
@@ -1174,7 +1275,7 @@ def _build_team_context(_cache_epoch: int) -> dict:
         for project in projects:
             if not project_has_apollos_member(project):
                 continue
-            if project.get("status", {}).get("name") in inactive_project_statuses:
+            if project.get("is_inactive"):
                 completed_projects.append(project)
             else:
                 remaining.append(project)
@@ -1358,6 +1459,7 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
                 pass
         proj["days_left"] = days_left
         proj["starts_in"] = starts_in
+        proj["is_inactive"] = is_inactive_project(proj)
 
     def _normalize_text(value: str | None) -> str:
         if not value:
@@ -1371,7 +1473,6 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
     normalized_person_name = normalize_display_name(
         person_cfg.get("linear_display_name") or person_name
     )
-    inactive_project_statuses = {"Completed", "Incomplete", "Canceled"}
     led_projects = [
         project
         for project in cycle_projects
@@ -1383,17 +1484,17 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
     lead_completed_projects = sum(
         1
         for project in led_projects
-        if (project.get("status") or {}).get("name") == "Completed"
+        if is_completed_project(project)
     )
     lead_incomplete_projects = sum(
         1
         for project in led_projects
-        if (project.get("status") or {}).get("name") == "Incomplete"
+        if is_incomplete_project(project)
     )
     lead_current_projects = sum(
         1
         for project in led_projects
-        if (project.get("status") or {}).get("name") not in inactive_project_statuses
+        if not project.get("is_inactive")
     )
     project_names = {
         proj.get("name") for proj in cycle_projects if proj.get("name")

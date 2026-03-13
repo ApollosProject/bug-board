@@ -4,7 +4,9 @@ A small Flask application that displays Linear issues and GitHub pull request st
 
 ## Setup
 
-1. Create a virtual environment and install dependencies:
+1. Create a virtual environment and install dependencies.
+   Before creating the venv, make sure your shell is using the interpreter
+   selected by `.python-version` (for example via `pyenv`):
 
 ```bash
 python -m venv venv
@@ -17,6 +19,12 @@ To lint and type check your code before committing:
 ```bash
 flake8 *.py
 mypy .
+```
+
+To run unit tests locally:
+
+```bash
+python -m unittest discover -s tests -p 'test_*.py'
 ```
 
 2. Provide the required environment variables. The application expects the following values:
@@ -74,9 +82,9 @@ The endpoint:
 - With `REDIS_URL` configured, cache miss/stale returns `{"status":"unknown"}` with `503` until worker refresh succeeds
 
 For humans, `GET /failing-dags` renders the same fleet-health data as an internal dashboard page
-and links back to the Astro filtered DAG view. When `AIRFLOW_FLEET_MONITOR_TOKEN` is
-configured, the dashboard only serves cached fleet-health data so unauthenticated
-requests cannot trigger a live Airflow scan.
+and links back to the Astro filtered DAG view. The dashboard always serves cached fleet-health
+data and never performs a live full-fleet Airflow scan during a web request. Without a fresh
+Redis-backed cache value, it renders the unavailable/setup-required state instead.
 
 This checker is intentionally not highly configurable. It uses fixed settings:
 
