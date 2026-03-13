@@ -12,6 +12,28 @@ def _install_import_shims() -> None:
     sys.modules.setdefault("dotenv", dotenv_module)
 
     requests_module = cast(Any, types.ModuleType("requests"))
+
+    class DummyRequestException(Exception):
+        pass
+
+    class DummyHTTPError(DummyRequestException):
+        def __init__(self, response=None):
+            super().__init__()
+            self.response = response
+
+    class DummySession:
+        def __init__(self):
+            self.headers = {}
+
+        def get(self, *args, **kwargs):
+            return types.SimpleNamespace(
+                raise_for_status=lambda: None,
+                json=lambda: {},
+            )
+
+    requests_module.Session = DummySession
+    requests_module.RequestException = DummyRequestException
+    requests_module.HTTPError = DummyHTTPError
     requests_module.get = lambda *args, **kwargs: None
     sys.modules.setdefault("requests", requests_module)
 
