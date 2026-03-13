@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from tenacity import before_sleep_log, retry, stop_after_attempt, wait_fixed
 
 from config import load_config
-from constants import PRIORITY_TO_SCORE
+from constants import ENGINEERING_TEAM_SLUG, PRIORITY_TO_SCORE
 from fleet_health_cache import refresh_fleet_health_cache, should_use_redis_cache
 from github import (
     get_pr_diff,
@@ -551,10 +551,10 @@ def post_leaderboard():
     days = 7
     config = load_config()
     people_config = config.get("people", {})
-    apollos_team_slugs = {
+    engineering_team_slugs = {
         slug
         for slug, info in people_config.items()
-        if info.get("team") == "apollos_engineering"
+        if info.get("team") == ENGINEERING_TEAM_SLUG
     }
 
     def normalize_identity(value: str | None) -> str:
@@ -626,7 +626,7 @@ def post_leaderboard():
     filtered_leaderboard = {
         assignee: score
         for assignee, score in leaderboard.items()
-        if alias_to_slug.get(normalize_identity(assignee)) in apollos_team_slugs
+        if alias_to_slug.get(normalize_identity(assignee)) in engineering_team_slugs
     }
     leaderboard = dict(
         sorted(filtered_leaderboard.items(), key=lambda x: x[1], reverse=True)
@@ -649,15 +649,15 @@ def post_leaderboard():
 
 @with_retries
 def post_stale():
-    apollos_team_members = get_team_members("apollos_engineering")
+    engineering_team_members = get_team_members(ENGINEERING_TEAM_SLUG)
     people_by_github_username = {
         person.get("github_username"): person
-        for person in apollos_team_members.values()
+        for person in engineering_team_members.values()
         if person.get("github_username")
     }
-    apollos_linear_usernames = {
+    engineering_linear_usernames = {
         person.get("linear_username")
-        for person in apollos_team_members.values()
+        for person in engineering_team_members.values()
         if person.get("linear_username")
     }
     prs = get_prs_waiting_for_review_by_reviewer()
@@ -726,7 +726,7 @@ def post_stale():
     filtered_stale_issues = {
         assignee: issues
         for assignee, issues in stale_issues.items()
-        if assignee in apollos_linear_usernames and issues
+        if assignee in engineering_linear_usernames and issues
     }
 
     if not prs and not filtered_stale_issues:
@@ -750,10 +750,10 @@ def post_stale():
 @with_retries
 def post_inactive_engineers():
     """Send list of engineers with no completed Linear issues in the last 7 days."""
-    apollos_team_members = get_team_members("apollos_engineering")
+    engineering_team_members = get_team_members(ENGINEERING_TEAM_SLUG)
     inactive = []
     base_url = os.getenv("APP_URL", "")
-    for person_key, person in apollos_team_members.items():
+    for person_key, person in engineering_team_members.items():
         login = person.get("linear_username")
         if not login:
             continue
@@ -809,10 +809,10 @@ def post_friday_deadlines():
     projects = get_projects()
     config = load_config()
     people_config = config.get("people", {})
-    apollos_slugs = {
+    engineering_slugs = {
         slug
         for slug, info in people_config.items()
-        if info.get("team") == "apollos_engineering"
+        if info.get("team") == ENGINEERING_TEAM_SLUG
     }
 
     def normalize(name: str) -> str:
@@ -826,15 +826,15 @@ def post_friday_deadlines():
         first = full.split()[0]
         name_to_slug.setdefault(first, slug)
 
-    def is_apollos_lead_project(project: dict) -> bool:
+    def is_engineering_lead_project(project: dict) -> bool:
         lead = (project.get("lead") or {}).get("displayName")
         if not lead:
             return False
         normalized = normalize(lead)
         slug = name_to_slug.get(normalized) or name_to_slug.get(normalized.split()[0])
-        return slug in apollos_slugs
+        return slug in engineering_slugs
 
-    projects = [p for p in projects if is_apollos_lead_project(p)]
+    projects = [p for p in projects if is_engineering_lead_project(p)]
 
     upcoming = []
     today = datetime.now(timezone.utc).date()

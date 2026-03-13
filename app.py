@@ -12,7 +12,7 @@ from flask import Flask, abort, jsonify, render_template, request
 
 from airflow_fleet_health import AirflowFleetHealthError, evaluate_fleet_health
 from config import load_config
-from constants import PRIORITY_TO_SCORE
+from constants import ENGINEERING_TEAM_SLUG, PRIORITY_TO_SCORE
 from fleet_health_cache import (
     get_cached_fleet_health,
     should_use_redis_cache,
@@ -636,10 +636,10 @@ def _build_leaderboard_entries(
 ) -> list[LeaderboardEntry]:
     config_data = load_config()
     people_config = config_data.get("people", {})
-    apollos_team_slugs = {
+    engineering_team_slugs = {
         slug
         for slug, info in people_config.items()
-        if info.get("team") == "apollos_engineering"
+        if info.get("team") == ENGINEERING_TEAM_SLUG
     }
 
     alias_to_slug = {}
@@ -880,7 +880,7 @@ def _build_leaderboard_entries(
     leaderboard_entries = [
         entry
         for entry in leaderboard_entries
-        if (slug := entry.get("slug")) is not None and slug in apollos_team_slugs
+        if (slug := entry.get("slug")) is not None and slug in engineering_team_slugs
     ]
 
     leaderboard_entries.sort(key=lambda entry: entry["score"], reverse=True)
@@ -1157,10 +1157,10 @@ def team_person_content_partial(slug):
 def _build_team_context(_cache_epoch: int) -> dict:
     config = load_config()
     people_config = config.get("people", {})
-    apollos_team_slugs = {
+    engineering_team_slugs = {
         slug
         for slug, info in people_config.items()
-        if info.get("team") == "apollos_engineering"
+        if info.get("team") == ENGINEERING_TEAM_SLUG
     }
 
     def format_name(key):
@@ -1196,8 +1196,8 @@ def _build_team_context(_cache_epoch: int) -> dict:
             return None
         return name_to_slug.get(parts[0])
 
-    def project_has_apollos_member(project: dict) -> bool:
-        """Return True when a project includes an Apollos engineer."""
+    def project_has_engineering_member(project: dict) -> bool:
+        """Return True when a project includes an engineering team member."""
         participants: list[str] = []
         lead = (project.get("lead") or {}).get("displayName")
         if lead:
@@ -1206,7 +1206,7 @@ def _build_team_context(_cache_epoch: int) -> dict:
         participants.extend(members)
         for name in participants:
             slug = slug_for_name(name)
-            if slug and slug in apollos_team_slugs:
+            if slug and slug in engineering_team_slugs:
                 return True
         return False
 
@@ -1273,7 +1273,7 @@ def _build_team_context(_cache_epoch: int) -> dict:
     for name, projects in list(projects_by_initiative.items()):
         remaining = []
         for project in projects:
-            if not project_has_apollos_member(project):
+            if not project_has_engineering_member(project):
                 continue
             if project.get("is_inactive"):
                 completed_projects.append(project)
@@ -1303,7 +1303,7 @@ def _build_team_context(_cache_epoch: int) -> dict:
         participants.extend(project.get("members", []))
         for name in participants:
             slug = slug_for_name(name)
-            if slug and slug in apollos_team_slugs:
+            if slug and slug in engineering_team_slugs:
                 project_name = project.get("name")
                 project_url = project.get("url")
                 if not isinstance(project_name, str) or not isinstance(project_url, str):
@@ -1327,7 +1327,9 @@ def _build_team_context(_cache_epoch: int) -> dict:
         key=lambda d: d["name"],
     )
 
-    support_slugs = [slug for slug in get_support_slugs() if slug in apollos_team_slugs]
+    support_slugs = [
+        slug for slug in get_support_slugs() if slug in engineering_team_slugs
+    ]
     on_call_support = sorted(
         [{"slug": name, "name": format_name(name)} for name in support_slugs],
         key=lambda d: d["name"],
@@ -1339,7 +1341,7 @@ def _build_team_context(_cache_epoch: int) -> dict:
     support_issues = {}
     for assignee, data in bugs_by_assignee.items():
         slug = slug_for_name(assignee)
-        if slug and slug in apollos_team_slugs:
+        if slug and slug in engineering_team_slugs:
             support_issues[slug] = [
                 {"title": issue["title"], "url": issue["url"]}
                 for issue in data["issues"]

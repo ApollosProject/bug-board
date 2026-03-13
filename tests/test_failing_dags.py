@@ -568,7 +568,7 @@ class TeamContextProjectFilteringTest(unittest.TestCase):
         config = {
             "people": {
                 "darryl": {
-                    "team": "apollos_engineering",
+                    "team": "engineering",
                     "linear_username": "darryl",
                 }
             },
@@ -606,7 +606,7 @@ class TeamContextProjectFilteringTest(unittest.TestCase):
         config = {
             "people": {
                 "darryl": {
-                    "team": "apollos_engineering",
+                    "team": "engineering",
                     "linear_username": "darryl",
                 }
             }
