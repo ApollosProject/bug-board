@@ -1,5 +1,7 @@
 # Constants used across the application
 
+ENGINEERING_TEAM_SLUG = "engineering"
+
 # Points awarded for each Linear priority level
 # priority: score
 # Priority levels:

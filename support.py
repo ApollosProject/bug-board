@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Dict, Set
 
 from config import load_config
+from constants import ENGINEERING_TEAM_SLUG
 from linear.projects import get_projects
 
 INACTIVE_PROJECT_STATUS_NAMES = {
@@ -97,7 +98,7 @@ def get_support_slugs() -> Set[str]:
     available_slugs: Set[str] = {
         slug
         for slug, info in people_cfg.items()
-        if info.get("team") == "apollos_engineering"
+        if info.get("team") == ENGINEERING_TEAM_SLUG
     }
 
     # On support = available AND not assigned to an active cycle project
