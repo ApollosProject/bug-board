@@ -4,15 +4,26 @@ from config import get_linear_team_key
 from .client import _execute
 
 
+def _normalize_project_members(projects: list[dict]) -> list[dict]:
+    for project in projects:
+        nodes = project.get("members", {}).get("nodes", [])
+        project["members"] = [m["displayName"] for m in nodes if m.get("displayName")]
+    return projects
+
+
 def get_projects():
     """Return all Linear projects under the Apollos team, ordered by name."""
     team_key = get_linear_team_key()
     query = gql(
         """
-        query Projects($team_key: String!) {
+        query Projects($team_key: String!, $after: String) {
           teams(filter: { key: { eq: $team_key } }, first: 1) {
             nodes {
-              projects(first: 50) {
+              projects(first: 50, after: $after) {
+                pageInfo {
+                  hasNextPage
+                  endCursor
+                }
                 nodes {
                   id
                   name
@@ -45,16 +56,23 @@ def get_projects():
         }
         """
     )
-    data = _execute(query, variable_values={"team_key": team_key})
-    teams = data.get("teams", {}).get("nodes", []) or []
-    if not teams:
-        return []
-    projects = teams[0].get("projects", {}).get("nodes", []) or []
+    projects = []
+    after = None
+    while True:
+        data = _execute(query, variable_values={"team_key": team_key, "after": after})
+        teams = data.get("teams", {}).get("nodes", []) or []
+        if not teams:
+            return []
+        project_connection = teams[0].get("projects", {}) or {}
+        projects.extend(project_connection.get("nodes", []) or [])
+        page_info = project_connection.get("pageInfo", {}) or {}
+        if not page_info.get("hasNextPage"):
+            break
+        after = page_info.get("endCursor")
+        if not after:
+            break
     sorted_projects = sorted(projects, key=lambda project: project.get("name", ""))
-    for project in sorted_projects:
-        nodes = project.get("members", {}).get("nodes", [])
-        project["members"] = [m["displayName"] for m in nodes if m.get("displayName")]
-    return sorted_projects
+    return _normalize_project_members(sorted_projects)
 
 
 def get_project_by_name(name: str) -> dict | None:
