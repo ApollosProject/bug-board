@@ -4,6 +4,14 @@ from typing import Dict, Set
 from config import load_config
 from linear.projects import get_projects
 
+INACTIVE_PROJECT_STATUS_NAMES = {
+    "completed",
+    "incomplete",
+    "canceled",
+    "cancelled",
+    "released",
+}
+
 
 def _normalize(name: str) -> str:
     """Normalize a Linear display name or username for comparison."""
@@ -24,8 +32,8 @@ def _name_to_slug_map(config: Dict) -> Dict[str, str]:
 
 def _is_active_today(project: Dict) -> bool:
     """Return True if today is within the project's start/target date window."""
-    status = (project.get("status") or {}).get("name")
-    if status in {"Completed", "Incomplete"}:
+    status = ((project.get("status") or {}).get("name") or "").strip().lower()
+    if project.get("completedAt") or status in INACTIVE_PROJECT_STATUS_NAMES:
         return False
     start = project.get("startDate")
     target = project.get("targetDate")
