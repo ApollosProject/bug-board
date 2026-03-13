@@ -47,6 +47,43 @@ def format_display_name(linear_username: str) -> str:
     return re.sub(r"[._-]+", " ", linear_username).title()
 
 
+INACTIVE_PROJECT_STATUS_NAMES = {
+    "completed",
+    "incomplete",
+    "canceled",
+    "cancelled",
+    "released",
+}
+COMPLETED_PROJECT_STATUS_NAMES = {"completed", "released"}
+INCOMPLETE_PROJECT_STATUS_NAMES = {"incomplete"}
+CANCELED_PROJECT_STATUS_NAMES = {"canceled", "cancelled"}
+
+
+def get_project_status_name(project: dict[str, Any]) -> str:
+    status = project.get("status") or {}
+    name = status.get("name")
+    if not isinstance(name, str):
+        return ""
+    return name.strip().lower()
+
+
+def is_incomplete_project(project: dict[str, Any]) -> bool:
+    return get_project_status_name(project) in INCOMPLETE_PROJECT_STATUS_NAMES
+
+
+def is_completed_project(project: dict[str, Any]) -> bool:
+    status_name = get_project_status_name(project)
+    if status_name in INCOMPLETE_PROJECT_STATUS_NAMES | CANCELED_PROJECT_STATUS_NAMES:
+        return False
+    return bool(project.get("completedAt")) or status_name in COMPLETED_PROJECT_STATUS_NAMES
+
+
+def is_inactive_project(project: dict[str, Any]) -> bool:
+    return bool(project.get("completedAt")) or (
+        get_project_status_name(project) in INACTIVE_PROJECT_STATUS_NAMES
+    )
+
+
 app = Flask(__name__)
 
 # Maximum number of distinct _build_index_context results to cache.
@@ -1210,6 +1247,7 @@ def _build_team_context(_cache_epoch: int) -> dict:
                 app.logger.warning("Invalid startDate %r for project %r", start, proj.get("id"))
         proj["days_left"] = days_left
         proj["starts_in"] = starts_in
+        proj["is_inactive"] = is_inactive_project(proj)
 
     # group projects by initiatives
     projects_by_initiative: dict[str, list[dict[str, Any]]] = {}
@@ -1230,8 +1268,6 @@ def _build_team_context(_cache_epoch: int) -> dict:
         sorted(projects_by_initiative.items(), key=lambda x: x[0])
     )
 
-    inactive_project_statuses = {"Completed", "Incomplete", "Canceled"}
-
     # Separate completed or incomplete projects from the initiative buckets
     completed_projects = []
     for name, projects in list(projects_by_initiative.items()):
@@ -1239,7 +1275,7 @@ def _build_team_context(_cache_epoch: int) -> dict:
         for project in projects:
             if not project_has_apollos_member(project):
                 continue
-            if project.get("status", {}).get("name") in inactive_project_statuses:
+            if project.get("is_inactive"):
                 completed_projects.append(project)
             else:
                 remaining.append(project)
@@ -1423,6 +1459,7 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
                 pass
         proj["days_left"] = days_left
         proj["starts_in"] = starts_in
+        proj["is_inactive"] = is_inactive_project(proj)
 
     def _normalize_text(value: str | None) -> str:
         if not value:
@@ -1436,7 +1473,6 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
     normalized_person_name = normalize_display_name(
         person_cfg.get("linear_display_name") or person_name
     )
-    inactive_project_statuses = {"Completed", "Incomplete", "Canceled"}
     led_projects = [
         project
         for project in cycle_projects
@@ -1448,17 +1484,17 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
     lead_completed_projects = sum(
         1
         for project in led_projects
-        if (project.get("status") or {}).get("name") == "Completed"
+        if is_completed_project(project)
     )
     lead_incomplete_projects = sum(
         1
         for project in led_projects
-        if (project.get("status") or {}).get("name") == "Incomplete"
+        if is_incomplete_project(project)
     )
     lead_current_projects = sum(
         1
         for project in led_projects
-        if (project.get("status") or {}).get("name") not in inactive_project_statuses
+        if not project.get("is_inactive")
     )
     project_names = {
         proj.get("name") for proj in cycle_projects if proj.get("name")
