@@ -5,14 +5,14 @@ from .client import _execute
 
 
 def get_projects():
-    """Return all Linear projects under the Apollos team, ordered by name."""
+    """Return all Linear projects under the configured team, ordered by name."""
     team_key = get_linear_team_key()
     query = gql(
         """
-        query Projects($team_key: String!) {
+        query Projects($team_key: String!, $cursor: String) {
           teams(filter: { key: { eq: $team_key } }, first: 1) {
             nodes {
-              projects(first: 50) {
+              projects(first: 50, after: $cursor) {
                 nodes {
                   id
                   name
@@ -39,17 +39,34 @@ def get_projects():
                     }
                   }
                 }
+                pageInfo {
+                  hasNextPage
+                  endCursor
+                }
               }
             }
           }
         }
         """
     )
-    data = _execute(query, variable_values={"team_key": team_key})
-    teams = data.get("teams", {}).get("nodes", []) or []
-    if not teams:
-        return []
-    projects = teams[0].get("projects", {}).get("nodes", []) or []
+    projects: list[dict] = []
+    cursor = None
+
+    while True:
+        data = _execute(
+            query, variable_values={"team_key": team_key, "cursor": cursor}
+        )
+        teams = data.get("teams", {}).get("nodes", []) or []
+        if not teams:
+            return []
+
+        payload = teams[0].get("projects", {}) or {}
+        projects.extend(payload.get("nodes", []) or [])
+        page_info = payload.get("pageInfo", {}) or {}
+        if not page_info.get("hasNextPage"):
+            break
+        cursor = page_info.get("endCursor")
+
     sorted_projects = sorted(projects, key=lambda project: project.get("name", ""))
     for project in sorted_projects:
         nodes = project.get("members", {}).get("nodes", [])
