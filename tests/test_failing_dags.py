@@ -11,6 +11,10 @@ def _install_import_shims() -> None:
     dotenv_module.load_dotenv = lambda *args, **kwargs: None
     sys.modules.setdefault("dotenv", dotenv_module)
 
+    requests_module = cast(Any, types.ModuleType("requests"))
+    requests_module.get = lambda *args, **kwargs: None
+    sys.modules.setdefault("requests", requests_module)
+
     gql_module = cast(Any, types.ModuleType("gql"))
 
     class DummyClient:
@@ -192,6 +196,99 @@ class FailingDagsDashboardTest(unittest.TestCase):
             response = self.client.get("/airflow-fleet-health")
 
         self.assertEqual(response.status_code, 401)
+
+
+class ProjectStatusClassificationTest(unittest.TestCase):
+    def test_released_project_is_inactive_and_completed(self):
+        project = {"status": {"name": "Released"}}
+
+        self.assertTrue(app_module.is_inactive_project(project))
+        self.assertTrue(app_module.is_completed_project(project))
+        self.assertFalse(app_module.is_incomplete_project(project))
+
+
+class TeamContextProjectFilteringTest(unittest.TestCase):
+    def setUp(self):
+        app_module._build_team_context.cache_clear()
+        app_module._build_person_context.cache_clear()
+
+    def tearDown(self):
+        app_module._build_team_context.cache_clear()
+        app_module._build_person_context.cache_clear()
+
+    def test_released_project_moves_out_of_current_focus(self):
+        config = {
+            "people": {
+                "darryl": {
+                    "team": "apollos_engineering",
+                    "linear_username": "darryl",
+                }
+            },
+            "platforms": {},
+        }
+        released_project = {
+            "id": "proj-1",
+            "name": "16KB Page Sizes for Android",
+            "url": "https://linear.example/project/16kb",
+            "health": "onTrack",
+            "status": {"name": "Released"},
+            "completedAt": "2025-11-21T00:00:00.000Z",
+            "startDate": "2025-11-11",
+            "targetDate": "2025-11-21",
+            "lead": {"displayName": "Darryl"},
+            "initiatives": {"nodes": [{"id": "init-1", "name": "Apollos+DL1 Cycle 6.2025"}]},
+            "members": [],
+        }
+
+        with patch.object(app_module, "load_config", return_value=config):
+            with patch.object(app_module, "get_projects", return_value=[released_project]):
+                with patch.object(app_module, "get_support_slugs", return_value=[]):
+                    with patch.object(app_module, "get_open_issues", return_value=[]):
+                        context = app_module._build_team_context(1)
+
+        self.assertEqual(context["developers"], [])
+        self.assertEqual(context["developer_projects"], {})
+        self.assertEqual(context["cycle_projects_by_initiative"], {})
+        self.assertEqual(
+            [project["name"] for project in context["completed_cycle_projects"]],
+            ["16KB Page Sizes for Android"],
+        )
+
+    def test_released_project_is_not_counted_as_current(self):
+        config = {
+            "people": {
+                "darryl": {
+                    "team": "apollos_engineering",
+                    "linear_username": "darryl",
+                }
+            }
+        }
+        released_project = {
+            "id": "proj-1",
+            "name": "16KB Page Sizes for Android",
+            "url": "https://linear.example/project/16kb",
+            "health": "onTrack",
+            "status": {"name": "Released"},
+            "completedAt": "2025-11-21T00:00:00.000Z",
+            "startDate": "2025-11-11",
+            "targetDate": "2025-11-21",
+            "lead": {"displayName": "Darryl"},
+            "initiatives": {"nodes": [{"id": "init-1", "name": "Apollos+DL1 Cycle 6.2025"}]},
+            "members": [],
+        }
+
+        with patch.object(app_module, "load_config", return_value=config):
+            with patch.object(app_module, "get_open_issues_for_person", return_value=[]):
+                with patch.object(app_module, "get_completed_issues_for_person", return_value=[]):
+                    with patch.object(app_module, "by_project", return_value={}):
+                        with patch.object(app_module, "by_platform", return_value={}):
+                            with patch.object(app_module, "get_projects", return_value=[released_project]):
+                                with patch.object(app_module, "get_support_slugs", return_value=[]):
+                                    context = app_module._build_person_context("darryl", 7, 1)
+
+        self.assertEqual(context["lead_current_projects"], 0)
+        self.assertEqual(context["lead_completed_projects"], 1)
+        self.assertEqual(context["lead_incomplete_projects"], 0)
 
 
 if __name__ == "__main__":
