@@ -77,9 +77,8 @@
 
   .dag-entry {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     align-items: start;
-    gap: 0.9rem;
     padding: 1rem 1.1rem;
     border: 1px solid rgba(115, 130, 155, 0.18);
     border-radius: 0.9rem;
@@ -89,21 +88,6 @@
       rgba(15, 23, 42, 0.02)
     );
     box-shadow: 0 0.65rem 1.5rem rgba(15, 23, 42, 0.05);
-  }
-
-  .dag-entry-index {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 2.25rem;
-    padding: 0.35rem 0.55rem;
-    border-radius: 999px;
-    background: rgba(15, 23, 42, 0.07);
-    color: var(--pico-muted-color);
-    font-size: 0.78rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
   }
 
   .dag-entry-link,
@@ -276,11 +260,6 @@
       box-shadow: 0 1rem 2rem rgba(2, 6, 23, 0.24);
     }
 
-    .dag-entry-index {
-      background: rgba(124, 149, 191, 0.16);
-      color: #c7d7f2;
-    }
-
     .dag-entry-link {
       color: #2bb8ff;
     }
@@ -404,11 +383,10 @@
           repopulate the full failing DAG set.
         </p>
       {% endif %}
-      <ol class="dag-list">
+      <ul class="dag-list">
         {% for dag in failed_dags %}
           <li class="dag-list-item">
             <div class="dag-entry">
-              <span class="dag-entry-index">{{ loop.index }}</span>
               {% if dag.astro_run_url %}
                 <a
                   class="dag-entry-link"
@@ -422,7 +400,7 @@
             </div>
           </li>
         {% endfor %}
-      </ol>
+      </ul>
     </article>
   {% elif not has_missing_airflow_credentials and status == "healthy" %}
     <article class="empty-state">
