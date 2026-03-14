@@ -227,6 +227,31 @@ class FailingDagsDashboardTest(unittest.TestCase):
     def setUp(self):
         self.client = app_module.app.test_client()
 
+    def test_build_astro_dag_run_url_uses_airflow_base_url(self):
+        with patch.dict(
+            app_module.os.environ,
+            {
+                "AIRFLOW_API_BASE_URL": (
+                    "https://clnlmo4ly14938581uy6kk252z28.28.astronomer.run/"
+                    "dk252z28/api/v1"
+                )
+            },
+            clear=False,
+        ):
+            url = app_module._build_astro_dag_run_url(
+                "cedar_creek_backfill_rock_prayer_request_dag",
+                "manual__2026-03-12T00:00:00+00:00",
+            )
+
+        self.assertEqual(
+            url,
+            (
+                "https://clnlmo4ly14938581uy6kk252z28.28.astronomer.run/"
+                "dk252z28/dags/cedar_creek_backfill_rock_prayer_request_dag/"
+                "grid?dag_run_id=manual__2026-03-12T00%3A00%3A00%2B00%3A00"
+            ),
+        )
+
     def test_dashboard_renders_full_failed_dag_list(self):
         payload = {
             "status": "degraded",
@@ -260,12 +285,22 @@ class FailingDagsDashboardTest(unittest.TestCase):
             ],
         }
 
-        with patch.object(
-            app_module,
-            "_get_airflow_fleet_health_payload",
-            return_value=(payload, 503),
+        with patch.dict(
+            app_module.os.environ,
+            {
+                "AIRFLOW_API_BASE_URL": (
+                    "https://clnlmo4ly14938581uy6kk252z28.28.astronomer.run/"
+                    "dk252z28/api/v1"
+                )
+            },
+            clear=False,
         ):
-            response = self.client.get("/failing-dags")
+            with patch.object(
+                app_module,
+                "_get_airflow_fleet_health_payload",
+                return_value=(payload, 503),
+            ):
+                response = self.client.get("/failing-dags")
 
         body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
@@ -275,14 +310,23 @@ class FailingDagsDashboardTest(unittest.TestCase):
         self.assertIn("Open in Astro", body)
         self.assertIn(
             (
-                'href="https://cloud.astronomer.io/cljsvo8d800yz01giqt70a7e7/'
+                'href="https://clnlmo4ly14938581uy6kk252z28.28.astronomer.run/'
+                'dk252z28/dags?status=failed&amp;state=active"'
+            ),
+            body,
+        )
+        self.assertIn(
+            (
+                'href="https://clnlmo4ly14938581uy6kk252z28.28.astronomer.run/'
+                "dk252z28/"
                 'dags/alpha_dag/grid?dag_run_id=run-alpha"'
             ),
             body,
         )
         self.assertIn(
             (
-                'href="https://cloud.astronomer.io/cljsvo8d800yz01giqt70a7e7/'
+                'href="https://clnlmo4ly14938581uy6kk252z28.28.astronomer.run/'
+                "dk252z28/"
                 'dags/beta_dag/grid?dag_run_id=run-beta"'
             ),
             body,
@@ -627,10 +671,18 @@ class TeamContextProjectFilteringTest(unittest.TestCase):
 
         with patch.object(app_module, "load_config", return_value=config):
             with patch.object(app_module, "get_open_issues_for_person", return_value=[]):
-                with patch.object(app_module, "get_completed_issues_for_person", return_value=[]):
+                with patch.object(
+                    app_module,
+                    "get_completed_issues_for_person",
+                    return_value=[],
+                ):
                     with patch.object(app_module, "by_project", return_value={}):
                         with patch.object(app_module, "by_platform", return_value={}):
-                            with patch.object(app_module, "get_projects", return_value=[released_project]):
+                            with patch.object(
+                                app_module,
+                                "get_projects",
+                                return_value=[released_project],
+                            ):
                                 with patch.object(app_module, "get_support_slugs", return_value=[]):
                                     context = app_module._build_person_context("darryl", 7, 1)
 
