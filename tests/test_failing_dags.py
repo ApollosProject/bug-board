@@ -287,10 +287,12 @@ class FailingDagsDashboardTest(unittest.TestCase):
             ),
             body,
         )
-        self.assertIn('class="dag-list"', body)
+        self.assertIn('<ul class="dag-list">', body)
         self.assertIn("2 failing DAGs", body)
         self.assertNotIn('class="dag-table"', body)
+        self.assertNotIn('class="dag-entry-index"', body)
         self.assertNotIn("Astro Failed DAGs", body)
+        self.assertNotIn('<ol class="dag-list">', body)
         self.assertNotIn('scope="col">DAG ID</th>', body)
         self.assertIn("The underlying fleet check is currently returning HTTP 503.", body)
 
