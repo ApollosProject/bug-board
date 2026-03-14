@@ -89,11 +89,7 @@ app = Flask(__name__)
 # Maximum number of distinct _build_index_context results to cache.
 # This can be increased or made configurable based on production usage patterns.
 INDEX_CONTEXT_CACHE_MAXSIZE = 16
-ASTRO_FAILED_DAGS_URL = (
-    "https://cloud.astronomer.io/cljsvo8d800yz01giqt70a7e7/"
-    "dags?status=failed&state=active"
-)
-ASTRO_BASE_URL = "https://cloud.astronomer.io/cljsvo8d800yz01giqt70a7e7"
+DEFAULT_ASTRO_UI_BASE_URL = "https://cloud.astronomer.io/cljsvo8d800yz01giqt70a7e7"
 AIRFLOW_REQUIRED_ENV_VARS = ("AIRFLOW_API_BASE_URL", "AIRFLOW_API_TOKEN")
 
 
@@ -183,10 +179,23 @@ def _coerce_failed_dag_entries(value: Any) -> list[dict[str, str]]:
     return entries
 
 
+def _get_astro_ui_base_url() -> str:
+    airflow_api_base_url = os.getenv("AIRFLOW_API_BASE_URL", "").strip().rstrip("/")
+    if not airflow_api_base_url:
+        return DEFAULT_ASTRO_UI_BASE_URL
+    if airflow_api_base_url.endswith("/api/v1"):
+        return airflow_api_base_url[: -len("/api/v1")]
+    return airflow_api_base_url
+
+
+def _build_astro_failed_dags_url() -> str:
+    return f"{_get_astro_ui_base_url()}/dags?status=failed&state=active"
+
+
 def _build_astro_dag_run_url(dag_id: str, dag_run_id: str) -> str:
     dag_id_encoded = quote(dag_id, safe="")
     query = urlencode({"dag_run_id": dag_run_id})
-    return f"{ASTRO_BASE_URL}/dags/{dag_id_encoded}/grid?{query}"
+    return f"{_get_astro_ui_base_url()}/dags/{dag_id_encoded}/grid?{query}"
 
 
 def _get_failed_dag_entries(payload: dict[str, Any]) -> tuple[list[dict[str, str]], bool]:
@@ -263,7 +272,7 @@ def failing_dags_dashboard():
 
     return render_template(
         "failing_dags.html",
-        astro_failed_dags_url=ASTRO_FAILED_DAGS_URL,
+        astro_failed_dags_url=_build_astro_failed_dags_url(),
         checked_at=_format_checked_at(payload.get("checked_at")),
         dags_without_runs=payload.get("dags_without_runs"),
         evaluated_dags=payload.get("evaluated_dags"),
