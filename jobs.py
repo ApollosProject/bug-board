@@ -976,7 +976,7 @@ def post_weekly_changelog():
     post_to_slack(changelog_text)
 
 
-if os.getenv("DEBUG") == "true":
+def run_debug_jobs() -> None:
     if should_use_redis_cache():
         refresh_airflow_fleet_health_cache_job()
     # post_inactive_engineers()
@@ -987,7 +987,9 @@ if os.getenv("DEBUG") == "true":
     # post_upcoming_projects()
     # post_friday_deadlines()
     post_recon_issues()
-else:
+
+
+def configure_scheduled_jobs() -> None:
     if should_use_redis_cache():
         refresh_interval_seconds = _read_positive_int_env(
             "AIRFLOW_FLEET_HEALTH_REFRESH_SECONDS",
@@ -1004,7 +1006,7 @@ else:
     else:
         logging.info("REDIS_URL not set; airflow fleet health cache refresh is disabled")
 
-    # schedule.every().friday.at("13:00").do(post_inactive_engineers)
+    schedule.every().friday.at("13:00").do(post_inactive_engineers)
     # schedule.every(1).days.at("12:00").do(post_priority_bugs)
     # schedule.every().friday.at("20:00").do(post_leaderboard)
     # schedule.every().thursday.at("19:00").do(post_weekly_changelog)
@@ -1015,6 +1017,17 @@ else:
     # standard time (UTC-5).
     schedule.every().day.at("14:00").do(post_recon_issues)
 
+
+def main() -> None:
+    if os.getenv("DEBUG") == "true":
+        run_debug_jobs()
+        return
+
+    configure_scheduled_jobs()
     while True:
         schedule.run_pending()
         time.sleep(1)
+
+
+if __name__ == "__main__":
+    main()
