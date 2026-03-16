@@ -1013,8 +1013,8 @@ def run_debug_jobs() -> None:
     # post_leaderboard()
     # post_weekly_changelog()
     # post_stale()
-    # post_upcoming_projects()
-    # post_friday_deadlines()
+    post_upcoming_projects()
+    post_friday_deadlines()
     post_recon_issues()
 
 
@@ -1042,8 +1042,8 @@ def configure_scheduled_jobs() -> None:
     # schedule.every().friday.at("20:00").do(post_leaderboard)
     # schedule.every().thursday.at("19:00").do(post_weekly_changelog)
     # schedule.every(1).days.at("14:00").do(post_stale)
-    # schedule.every().friday.at("12:00").do(post_upcoming_projects)
-    # schedule.every().monday.at("12:00").do(post_friday_deadlines)
+    schedule.every().friday.at("12:00").do(post_upcoming_projects)
+    schedule.every().monday.at("12:00").do(post_friday_deadlines)
     # Run on UTC time like the other scheduled jobs. 14:00 UTC is 9:00am ET during
     # standard time (UTC-5).
     schedule.every().day.at("14:00").do(post_recon_issues)
