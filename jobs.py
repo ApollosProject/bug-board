@@ -980,7 +980,7 @@ def run_debug_jobs() -> None:
     if should_use_redis_cache():
         refresh_airflow_fleet_health_cache_job()
     # post_inactive_engineers()
-    # post_priority_bugs()
+    post_priority_bugs()
     # post_leaderboard()
     # post_weekly_changelog()
     # post_stale()
@@ -1007,7 +1007,7 @@ def configure_scheduled_jobs() -> None:
         logging.info("REDIS_URL not set; airflow fleet health cache refresh is disabled")
 
     schedule.every().friday.at("13:00").do(post_inactive_engineers)
-    # schedule.every(1).days.at("12:00").do(post_priority_bugs)
+    schedule.every(1).days.at("12:00").do(post_priority_bugs)
     # schedule.every().friday.at("20:00").do(post_leaderboard)
     # schedule.every().thursday.at("19:00").do(post_weekly_changelog)
     # schedule.every(1).days.at("14:00").do(post_stale)
