@@ -142,6 +142,14 @@ def post_to_manager_slack(markdown: str):
 
 def format_bug_line(bug):
     """Return a formatted Slack message line for a bug."""
+
+    def signed_sla_days_text() -> str:
+        breaches_at = _parse_linear_dt(bug.get("slaBreachesAt"))
+        if not breaches_at:
+            return f"+{bug['daysOpen']}d"
+        delta_days = (datetime.now(timezone.utc) - breaches_at).days
+        return f"{delta_days:+d}d"
+
     reviewer = (
         get_slack_markdown_by_linear_username(bug["assignee"]["displayName"])
         if bug["assignee"]
@@ -151,7 +159,7 @@ def format_bug_line(bug):
     reviewer_text = f", {reviewer}" if reviewer else ""
     content = (
         f"<{bug['url']}|{bug['title']}> "
-        f"(+{bug['daysOpen']}d{platform_text}{reviewer_text})"
+        f"({signed_sla_days_text()}{platform_text}{reviewer_text})"
     )
     if bug.get("priority") == 1:
         return f"- \U0001f6a8 {content} \U0001f6a8"

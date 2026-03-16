@@ -243,6 +243,8 @@ class PostPriorityBugsTest(unittest.TestCase):
         self.assertIn("*Overdue*", posted[0])
         self.assertIn("Risk bug", posted[0])
         self.assertIn("Breached bug", posted[0])
+        self.assertIn("(-1d, Web, No Assignee)", posted[0])
+        self.assertIn("(+0d, Mobile, No Assignee)", posted[0])
         self.assertNotIn("Old bug", posted[0])
 
 
