@@ -39,6 +39,12 @@ def get_open_issues(priority, label):
               createdAt
               updatedAt
               priority
+              dueDate
+              slaType
+              slaStartedAt
+              slaMediumRiskAt
+              slaHighRiskAt
+              slaBreachesAt
             }
           }
         }
@@ -301,9 +307,15 @@ def get_created_issues(priority, label, days=30):
             and tag["name"].lower().replace(" ", "-") in get_platforms()
         ]
         issue["platform"] = platforms[0] if platforms else None
-        assignee = issue.get("assignee", {}).get("displayName") if issue.get("assignee") else None
+        assignee = (
+            issue.get("assignee", {}).get("displayName")
+            if issue.get("assignee")
+            else None
+        )
         if assignee:
-            issue["assignee_time_to_fix"] = _compute_assignee_time_to_fix(issue, assignee)
+            issue["assignee_time_to_fix"] = _compute_assignee_time_to_fix(
+                issue, assignee
+            )
         else:
             issue["assignee_time_to_fix"] = None
     return issues

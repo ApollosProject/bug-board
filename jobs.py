@@ -142,6 +142,14 @@ def post_to_manager_slack(markdown: str):
 
 def format_bug_line(bug):
     """Return a formatted Slack message line for a bug."""
+
+    def signed_sla_days_text() -> str:
+        breaches_at = _parse_linear_dt(bug.get("slaBreachesAt"))
+        if not breaches_at:
+            return f"+{bug['daysOpen']}d"
+        delta_days = (datetime.now(timezone.utc) - breaches_at).days
+        return f"{delta_days:+d}d"
+
     reviewer = (
         get_slack_markdown_by_linear_username(bug["assignee"]["displayName"])
         if bug["assignee"]
@@ -151,7 +159,7 @@ def format_bug_line(bug):
     reviewer_text = f", {reviewer}" if reviewer else ""
     content = (
         f"<{bug['url']}|{bug['title']}> "
-        f"(+{bug['daysOpen']}d{platform_text}{reviewer_text})"
+        f"({signed_sla_days_text()}{platform_text}{reviewer_text})"
     )
     if bug.get("priority") == 1:
         return f"- \U0001f6a8 {content} \U0001f6a8"
@@ -271,17 +279,38 @@ def post_priority_bugs():
     config = load_config()
     open_priority_bugs = get_open_issues(2, "Bug")
     unassigned = [bug for bug in open_priority_bugs if bug["assignee"] is None]
-    urgent_bugs = [bug for bug in open_priority_bugs if bug["priority"] == 1]
-    high_bugs = [bug for bug in open_priority_bugs if bug["priority"] == 2]
+    now = datetime.now(timezone.utc)
 
-    # Urgent bugs are due after one day. Mark them at risk immediately and
-    # overdue if not fixed within a day. High priority bugs retain the
-    # existing week-long window.
-    at_risk = [bug for bug in urgent_bugs if bug["daysOpen"] <= 1] + [
-        bug for bug in high_bugs if bug["daysOpen"] > 4 and bug["daysOpen"] <= 7
+    def issue_has_sla(issue: dict) -> bool:
+        return any(
+            issue.get(field_name)
+            for field_name in (
+                "slaType",
+                "slaStartedAt",
+                "slaMediumRiskAt",
+                "slaHighRiskAt",
+                "slaBreachesAt",
+            )
+        )
+
+    def issue_reached_sla(issue: dict, field_name: str) -> bool:
+        reached_at = _parse_linear_dt(issue.get(field_name))
+        if not reached_at:
+            return False
+        return reached_at <= now
+
+    open_priority_bugs = [bug for bug in open_priority_bugs if issue_has_sla(bug)]
+    unassigned = [bug for bug in open_priority_bugs if bug["assignee"] is None]
+
+    overdue = [
+        bug for bug in open_priority_bugs if issue_reached_sla(bug, "slaBreachesAt")
     ]
-    overdue = [bug for bug in urgent_bugs if bug["daysOpen"] > 1] + [
-        bug for bug in high_bugs if bug["daysOpen"] > 7
+    overdue_ids = {bug["id"] for bug in overdue if bug.get("id")}
+    at_risk = [
+        bug
+        for bug in open_priority_bugs
+        if bug.get("id") not in overdue_ids
+        and issue_reached_sla(bug, "slaHighRiskAt")
     ]
 
     markdown = ""
@@ -1004,7 +1033,9 @@ def configure_scheduled_jobs() -> None:
             refresh_interval_seconds,
         )
     else:
-        logging.info("REDIS_URL not set; airflow fleet health cache refresh is disabled")
+        logging.info(
+            "REDIS_URL not set; airflow fleet health cache refresh is disabled"
+        )
 
     schedule.every().friday.at("13:00").do(post_inactive_engineers)
     schedule.every(1).days.at("12:00").do(post_priority_bugs)

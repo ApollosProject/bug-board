@@ -83,6 +83,9 @@ class LinearIssueStateFiltersTest(unittest.TestCase):
             'state: { name: { nin: ["Done", "Canceled", "Duplicate"] } }',
             query_text,
         )
+        self.assertIn("slaMediumRiskAt", query_text)
+        self.assertIn("slaHighRiskAt", query_text)
+        self.assertIn("slaBreachesAt", query_text)
         self.assertEqual(issues[0]["platform"], "Mobile")
         self.assertEqual(issues[0]["daysOpen"], 1)
 
