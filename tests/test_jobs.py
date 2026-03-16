@@ -211,7 +211,7 @@ class PostPriorityBugsTest(unittest.TestCase):
                 "daysOpen": 2,
                 "priority": 2,
                 "slaMediumRiskAt": "2026-03-15T08:00:00.000Z",
-                "slaHighRiskAt": "2026-03-15T13:00:00.000Z",
+                "slaHighRiskAt": "2026-03-15T11:00:00.000Z",
                 "slaBreachesAt": "2026-03-16T12:00:00.000Z",
             },
             {

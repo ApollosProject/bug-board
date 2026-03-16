@@ -295,10 +295,7 @@ def post_priority_bugs():
         bug
         for bug in open_priority_bugs
         if bug.get("id") not in overdue_ids
-        and (
-            issue_reached_sla(bug, "slaHighRiskAt")
-            or issue_reached_sla(bug, "slaMediumRiskAt")
-        )
+        and issue_reached_sla(bug, "slaHighRiskAt")
     ]
 
     markdown = ""
