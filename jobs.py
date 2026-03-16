@@ -271,17 +271,26 @@ def post_priority_bugs():
     config = load_config()
     open_priority_bugs = get_open_issues(2, "Bug")
     unassigned = [bug for bug in open_priority_bugs if bug["assignee"] is None]
-    urgent_bugs = [bug for bug in open_priority_bugs if bug["priority"] == 1]
-    high_bugs = [bug for bug in open_priority_bugs if bug["priority"] == 2]
+    now = datetime.now(timezone.utc)
 
-    # Urgent bugs are due after one day. Mark them at risk immediately and
-    # overdue if not fixed within a day. High priority bugs retain the
-    # existing week-long window.
-    at_risk = [bug for bug in urgent_bugs if bug["daysOpen"] <= 1] + [
-        bug for bug in high_bugs if bug["daysOpen"] > 4 and bug["daysOpen"] <= 7
+    def issue_reached_sla(issue: dict, field_name: str) -> bool:
+        reached_at = _parse_linear_dt(issue.get(field_name))
+        if not reached_at:
+            return False
+        return reached_at <= now
+
+    overdue = [
+        bug for bug in open_priority_bugs if issue_reached_sla(bug, "slaBreachesAt")
     ]
-    overdue = [bug for bug in urgent_bugs if bug["daysOpen"] > 1] + [
-        bug for bug in high_bugs if bug["daysOpen"] > 7
+    overdue_ids = {bug["id"] for bug in overdue if bug.get("id")}
+    at_risk = [
+        bug
+        for bug in open_priority_bugs
+        if bug.get("id") not in overdue_ids
+        and (
+            issue_reached_sla(bug, "slaHighRiskAt")
+            or issue_reached_sla(bug, "slaMediumRiskAt")
+        )
     ]
 
     markdown = ""
@@ -1004,7 +1013,9 @@ def configure_scheduled_jobs() -> None:
             refresh_interval_seconds,
         )
     else:
-        logging.info("REDIS_URL not set; airflow fleet health cache refresh is disabled")
+        logging.info(
+            "REDIS_URL not set; airflow fleet health cache refresh is disabled"
+        )
 
     schedule.every().friday.at("13:00").do(post_inactive_engineers)
     schedule.every(1).days.at("12:00").do(post_priority_bugs)

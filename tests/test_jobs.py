@@ -1,6 +1,7 @@
 import sys
 import types
 import unittest
+from datetime import datetime, timezone
 from typing import Any, cast
 from unittest.mock import patch
 
@@ -42,9 +43,7 @@ def _install_import_shims() -> None:
 
     github_module = cast(Any, types.ModuleType("github"))
     github_module.get_pr_diff = lambda *args, **kwargs: ""
-    github_module.get_prs_waiting_for_review_by_reviewer = (
-        lambda *args, **kwargs: {}
-    )
+    github_module.get_prs_waiting_for_review_by_reviewer = lambda *args, **kwargs: {}
     github_module.get_prs_with_changes_requested_by_reviewer = (
         lambda *args, **kwargs: {}
     )
@@ -53,12 +52,8 @@ def _install_import_shims() -> None:
     sys.modules.setdefault("github", github_module)
 
     leaderboard_module = cast(Any, types.ModuleType("leaderboard"))
-    leaderboard_module.calculate_cycle_project_lead_points = (
-        lambda *args, **kwargs: 0
-    )
-    leaderboard_module.calculate_cycle_project_member_points = (
-        lambda *args, **kwargs: 0
-    )
+    leaderboard_module.calculate_cycle_project_lead_points = lambda *args, **kwargs: 0
+    leaderboard_module.calculate_cycle_project_member_points = lambda *args, **kwargs: 0
     sys.modules.setdefault("leaderboard", leaderboard_module)
 
     linear_package = cast(Any, types.ModuleType("linear"))
@@ -94,6 +89,20 @@ _install_import_shims()
 
 import jobs as jobs_module  # noqa: E402
 
+for module_name in [
+    "config",
+    "constants",
+    "fleet_health_cache",
+    "github",
+    "leaderboard",
+    "linear",
+    "linear.issues",
+    "linear.projects",
+    "openai_client",
+    "support",
+]:
+    sys.modules.pop(module_name, None)
+
 
 class _FakeScheduledJob:
     def __init__(self, recorder, interval=None):
@@ -104,6 +113,11 @@ class _FakeScheduledJob:
 
     @property
     def day(self):
+        self.unit = "day"
+        return self
+
+    @property
+    def days(self):
         self.unit = "day"
         return self
 
@@ -162,6 +176,74 @@ class ConfigureScheduledJobsTest(unittest.TestCase):
             },
             recorded_jobs,
         )
+
+
+class FixedDateTime(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        if tz is None:
+            return datetime(2026, 3, 15, 12, 0, 0)
+        return datetime(2026, 3, 15, 12, 0, 0, tzinfo=tz)
+
+
+class PostPriorityBugsTest(unittest.TestCase):
+    def test_uses_linear_sla_windows_for_at_risk_and_overdue(self):
+        posted = []
+        bugs = [
+            {
+                "id": "breached-bug",
+                "title": "Breached bug",
+                "assignee": {"displayName": "Alex"},
+                "url": "https://linear.app/issue/breached-bug",
+                "platform": "Mobile",
+                "daysOpen": 1,
+                "priority": 1,
+                "slaMediumRiskAt": "2026-03-15T09:00:00.000Z",
+                "slaHighRiskAt": "2026-03-15T10:00:00.000Z",
+                "slaBreachesAt": "2026-03-15T11:00:00.000Z",
+            },
+            {
+                "id": "risk-bug",
+                "title": "Risk bug",
+                "assignee": {"displayName": "Taylor"},
+                "url": "https://linear.app/issue/risk-bug",
+                "platform": "Web",
+                "daysOpen": 2,
+                "priority": 2,
+                "slaMediumRiskAt": "2026-03-15T08:00:00.000Z",
+                "slaHighRiskAt": "2026-03-15T13:00:00.000Z",
+                "slaBreachesAt": "2026-03-16T12:00:00.000Z",
+            },
+            {
+                "id": "old-bug",
+                "title": "Old bug",
+                "assignee": {"displayName": "Jordan"},
+                "url": "https://linear.app/issue/old-bug",
+                "platform": "API",
+                "daysOpen": 30,
+                "priority": 2,
+                "slaMediumRiskAt": "2026-03-16T08:00:00.000Z",
+                "slaHighRiskAt": "2026-03-16T10:00:00.000Z",
+                "slaBreachesAt": "2026-03-17T12:00:00.000Z",
+            },
+        ]
+
+        with patch.object(
+            jobs_module, "load_config", return_value={"people": {}, "platforms": {}}
+        ):
+            with patch.object(jobs_module, "get_open_issues", return_value=bugs):
+                with patch.object(
+                    jobs_module, "post_to_slack", side_effect=posted.append
+                ):
+                    with patch.object(jobs_module, "datetime", FixedDateTime):
+                        jobs_module.post_priority_bugs()
+
+        self.assertEqual(len(posted), 1)
+        self.assertIn("*At Risk*", posted[0])
+        self.assertIn("*Overdue*", posted[0])
+        self.assertIn("Risk bug", posted[0])
+        self.assertIn("Breached bug", posted[0])
+        self.assertNotIn("Old bug", posted[0])
 
 
 if __name__ == "__main__":
