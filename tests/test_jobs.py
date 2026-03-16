@@ -183,6 +183,15 @@ class ConfigureScheduledJobsTest(unittest.TestCase):
         )
         self.assertIn(
             {
+                "interval": 1,
+                "unit": "day",
+                "at_time": "14:00",
+                "func": jobs_module.post_stale,
+            },
+            recorded_jobs,
+        )
+        self.assertIn(
+            {
                 "interval": None,
                 "unit": "friday",
                 "at_time": "12:00",
@@ -205,13 +214,15 @@ class RunDebugJobsTest(unittest.TestCase):
     def test_runs_upcoming_projects_and_friday_deadlines(self):
         with patch.object(jobs_module, "should_use_redis_cache", return_value=False):
             with patch.object(jobs_module, "post_priority_bugs"):
-                with patch.object(jobs_module, "post_upcoming_projects") as upcoming:
-                    with patch.object(
-                        jobs_module, "post_friday_deadlines"
-                    ) as friday_deadlines:
-                        with patch.object(jobs_module, "post_recon_issues"):
-                            jobs_module.run_debug_jobs()
+                with patch.object(jobs_module, "post_stale") as stale:
+                    with patch.object(jobs_module, "post_upcoming_projects") as upcoming:
+                        with patch.object(
+                            jobs_module, "post_friday_deadlines"
+                        ) as friday_deadlines:
+                            with patch.object(jobs_module, "post_recon_issues"):
+                                jobs_module.run_debug_jobs()
 
+        stale.assert_called_once_with()
         upcoming.assert_called_once_with()
         friday_deadlines.assert_called_once_with()
 
