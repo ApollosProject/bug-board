@@ -183,7 +183,7 @@ class ConfigureScheduledJobsTest(unittest.TestCase):
         )
         self.assertIn(
             {
-                "interval": 1,
+                "interval": None,
                 "unit": "day",
                 "at_time": "14:00",
                 "func": jobs_module.post_stale,
