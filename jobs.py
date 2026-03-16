@@ -309,8 +309,7 @@ def post_priority_bugs():
     at_risk = [
         bug
         for bug in open_priority_bugs
-        if bug.get("id") not in overdue_ids
-        and issue_reached_sla(bug, "slaHighRiskAt")
+        if bug.get("id") not in overdue_ids and issue_reached_sla(bug, "slaHighRiskAt")
     ]
 
     markdown = ""
@@ -1008,7 +1007,7 @@ def post_weekly_changelog():
 def run_debug_jobs() -> None:
     if should_use_redis_cache():
         refresh_airflow_fleet_health_cache_job()
-    # post_inactive_engineers()
+    post_inactive_engineers()
     post_priority_bugs()
     # post_leaderboard()
     # post_weekly_changelog()
@@ -1038,14 +1037,12 @@ def configure_scheduled_jobs() -> None:
         )
 
     schedule.every().friday.at("13:00").do(post_inactive_engineers)
-    schedule.every(1).days.at("12:00").do(post_priority_bugs)
+    schedule.every().day.at("12:00").do(post_priority_bugs)
     # schedule.every().friday.at("20:00").do(post_leaderboard)
     # schedule.every().thursday.at("19:00").do(post_weekly_changelog)
     # schedule.every(1).days.at("14:00").do(post_stale)
     schedule.every().friday.at("12:00").do(post_upcoming_projects)
     schedule.every().monday.at("12:00").do(post_friday_deadlines)
-    # Run on UTC time like the other scheduled jobs. 14:00 UTC is 9:00am ET during
-    # standard time (UTC-5).
     schedule.every().day.at("14:00").do(post_recon_issues)
 
 
