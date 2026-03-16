@@ -281,11 +281,26 @@ def post_priority_bugs():
     unassigned = [bug for bug in open_priority_bugs if bug["assignee"] is None]
     now = datetime.now(timezone.utc)
 
+    def issue_has_sla(issue: dict) -> bool:
+        return any(
+            issue.get(field_name)
+            for field_name in (
+                "slaType",
+                "slaStartedAt",
+                "slaMediumRiskAt",
+                "slaHighRiskAt",
+                "slaBreachesAt",
+            )
+        )
+
     def issue_reached_sla(issue: dict, field_name: str) -> bool:
         reached_at = _parse_linear_dt(issue.get(field_name))
         if not reached_at:
             return False
         return reached_at <= now
+
+    open_priority_bugs = [bug for bug in open_priority_bugs if issue_has_sla(bug)]
+    unassigned = [bug for bug in open_priority_bugs if bug["assignee"] is None]
 
     overdue = [
         bug for bug in open_priority_bugs if issue_reached_sla(bug, "slaBreachesAt")

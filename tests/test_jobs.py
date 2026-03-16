@@ -226,6 +226,20 @@ class PostPriorityBugsTest(unittest.TestCase):
                 "slaHighRiskAt": "2026-03-16T10:00:00.000Z",
                 "slaBreachesAt": "2026-03-17T12:00:00.000Z",
             },
+            {
+                "id": "no-sla-bug",
+                "title": "No SLA bug",
+                "assignee": None,
+                "url": "https://linear.app/issue/no-sla-bug",
+                "platform": "Admin",
+                "daysOpen": 45,
+                "priority": 1,
+                "slaType": None,
+                "slaStartedAt": None,
+                "slaMediumRiskAt": None,
+                "slaHighRiskAt": None,
+                "slaBreachesAt": None,
+            },
         ]
 
         with patch.object(
@@ -246,6 +260,7 @@ class PostPriorityBugsTest(unittest.TestCase):
         self.assertIn("(-1d, Web, No Assignee)", posted[0])
         self.assertIn("(+0d, Mobile, No Assignee)", posted[0])
         self.assertNotIn("Old bug", posted[0])
+        self.assertNotIn("No SLA bug", posted[0])
 
 
 if __name__ == "__main__":
