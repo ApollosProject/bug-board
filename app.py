@@ -183,9 +183,7 @@ def _get_astro_ui_base_url() -> str:
     airflow_api_base_url = os.getenv("AIRFLOW_API_BASE_URL", "").strip().rstrip("/")
     if not airflow_api_base_url:
         return DEFAULT_ASTRO_UI_BASE_URL
-    if airflow_api_base_url.endswith("/api/v1"):
-        return airflow_api_base_url[: -len("/api/v1")]
-    return airflow_api_base_url
+    return re.sub(r"/api/v\d+$", "", airflow_api_base_url)
 
 
 def _build_astro_failed_dags_url() -> str:

@@ -227,30 +227,31 @@ class FailingDagsDashboardTest(unittest.TestCase):
     def setUp(self):
         self.client = app_module.app.test_client()
 
-    def test_build_astro_dag_run_url_uses_airflow_base_url(self):
-        with patch.dict(
-            app_module.os.environ,
-            {
-                "AIRFLOW_API_BASE_URL": (
-                    "https://clnlmo4ly14938581uy6kk252z28.28.astronomer.run/"
-                    "dk252z28/api/v1"
-                )
-            },
-            clear=False,
-        ):
-            url = app_module._build_astro_dag_run_url(
-                "cedar_creek_backfill_rock_prayer_request_dag",
-                "manual__2026-03-12T00:00:00+00:00",
-            )
-
-        self.assertEqual(
-            url,
-            (
-                "https://clnlmo4ly14938581uy6kk252z28.28.astronomer.run/"
-                "dk252z28/dags/cedar_creek_backfill_rock_prayer_request_dag/"
-                "grid?dag_run_id=manual__2026-03-12T00%3A00%3A00%2B00%3A00"
-            ),
+    def test_build_astro_dag_run_url_strips_airflow_api_version_suffix(self):
+        expected_url = (
+            "https://clnlmo4ly14938581uy6kk252z28.28.astronomer.run/"
+            "dk252z28/dags/cedar_creek_backfill_rock_prayer_request_dag/"
+            "grid?dag_run_id=manual__2026-03-12T00%3A00%3A00%2B00%3A00"
         )
+
+        for version in ("v1", "v2"):
+            with self.subTest(version=version):
+                with patch.dict(
+                    app_module.os.environ,
+                    {
+                        "AIRFLOW_API_BASE_URL": (
+                            "https://clnlmo4ly14938581uy6kk252z28.28.astronomer.run/"
+                            f"dk252z28/api/{version}"
+                        )
+                    },
+                    clear=False,
+                ):
+                    url = app_module._build_astro_dag_run_url(
+                        "cedar_creek_backfill_rock_prayer_request_dag",
+                        "manual__2026-03-12T00:00:00+00:00",
+                    )
+
+                self.assertEqual(url, expected_url)
 
     def test_dashboard_renders_full_failed_dag_list(self):
         payload = {
@@ -290,7 +291,7 @@ class FailingDagsDashboardTest(unittest.TestCase):
             {
                 "AIRFLOW_API_BASE_URL": (
                     "https://clnlmo4ly14938581uy6kk252z28.28.astronomer.run/"
-                    "dk252z28/api/v1"
+                    "dk252z28/api/v2"
                 )
             },
             clear=False,
