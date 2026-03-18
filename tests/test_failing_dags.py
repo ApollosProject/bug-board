@@ -332,6 +332,10 @@ class FailingDagsDashboardTest(unittest.TestCase):
             body,
         )
         self.assertIn('<ul class="dag-list">', body)
+        self.assertIn(".dag-list-item {", body)
+        self.assertIn("list-style: none;", body)
+        self.assertIn(".dag-list-item::marker {", body)
+        self.assertIn('content: "";', body)
         self.assertIn("2 failing DAGs", body)
         self.assertNotIn('class="dag-table"', body)
         self.assertNotIn('class="dag-entry-index"', body)
