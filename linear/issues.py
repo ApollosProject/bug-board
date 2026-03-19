@@ -605,69 +605,6 @@ def get_open_issues_in_projects(project_names):
     return issues
 
 
-def get_recently_resolved_parent_issues_in_project(project_name: str, limit: int = 50):
-    """Return recently resolved *parent* issues for a project.
-
-    This is used for computing 'days since last open issue' when there are
-    currently no open issues. Use Linear state *type* (not customizable name)
-    so custom workflows like "Released" are treated correctly.
-    """
-    team_key = get_linear_team_key()
-    query = gql(
-        """
-        query ResolvedIssuesInProject(
-          $projectName: String!,
-          $team_key: String!,
-          $cursor: String
-        ) {
-          issues(
-            first: 50
-            after: $cursor
-            filter: {
-              team: { key: { eq: $team_key } }
-              project: { name: { eq: $projectName } }
-              parent: { null: true }
-              state: { type: { in: ["completed", "canceled"] } }
-            }
-            orderBy: updatedAt
-          ) {
-            nodes {
-              id
-              identifier
-              title
-              url
-              updatedAt
-              completedAt
-              canceledAt
-              state { name type }
-            }
-            pageInfo { hasNextPage endCursor }
-          }
-        }
-        """,
-    )
-
-    cursor = None
-    issues = []
-    while True:
-        data = _execute(
-            query,
-            variable_values={
-                "projectName": project_name,
-                "team_key": team_key,
-                "cursor": cursor,
-            },
-        )
-        payload = data["issues"]
-        issues.extend(payload["nodes"])
-        if len(issues) >= limit:
-            return issues[:limit]
-        if not payload["pageInfo"]["hasNextPage"]:
-            break
-        cursor = payload["pageInfo"]["endCursor"]
-    return issues
-
-
 def get_completed_issues_for_person(login: str, days=30):
     """Return completed issues for a user over the last `days` days, filtered by Linear username."""
     team_key = get_linear_team_key()
