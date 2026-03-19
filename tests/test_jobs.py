@@ -65,14 +65,10 @@ def _install_import_shims() -> None:
     linear_issues_module.get_completed_issues_for_person = lambda *args, **kwargs: []
     linear_issues_module.get_open_issues = lambda *args, **kwargs: []
     linear_issues_module.get_open_issues_in_projects = lambda *args, **kwargs: []
-    linear_issues_module.get_recently_resolved_parent_issues_in_project = (
-        lambda *args, **kwargs: []
-    )
     linear_issues_module.get_stale_issues_by_assignee = lambda *args, **kwargs: {}
     sys.modules.setdefault("linear.issues", linear_issues_module)
 
     linear_projects_module = cast(Any, types.ModuleType("linear.projects"))
-    linear_projects_module.get_project_by_name = lambda *args, **kwargs: None
     linear_projects_module.get_projects = lambda *args, **kwargs: []
     sys.modules.setdefault("linear.projects", linear_projects_module)
 
@@ -177,15 +173,6 @@ class ConfigureScheduledJobsTest(unittest.TestCase):
                 "interval": None,
                 "unit": "day",
                 "at_time": "14:00",
-                "func": jobs_module.post_recon_issues,
-            },
-            recorded_jobs,
-        )
-        self.assertIn(
-            {
-                "interval": None,
-                "unit": "day",
-                "at_time": "14:00",
                 "func": jobs_module.post_stale,
             },
             recorded_jobs,
@@ -219,8 +206,7 @@ class RunDebugJobsTest(unittest.TestCase):
                         with patch.object(
                             jobs_module, "post_friday_deadlines"
                         ) as friday_deadlines:
-                            with patch.object(jobs_module, "post_recon_issues"):
-                                jobs_module.run_debug_jobs()
+                            jobs_module.run_debug_jobs()
 
         stale.assert_called_once_with()
         upcoming.assert_called_once_with()

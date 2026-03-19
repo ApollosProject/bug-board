@@ -2,8 +2,7 @@ import logging
 import os
 import re
 import time
-from datetime import date, datetime, timezone, tzinfo
-from zoneinfo import ZoneInfo
+from datetime import datetime, timezone
 
 import requests
 import schedule
@@ -28,11 +27,9 @@ from linear.issues import (
     get_completed_issues,
     get_completed_issues_for_person,
     get_open_issues,
-    get_open_issues_in_projects,
-    get_recently_resolved_parent_issues_in_project,
     get_stale_issues_by_assignee,
 )
-from linear.projects import get_project_by_name, get_projects
+from linear.projects import get_projects
 from openai_client import get_chat_function_call
 from support import get_support_slugs
 
@@ -43,18 +40,7 @@ MAX_RETRY_COUNT = 3
 RETRY_SLEEP_SECONDS = 5
 MAX_DIFF_CHARS = 12000
 MAX_DIFF_FILES = 20
-RECON_PROJECT_NAME = os.getenv("RECON_PROJECT_NAME", "RECON Issues")
-RECON_TZ = os.getenv("RECON_TIMEZONE", "America/New_York")
 FLEET_HEALTH_REFRESH_DEFAULT_SECONDS = 60
-
-
-def _today_in_tz(tz_name: str) -> date:
-    tz: tzinfo
-    try:
-        tz = ZoneInfo(tz_name)
-    except Exception:
-        tz = timezone.utc
-    return datetime.now(tz).date()
 
 
 def _read_positive_int_env(name: str, default: int) -> int:
@@ -77,28 +63,6 @@ def _parse_linear_dt(value: str | None) -> datetime | None:
         except ValueError:
             continue
     return None
-
-
-def _get_recon_cc_mentions() -> list[str]:
-    """Return Slack mentions to CC when an SLA is breached.
-
-    Source:
-    - config.yml people entries for slugs in RECON_CC_SLUGS (default: gerry,tyler)
-    """
-    slugs_env = os.getenv("RECON_CC_SLUGS", "gerry,tyler")
-    slugs = [s.strip() for s in slugs_env.split(",") if s.strip()]
-    config = load_config()
-    people = config.get("people", {}) or {}
-    mentions = []
-    for slug in slugs:
-        person = people.get(slug)
-        slack_id = (person or {}).get("slack_id")
-        if slack_id:
-            mentions.append(f"<@{slack_id}>")
-        else:
-            # Fallback to plain text so the intent is still visible even if config is missing.
-            mentions.append(slug)
-    return mentions
 
 
 def post_to_slack(markdown: str):
@@ -410,168 +374,6 @@ def post_priority_bugs():
     if markdown:
         markdown += f"\n\n<{os.getenv('APP_URL')}|View Bug Board>"
         post_to_slack(markdown)
-
-
-@with_retries
-def post_recon_issues():
-    """Post daily RECON Issues summary for the RECON Issues Linear project."""
-    project = get_project_by_name(RECON_PROJECT_NAME)
-    if not project:
-        logging.error("RECON project not found by name: %r", RECON_PROJECT_NAME)
-        return
-
-    today = _today_in_tz(RECON_TZ)
-
-    issues = get_open_issues_in_projects([RECON_PROJECT_NAME])
-    # Only consider parent issues for open-count and the "days since last open issue"
-    # metric (per requirement).
-    parent_issues = [i for i in issues if not i.get("parent")]
-    open_count = len(parent_issues)
-
-    now = datetime.now(timezone.utc)
-
-    def is_open_state(state: dict | None) -> bool:
-        state = state or {}
-        # Linear workflow names are customizable (e.g. "Released"), so use
-        # state type when available.
-        state_type = (state.get("type") or "").lower()
-        if state_type:
-            return state_type not in {"completed", "canceled"}
-        state_name = state.get("name")
-        return state_name not in {"Done", "Canceled", "Duplicate"}
-
-    def slack_mention_or_name(display_name: str | None) -> str:
-        if not display_name:
-            return "Unassigned"
-        mention = get_slack_markdown_by_linear_username(display_name)
-        return display_name if mention == "No Assignee" else mention
-
-    def issue_is_sla_breached(issue: dict) -> bool:
-        breaches_at = _parse_linear_dt(issue.get("slaBreachesAt"))
-        if not breaches_at:
-            return False
-        return breaches_at <= now
-
-    # A RECON "issue" may have sub-issues with SLAs. CC if any open issue or any
-    # open child is breached.
-    breached_items: list[dict] = []
-    for issue in parent_issues:
-        if issue_is_sla_breached(issue):
-            breached_items.append(issue)
-            continue
-        for child in (issue.get("children") or {}).get("nodes", []) or []:
-            if not is_open_state(child.get("state")):
-                continue
-            if issue_is_sla_breached(child):
-                breached_items.append(child)
-
-    cc_mentions = _get_recon_cc_mentions() if breached_items else []
-
-    # Format Slack post
-    lines: list[str] = []
-    project_url = project.get("url")
-    if project_url:
-        lines.append(f"*<{project_url}|RECON Issues Daily>*")
-    else:
-        lines.append("*RECON Issues Daily*")
-    lines.append("--------------------------------")
-    lines.append("")
-
-    if open_count == 0:
-        resolved = get_recently_resolved_parent_issues_in_project(RECON_PROJECT_NAME)
-
-        def resolved_at(it: dict) -> datetime | None:
-            return (
-                _parse_linear_dt(it.get("completedAt"))
-                or _parse_linear_dt(it.get("canceledAt"))
-                or _parse_linear_dt(it.get("updatedAt"))
-            )
-
-        latest = None
-        for it in resolved:
-            dt = resolved_at(it)
-            if not dt:
-                continue
-            if latest is None or dt > latest:
-                latest = dt
-
-        if latest is None:
-            lines.append("Days since last open issue: unknown")
-        else:
-            try:
-                tz = ZoneInfo(RECON_TZ)
-            except Exception:
-                tz = timezone.utc
-            latest_date = latest.astimezone(tz).date()
-            days = (today - latest_date).days
-            if days < 0:
-                days = 0
-            lines.append(f"Days since last open issue: {days}")
-
-        lines.append("")
-        lines.append("🎉🎉🎉")
-    else:
-        lines.append(f"*Open issues ({open_count})*")
-        lines.append("")
-
-        # Sort oldest first for readability.
-        def created_key(it: dict) -> str:
-            return it.get("createdAt") or ""
-
-        for issue in sorted(parent_issues, key=created_key):
-            created = _parse_linear_dt(issue.get("createdAt"))
-            age_days = (now - created).days if created else None
-            ident = issue.get("identifier")
-            title = issue.get("title")
-            url = issue.get("url")
-            if issue_is_sla_breached(issue):
-                breached = " \U0001f6a8 SLA BREACHED \U0001f6a8"
-            else:
-                breached = ""
-            if not breached:
-                for child in (issue.get("children") or {}).get("nodes", []) or []:
-                    if not is_open_state(child.get("state")):
-                        continue
-                    if issue_is_sla_breached(child):
-                        breached = " \U0001f6a8 SLA Breached \U0001f6a8"
-                        break
-            age = f"+{age_days}d" if age_days is not None else None
-            if ident:
-                label = f"{ident}: {title}"
-            else:
-                label = title
-
-            # Show sub-issue assignees (deduped), not the parent assignee.
-            assignees: set[str] = set()
-            for child in (issue.get("children") or {}).get("nodes", []) or []:
-                if not is_open_state(child.get("state")):
-                    continue
-                child_assignee = (child.get("assignee") or {}).get("displayName")
-                if child_assignee:
-                    assignees.add(slack_mention_or_name(child_assignee))
-
-            if assignees:
-                assignees_text = ", ".join(sorted(assignees))
-            else:
-                # If there are no open sub-issues (or no assignees), fall back.
-                parent_assignee = (issue.get("assignee") or {}).get("displayName")
-                assignees_text = slack_mention_or_name(parent_assignee)
-
-            meta_parts = []
-            if age:
-                meta_parts.append(age)
-            if assignees_text:
-                meta_parts.append(assignees_text)
-            meta = f" ({', '.join(meta_parts)})" if meta_parts else ""
-
-            lines.append(f"- <{url}|{label}>{meta}{breached}")
-
-    # Put CC at the bottom, separated by a blank line.
-    if cc_mentions:
-        lines.append("")
-        lines.append("cc: " + " ".join(cc_mentions))
-
-    post_to_slack("\n".join(lines))
 
 
 @with_retries
@@ -1014,7 +816,6 @@ def run_debug_jobs() -> None:
     post_stale()
     post_upcoming_projects()
     post_friday_deadlines()
-    post_recon_issues()
 
 
 def configure_scheduled_jobs() -> None:
@@ -1043,7 +844,6 @@ def configure_scheduled_jobs() -> None:
     schedule.every().day.at("14:00").do(post_stale)
     schedule.every().friday.at("12:00").do(post_upcoming_projects)
     schedule.every().monday.at("12:00").do(post_friday_deadlines)
-    schedule.every().day.at("14:00").do(post_recon_issues)
 
 
 def main() -> None:
