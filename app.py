@@ -86,7 +86,13 @@ def is_inactive_project(project: dict[str, Any]) -> bool:
 
 
 app = Flask(__name__)
-app.wsgi_app = ProxyFix(app.wsgi_app, x_prefix=1)
+
+
+def _apply_proxy_fix(flask_app: Flask) -> None:
+    setattr(flask_app, "wsgi_app", ProxyFix(flask_app.wsgi_app, x_prefix=1))
+
+
+_apply_proxy_fix(app)
 
 # Maximum number of distinct _build_index_context results to cache.
 # This can be increased or made configurable based on production usage patterns.
