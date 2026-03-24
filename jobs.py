@@ -276,10 +276,10 @@ def post_priority_bugs():
         if bug.get("id") not in overdue_ids and issue_reached_sla(bug, "slaHighRiskAt")
     ]
 
-    markdown = ""
+    sections = []
     if unassigned:
-        markdown += "*Unassigned Priority Bugs*\n\n"
-        markdown += "\n".join(
+        unassigned_section = "*Unassigned Priority Bugs*\n\n"
+        unassigned_section += "\n".join(
             [
                 format_bug_line(bug)
                 for bug in sorted(
@@ -289,7 +289,6 @@ def post_priority_bugs():
                 )
             ]
         )
-        markdown += "\n\n"
         assigned = {
             bug["assignee"]["displayName"]
             for bug in open_priority_bugs
@@ -344,34 +343,38 @@ def post_priority_bugs():
                 notified_lines.append(mention)
 
             notified_text = "\n".join(notified_lines)
-            markdown += f"attn:\n\n{notified_text}"
+            unassigned_section += f"\n\nattn:\n\n{notified_text}"
+        sections.append(unassigned_section)
     if at_risk:
-        markdown += "\n\n*At Risk*\n\n"
-        markdown += "\n".join(
-            [
-                format_bug_line(bug)
-                for bug in sorted(
-                    at_risk,
-                    key=lambda x: x["daysOpen"],
-                    reverse=True,
-                )
-            ]
+        sections.append(
+            "*At Risk*\n\n"
+            + "\n".join(
+                [
+                    format_bug_line(bug)
+                    for bug in sorted(
+                        at_risk,
+                        key=lambda x: x["daysOpen"],
+                        reverse=True,
+                    )
+                ]
+            )
         )
-        markdown += "\n\n"
     if overdue:
-        markdown += "\n\n*Overdue*\n\n"
-        markdown += "\n".join(
-            [
-                format_bug_line(bug)
-                for bug in sorted(
-                    overdue,
-                    key=lambda x: x["daysOpen"],
-                    reverse=True,
-                )
-            ]
+        sections.append(
+            "*Overdue*\n\n"
+            + "\n".join(
+                [
+                    format_bug_line(bug)
+                    for bug in sorted(
+                        overdue,
+                        key=lambda x: x["daysOpen"],
+                        reverse=True,
+                    )
+                ]
+            )
         )
-        markdown += "\n\n"
-    if markdown:
+    if sections:
+        markdown = "\n\n".join(sections)
         markdown += f"\n\n<{os.getenv('APP_URL')}|View Bug Board>"
         post_to_slack(markdown)
 
