@@ -1,7 +1,7 @@
 import sys
 import types
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, cast
 from unittest.mock import patch
 
@@ -294,8 +294,70 @@ class PostPriorityBugsTest(unittest.TestCase):
         self.assertIn("Breached bug", posted[0])
         self.assertIn("(-1d, Web, No Assignee)", posted[0])
         self.assertIn("(+0d, Mobile, No Assignee)", posted[0])
+        self.assertIn("(-1d, Web, No Assignee)\n\n*Overdue*", posted[0])
+        self.assertNotIn("\n\n\n\n*Overdue*", posted[0])
         self.assertNotIn("Old bug", posted[0])
         self.assertNotIn("No SLA bug", posted[0])
+
+    def test_uses_single_blank_line_between_priority_bug_sections(self):
+        posted = []
+        bugs = [
+            {
+                "id": "unassigned-bug",
+                "title": "Unassigned bug",
+                "assignee": None,
+                "url": "https://linear.app/issue/unassigned-bug",
+                "platform": "Mobile",
+                "daysOpen": 14,
+                "priority": 2,
+                "slaMediumRiskAt": "2026-03-14T08:00:00.000Z",
+                "slaHighRiskAt": "2026-03-16T10:00:00.000Z",
+                "slaBreachesAt": "2026-03-17T12:00:00.000Z",
+            },
+            {
+                "id": "risk-bug",
+                "title": "Risk bug",
+                "assignee": {"displayName": "Taylor"},
+                "url": "https://linear.app/issue/risk-bug",
+                "platform": "Web",
+                "daysOpen": 1,
+                "priority": 2,
+                "slaMediumRiskAt": "2026-03-14T08:00:00.000Z",
+                "slaHighRiskAt": "2026-03-15T11:00:00.000Z",
+                "slaBreachesAt": "2026-03-16T12:00:00.000Z",
+            },
+            {
+                "id": "overdue-bug",
+                "title": "Overdue bug",
+                "assignee": {"displayName": "Jordan"},
+                "url": "https://linear.app/issue/overdue-bug",
+                "platform": "API",
+                "daysOpen": 0,
+                "priority": 2,
+                "slaMediumRiskAt": "2026-03-14T08:00:00.000Z",
+                "slaHighRiskAt": "2026-03-15T09:00:00.000Z",
+                "slaBreachesAt": "2026-03-15T11:00:00.000Z",
+            },
+        ]
+
+        with patch.object(
+            jobs_module, "load_config", return_value={"people": {}, "platforms": {}}
+        ):
+            with patch.object(jobs_module, "get_open_issues", return_value=bugs):
+                with patch.object(
+                    jobs_module, "post_to_slack", side_effect=posted.append
+                ):
+                    with patch.object(jobs_module, "datetime", FixedDateTime):
+                        jobs_module.post_priority_bugs()
+
+        self.assertEqual(len(posted), 1)
+        self.assertIn("Unassigned bug", posted[0])
+        self.assertIn("Risk bug", posted[0])
+        self.assertIn("Overdue bug", posted[0])
+        self.assertIn("Mobile)\n\n*At Risk*", posted[0])
+        self.assertIn("No Assignee)\n\n*Overdue*", posted[0])
+        self.assertNotIn("\n\n\n\n*At Risk*", posted[0])
+        self.assertNotIn("\n\n\n\n*Overdue*", posted[0])
 
 
 if __name__ == "__main__":
