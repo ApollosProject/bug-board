@@ -227,6 +227,26 @@ class FailingDagsDashboardTest(unittest.TestCase):
     def setUp(self):
         self.client = app_module.app.test_client()
 
+    def test_dashboard_honors_forwarded_prefix_for_app_links(self):
+        payload = {"status": "healthy", "failed_runs": 0, "failed_dags": []}
+
+        with patch.object(
+            app_module,
+            "_get_airflow_fleet_health_payload",
+            return_value=(payload, 200),
+        ):
+            response = self.client.get(
+                "/failing-dags", headers={"X-Forwarded-Prefix": "/grid"}
+            )
+
+        body = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('href="/grid/static/pico.min.css"', body)
+        self.assertIn('href="/grid/static/styles.css"', body)
+        self.assertIn('href="/grid/"', body)
+        self.assertIn('href="/grid/team"', body)
+        self.assertIn('href="/grid/failing-dags"', body)
+
     def test_build_astro_dag_run_url_strips_airflow_api_version_suffix(self):
         expected_url = (
             "https://clnlmo4ly14938581uy6kk252z28.28.astronomer.run/"

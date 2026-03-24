@@ -9,6 +9,7 @@ from typing import Any, TypedDict, TypeVar
 from urllib.parse import quote, urlencode
 
 from flask import Flask, abort, jsonify, render_template, request
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from airflow_fleet_health import AirflowFleetHealthError, evaluate_fleet_health
 from config import load_config
@@ -85,6 +86,7 @@ def is_inactive_project(project: dict[str, Any]) -> bool:
 
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_prefix=1)
 
 # Maximum number of distinct _build_index_context results to cache.
 # This can be increased or made configurable based on production usage patterns.
