@@ -3,7 +3,7 @@ from datetime import datetime
 import threading
 
 from dotenv import load_dotenv
-from gql import Client
+from gql import Client, GraphQLRequest
 from gql.transport.aiohttp import AIOHTTPTransport
 
 load_dotenv()
@@ -66,4 +66,5 @@ def _execute(query, variable_values=None):
     client = _get_client()
     if variable_values is None:
         return client.execute(query)
-    return client.execute(query, variable_values=variable_values)
+    request = GraphQLRequest(query, variable_values=variable_values)
+    return client.execute(request)
