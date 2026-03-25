@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime
 from unittest.mock import patch
 
 from gql import GraphQLRequest, gql
@@ -57,6 +58,48 @@ class GraphQLClientRequestTests(unittest.TestCase):
         request, kwargs = client.calls[0]
         self.assertIs(request, query)
         self.assertEqual(kwargs, {})
+
+    def test_waiting_for_review_uses_utc_timestamps(self):
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                base = datetime(2026, 3, 25, 14, 0, 0)
+                if tz is None:
+                    return base
+                return base.replace(tzinfo=tz)
+
+        pr = {
+            "number": 6050,
+            "additions": 1,
+            "mergeable": "MERGEABLE",
+            "reviewRequests": {
+                "nodes": [
+                    {"requestedReviewer": {"login": "darrylyip"}},
+                    {"requestedReviewer": {"login": "vitlelis"}},
+                ]
+            },
+            "reviews": {"nodes": []},
+            "timelineItems": {
+                "nodes": [
+                    {
+                        "createdAt": "2026-03-24T13:51:12Z",
+                        "requestedReviewer": {"login": "darrylyip"},
+                    },
+                    {
+                        "createdAt": "2026-03-24T13:51:13Z",
+                        "requestedReviewer": {"login": "vitlelis"},
+                    },
+                ]
+            },
+            "statusCheckRollup": {"state": "SUCCESS"},
+        }
+
+        with patch.object(github, "_get_all_prs", return_value=[pr]):
+            with patch.object(github, "datetime", FixedDateTime):
+                waiting = github.get_prs_waiting_for_review_by_reviewer()
+
+        self.assertEqual(waiting["darrylyip"], [pr])
+        self.assertEqual(waiting["vitlelis"], [pr])
 
 
 if __name__ == "__main__":
