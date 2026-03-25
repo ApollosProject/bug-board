@@ -103,14 +103,7 @@ jobs:
         trap cleanup EXIT
 
         for _ in {1..20}; do
-          if python - <<'PY'
-import json
-import urllib.request
-
-with urllib.request.urlopen("http://127.0.0.1:8000/healthz", timeout=2) as response:
-    payload = json.loads(response.read().decode())
-    assert payload == {"status": "ok"}
-PY
+          if python -c "import json, urllib.request; payload = json.loads(urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2).read().decode()); assert payload == {'status': 'ok'}"
           then
             exit 0
           fi
