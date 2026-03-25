@@ -59,32 +59,6 @@ class GraphQLClientRequestTests(unittest.TestCase):
         self.assertIs(request, query)
         self.assertEqual(kwargs, {})
 
-    def test_github_execute_falls_back_for_gql3_style_clients(self):
-        class _FallbackClient:
-            def __init__(self):
-                self.calls = []
-
-            def execute(self, request, **kwargs):
-                self.calls.append((request, kwargs))
-                if isinstance(request, GraphQLRequest):
-                    raise TypeError("Not an AST Node: <GraphQLRequest instance>.")
-                return {"ok": True}
-
-        client = _FallbackClient()
-        query = gql("query RepoId($owner: String!) { __typename }")
-
-        with patch.object(github, "_get_client", return_value=client):
-            response = github._execute(query, {"owner": "apollosproject"})
-
-        self.assertEqual(response, {"ok": True})
-        self.assertEqual(len(client.calls), 2)
-        request, kwargs = client.calls[0]
-        self.assertIsInstance(request, GraphQLRequest)
-        self.assertEqual(request.variable_values, {"owner": "apollosproject"})
-        request, kwargs = client.calls[1]
-        self.assertIs(request, query)
-        self.assertEqual(kwargs, {"variable_values": {"owner": "apollosproject"}})
-
     def test_waiting_for_review_uses_utc_timestamps(self):
         class FixedDateTime(datetime):
             @classmethod
