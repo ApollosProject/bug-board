@@ -547,6 +547,12 @@ class FailingDagsDashboardTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 401)
 
+    def test_healthz_returns_ok_payload(self):
+        response = self.client.get("/healthz")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), {"status": "ok"})
+
     def test_health_endpoint_skips_live_eval_without_redis(self):
         with patch.dict(
             app_module.os.environ,
