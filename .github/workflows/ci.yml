@@ -70,3 +70,52 @@ jobs:
     - name: Run unit tests
       run: |
         python -m unittest discover -s tests -p 'test_*.py'
+
+  gunicorn-smoke:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Verify Gunicorn boots the app
+      run: |
+        set -euo pipefail
+
+        LOG_FILE="$(mktemp)"
+        gunicorn app:app --bind 127.0.0.1:8000 --workers 1 --log-file "$LOG_FILE" &
+        GUNICORN_PID=$!
+
+        cleanup() {
+          kill "$GUNICORN_PID" || true
+          wait "$GUNICORN_PID" || true
+          rm -f "$LOG_FILE"
+        }
+        trap cleanup EXIT
+
+        for _ in {1..20}; do
+          if python - <<'PY'
+import json
+import urllib.request
+
+with urllib.request.urlopen("http://127.0.0.1:8000/healthz", timeout=2) as response:
+    payload = json.loads(response.read().decode())
+    assert payload == {"status": "ok"}
+PY
+          then
+            exit 0
+          fi
+          sleep 1
+        done
+
+        cat "$LOG_FILE"
+        exit 1
