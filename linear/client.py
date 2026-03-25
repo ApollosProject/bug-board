@@ -67,4 +67,9 @@ def _execute(query, variable_values=None):
     if variable_values is None:
         return client.execute(query)
     request = GraphQLRequest(query, variable_values=variable_values)
-    return client.execute(request)
+    try:
+        return client.execute(request)
+    except TypeError as exc:
+        if "Not an AST Node" not in str(exc):
+            raise
+        return client.execute(query, variable_values=variable_values)

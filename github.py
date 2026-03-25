@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any, Dict, List
 import requests
@@ -39,7 +39,12 @@ def _execute(query, variable_values=None):
     if variable_values is None:
         return client.execute(query)
     request = GraphQLRequest(query, variable_values=variable_values)
-    return client.execute(request)
+    try:
+        return client.execute(request)
+    except TypeError as exc:
+        if "Not an AST Node" not in str(exc):
+            raise
+        return client.execute(query, variable_values=variable_values)
 
 
 # headers used for REST API requests
@@ -190,6 +195,17 @@ def has_failing_required_checks(pr):
     return rollup.get("state") != "SUCCESS"
 
 
+def _parse_github_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=timezone.utc
+        )
+    except ValueError:
+        return None
+
+
 def _get_all_prs(pr_states: List[str]) -> List[Dict[str, Any]]:
     """Fetch PRs for all tracked repositories concurrently."""
     repo_ids = get_repo_ids()
@@ -312,6 +328,7 @@ def get_prs_waiting_for_review_by_reviewer():
     """
     all_prs = _get_all_prs(["OPEN"])
     stuck_prs = {}
+    threshold = datetime.now(timezone.utc) - timedelta(hours=24)
     for pr in all_prs:
         additions = pr.get("additions")
         if additions is None or additions >= 200:
@@ -327,10 +344,11 @@ def get_prs_waiting_for_review_by_reviewer():
             # waiting on author to fix checks
             continue
         for review in pr["timelineItems"]["nodes"]:
+            requested_at = _parse_github_timestamp(review.get("createdAt"))
             if (
                 review["requestedReviewer"]
-                and review["createdAt"]
-                < (datetime.now() - timedelta(hours=24)).isoformat()
+                and requested_at is not None
+                and requested_at < threshold
             ):
                 reviewer = review["requestedReviewer"]["login"]
                 open_review_requests = [
