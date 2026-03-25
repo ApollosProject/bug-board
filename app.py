@@ -245,6 +245,13 @@ def _require_airflow_fleet_monitor_token() -> None:
         abort(401)
 
 
+@app.route("/healthz")
+def healthz():
+    response = jsonify({"status": "ok"})
+    response.headers["Cache-Control"] = "no-store"
+    return response, 200
+
+
 @app.route("/airflow-fleet-health")
 def airflow_fleet_health():
     _require_airflow_fleet_monitor_token()

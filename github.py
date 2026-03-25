@@ -7,7 +7,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 
 from dotenv import load_dotenv
-from gql import Client, gql
+from gql import Client, GraphQLRequest, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 
 from config import get_github_orgs
@@ -38,7 +38,8 @@ def _execute(query, variable_values=None):
     client = _get_client()
     if variable_values is None:
         return client.execute(query)
-    return client.execute(query, variable_values=variable_values)
+    request = GraphQLRequest(query, variable_values=variable_values)
+    return client.execute(request)
 
 
 # headers used for REST API requests

@@ -17,10 +17,17 @@ def _install_import_shims() -> None:
         def __init__(self, *args, **kwargs):
             pass
 
-        def execute(self, query, variable_values=None):
+        def execute(self, query, **kwargs):
             return {}
 
+    class DummyGraphQLRequest:
+        def __init__(self, request, *, variable_values=None, operation_name=None):
+            self.request = request
+            self.variable_values = variable_values
+            self.operation_name = operation_name
+
     gql_module.Client = DummyClient
+    gql_module.GraphQLRequest = DummyGraphQLRequest
     gql_module.gql = lambda query: query
     sys.modules.setdefault("gql", gql_module)
 
