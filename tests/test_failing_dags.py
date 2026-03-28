@@ -254,11 +254,10 @@ class FailingDagsDashboardTest(unittest.TestCase):
         self.assertIn('href="/grid/team"', body)
         self.assertIn('href="/grid/failing-dags"', body)
 
-    def test_build_astro_dag_run_url_strips_airflow_api_version_suffix(self):
+    def test_build_astro_dag_url_strips_airflow_api_version_suffix(self):
         expected_url = (
             "https://clnlmo4ly14938581uy6kk252z28.28.astronomer.run/"
-            "dk252z28/dags/cedar_creek_backfill_rock_prayer_request_dag/"
-            "grid?dag_run_id=manual__2026-03-12T00%3A00%3A00%2B00%3A00"
+            "dk252z28/dags/cedar_creek_backfill_rock_prayer_request_dag"
         )
 
         for version in ("v1", "v2"):
@@ -273,9 +272,8 @@ class FailingDagsDashboardTest(unittest.TestCase):
                     },
                     clear=False,
                 ):
-                    url = app_module._build_astro_dag_run_url(
-                        "cedar_creek_backfill_rock_prayer_request_dag",
-                        "manual__2026-03-12T00:00:00+00:00",
+                    url = app_module._build_astro_dag_url(
+                        "cedar_creek_backfill_rock_prayer_request_dag"
                     )
 
                 self.assertEqual(url, expected_url)
@@ -347,7 +345,7 @@ class FailingDagsDashboardTest(unittest.TestCase):
             (
                 'href="https://clnlmo4ly14938581uy6kk252z28.28.astronomer.run/'
                 "dk252z28/"
-                'dags/alpha_dag/grid?dag_run_id=run-alpha"'
+                'dags/alpha_dag"'
             ),
             body,
         )
@@ -355,7 +353,7 @@ class FailingDagsDashboardTest(unittest.TestCase):
             (
                 'href="https://clnlmo4ly14938581uy6kk252z28.28.astronomer.run/'
                 "dk252z28/"
-                'dags/beta_dag/grid?dag_run_id=run-beta"'
+                'dags/beta_dag"'
             ),
             body,
         )
@@ -402,6 +400,7 @@ class FailingDagsDashboardTest(unittest.TestCase):
         self.assertIn("alpha_dag", body)
         self.assertIn("beta_dag", body)
         self.assertIn("3 failing DAGs", body)
+        self.assertIn('/dags/alpha_dag"', body)
         self.assertNotIn("/dags/alpha_dag/grid?dag_run_id=", body)
         self.assertIn("This cache entry only contains a partial DAG list.", body)
 

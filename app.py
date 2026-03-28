@@ -6,7 +6,7 @@ from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
 from datetime import datetime
 from functools import lru_cache
 from typing import Any, TypedDict, TypeVar
-from urllib.parse import quote, urlencode
+from urllib.parse import quote
 
 from flask import Flask, abort, jsonify, render_template, request
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -178,11 +178,11 @@ def _coerce_failed_dag_entries(value: Any) -> list[dict[str, str]]:
         entry = {
             "dag_id": dag_id,
             "state": state if isinstance(state, str) and state else "unknown",
+            "astro_dag_url": _build_astro_dag_url(dag_id),
         }
         dag_run_id = item.get("dag_run_id")
         if isinstance(dag_run_id, str) and dag_run_id:
             entry["dag_run_id"] = dag_run_id
-            entry["astro_run_url"] = _build_astro_dag_run_url(dag_id, dag_run_id)
         entries.append(entry)
     return entries
 
@@ -198,10 +198,9 @@ def _build_astro_failed_dags_url() -> str:
     return f"{_get_astro_ui_base_url()}/dags?status=failed&state=active"
 
 
-def _build_astro_dag_run_url(dag_id: str, dag_run_id: str) -> str:
+def _build_astro_dag_url(dag_id: str) -> str:
     dag_id_encoded = quote(dag_id, safe="")
-    query = urlencode({"dag_run_id": dag_run_id})
-    return f"{_get_astro_ui_base_url()}/dags/{dag_id_encoded}/grid?{query}"
+    return f"{_get_astro_ui_base_url()}/dags/{dag_id_encoded}"
 
 
 def _get_failed_dag_entries(payload: dict[str, Any]) -> tuple[list[dict[str, str]], bool]:
