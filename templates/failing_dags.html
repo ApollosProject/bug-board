@@ -392,10 +392,10 @@
         {% for dag in failed_dags %}
           <li class="dag-list-item">
             <div class="dag-entry">
-              {% if dag.astro_run_url %}
+              {% if dag.astro_dag_url %}
                 <a
                   class="dag-entry-link"
-                  href="{{ dag.astro_run_url }}"
+                  href="{{ dag.astro_dag_url }}"
                   target="_blank"
                   rel="noopener noreferrer"
                 >{{ dag.dag_id }}</a>
