@@ -89,18 +89,3 @@
   </ul>
 </details>
 {% endif %}
-<h3>Platforms</h3>
-<ul>
-  {% for platform, members in platform_teams|dictsort %}
-    <li>
-      {{ platform.replace('-', ' ').title() }} &ndash;
-      {% if members %}
-        {% for member in members %}
-          {{ member.name|first_name }}{% if member.lead %}*{% endif %}{% if not loop.last %}, {% endif %}
-        {% endfor %}
-      {% else %}
-        No members
-      {% endif %}
-    </li>
-  {% endfor %}
-</ul>

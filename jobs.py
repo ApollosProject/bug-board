@@ -294,37 +294,20 @@ def post_priority_bugs():
             for bug in open_priority_bugs
             if bug["assignee"]
         }
-        platforms = {bug["platform"] for bug in unassigned if bug["platform"]}
         notified_slack_ids: set[str] = set()
         slug_by_slack_id: dict[str, str] = {}
-        lead_platforms_by_slack_id: dict[str, set[str]] = {}
         support_slugs = get_support_slugs()
-        for platform in platforms:
-            platform_slug = platform.lower().replace(" ", "-")
-            platform_config = config["platforms"].get(platform_slug, {})
-
-            participant_roles = []
-            lead_slug = platform_config.get("lead")
-            if lead_slug:
-                participant_roles.append((lead_slug, True))
-            for developer_slug in platform_config.get("developers", []):
-                participant_roles.append((developer_slug, False))
-
-            for slug, is_lead in participant_roles:
-                person = config["people"].get(slug)
-                if not person:
-                    continue
-                if slug not in support_slugs:
-                    continue
-                if person["linear_username"] in assigned:
-                    continue
-                slack_id = person.get("slack_id")
-                if not slack_id:
-                    continue
-                notified_slack_ids.add(slack_id)
-                slug_by_slack_id.setdefault(slack_id, slug)
-                if is_lead:
-                    lead_platforms_by_slack_id.setdefault(slack_id, set()).add(platform)
+        for slug in support_slugs:
+            person = config["people"].get(slug)
+            if not person:
+                continue
+            if person.get("linear_username") in assigned:
+                continue
+            slack_id = person.get("slack_id")
+            if not slack_id:
+                continue
+            notified_slack_ids.add(slack_id)
+            slug_by_slack_id.setdefault(slack_id, slug)
 
         if notified_slack_ids:
             notified_lines = []
@@ -332,15 +315,7 @@ def post_priority_bugs():
                 notified_slack_ids,
                 key=lambda sid: slug_by_slack_id.get(sid, ""),
             ):
-                mention = f"<@{slack_id}>"
-                lead_platforms = sorted(lead_platforms_by_slack_id.get(slack_id, set()))
-                if lead_platforms:
-                    if len(lead_platforms) == 1:
-                        mention = f"{mention} ({lead_platforms[0]} Lead)"
-                    else:
-                        lead_text = ", ".join(f"{p} Lead" for p in lead_platforms)
-                        mention = f"{mention} ({lead_text})"
-                notified_lines.append(mention)
+                notified_lines.append(f"<@{slack_id}>")
 
             notified_text = "\n".join(notified_lines)
             unassigned_section += f"\n\nattn:\n\n{notified_text}"
