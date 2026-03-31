@@ -106,6 +106,7 @@ class _FakeScheduledJob:
         self.interval = interval
         self.unit = None
         self.at_time = None
+        self.timezone = None
 
     @property
     def day(self):
@@ -132,8 +133,9 @@ class _FakeScheduledJob:
         self.unit = "seconds"
         return self
 
-    def at(self, at_time):
+    def at(self, at_time, timezone=None):
         self.at_time = at_time
+        self.timezone = timezone
         return self
 
     def do(self, func):
@@ -142,6 +144,7 @@ class _FakeScheduledJob:
                 "interval": self.interval,
                 "unit": self.unit,
                 "at_time": self.at_time,
+                "timezone": self.timezone,
                 "func": func,
             }
         )
@@ -164,6 +167,7 @@ class ConfigureScheduledJobsTest(unittest.TestCase):
                 "interval": None,
                 "unit": "friday",
                 "at_time": "13:00",
+                "timezone": None,
                 "func": jobs_module.post_inactive_engineers,
             },
             recorded_jobs,
@@ -173,7 +177,18 @@ class ConfigureScheduledJobsTest(unittest.TestCase):
                 "interval": None,
                 "unit": "day",
                 "at_time": "14:00",
+                "timezone": None,
                 "func": jobs_module.post_stale,
+            },
+            recorded_jobs,
+        )
+        self.assertIn(
+            {
+                "interval": None,
+                "unit": "day",
+                "at_time": "14:00",
+                "timezone": "America/New_York",
+                "func": jobs_module.post_overdue_projects,
             },
             recorded_jobs,
         )
@@ -182,6 +197,7 @@ class ConfigureScheduledJobsTest(unittest.TestCase):
                 "interval": None,
                 "unit": "friday",
                 "at_time": "12:00",
+                "timezone": None,
                 "func": jobs_module.post_upcoming_projects,
             },
             recorded_jobs,
@@ -191,6 +207,7 @@ class ConfigureScheduledJobsTest(unittest.TestCase):
                 "interval": None,
                 "unit": "monday",
                 "at_time": "12:00",
+                "timezone": None,
                 "func": jobs_module.post_friday_deadlines,
             },
             recorded_jobs,
@@ -198,17 +215,23 @@ class ConfigureScheduledJobsTest(unittest.TestCase):
 
 
 class RunDebugJobsTest(unittest.TestCase):
-    def test_runs_upcoming_projects_and_friday_deadlines(self):
+    def test_runs_overdue_projects_upcoming_projects_and_friday_deadlines(self):
         with patch.object(jobs_module, "should_use_redis_cache", return_value=False):
             with patch.object(jobs_module, "post_priority_bugs"):
                 with patch.object(jobs_module, "post_stale") as stale:
-                    with patch.object(jobs_module, "post_upcoming_projects") as upcoming:
+                    with patch.object(
+                        jobs_module, "post_overdue_projects"
+                    ) as overdue:
                         with patch.object(
-                            jobs_module, "post_friday_deadlines"
-                        ) as friday_deadlines:
-                            jobs_module.run_debug_jobs()
+                            jobs_module, "post_upcoming_projects"
+                        ) as upcoming:
+                            with patch.object(
+                                jobs_module, "post_friday_deadlines"
+                            ) as friday_deadlines:
+                                jobs_module.run_debug_jobs()
 
         stale.assert_called_once_with()
+        overdue.assert_called_once_with()
         upcoming.assert_called_once_with()
         friday_deadlines.assert_called_once_with()
 
@@ -417,6 +440,87 @@ class PostPriorityBugsTest(unittest.TestCase):
         self.assertIn("attn:\n\n<@U2>\n<@U3>\n<@U4>", posted[0])
         self.assertNotIn("<@U1>", posted[0])
         self.assertNotIn("Lead)", posted[0])
+
+
+class PostOverdueProjectsTest(unittest.TestCase):
+    def test_posts_only_engineering_led_active_projects_with_past_target_dates(self):
+        posted = []
+        projects = [
+            {
+                "name": "Late Alpha",
+                "url": "https://linear.app/project/late-alpha",
+                "targetDate": "2026-03-14",
+                "status": {"name": "Active"},
+                "lead": {"displayName": "Alex"},
+            },
+            {
+                "name": "Late Beta",
+                "url": "https://linear.app/project/late-beta",
+                "targetDate": "2026-03-11",
+                "status": {"name": "Planned"},
+                "lead": {"displayName": "Pat"},
+            },
+            {
+                "name": "Late Gamma",
+                "url": "https://linear.app/project/late-gamma",
+                "targetDate": "2026-03-13",
+                "status": {"name": "Active"},
+                "lead": None,
+            },
+            {
+                "name": "Due Today",
+                "url": "https://linear.app/project/due-today",
+                "targetDate": "2026-03-15",
+                "status": {"name": "Active"},
+                "lead": {"displayName": "Alex"},
+            },
+            {
+                "name": "Completed Late",
+                "url": "https://linear.app/project/completed-late",
+                "targetDate": "2026-03-10",
+                "status": {"name": "Completed"},
+                "lead": {"displayName": "Alex"},
+            },
+            {
+                "name": "Released Late",
+                "url": "https://linear.app/project/released-late",
+                "targetDate": "2026-03-09",
+                "status": {"name": "Released"},
+                "lead": {"displayName": "Alex"},
+            },
+        ]
+        config = {
+            "people": {
+                "alex": {
+                    "linear_username": "Alex",
+                    "slack_id": "U1",
+                    "team": "engineering",
+                },
+                "pat": {
+                    "linear_username": "Pat",
+                    "slack_id": "U2",
+                    "team": "product",
+                },
+            }
+        }
+
+        with patch.object(jobs_module, "load_config", return_value=config):
+            with patch.object(jobs_module, "get_projects", return_value=projects):
+                with patch.object(
+                    jobs_module, "post_to_slack", side_effect=posted.append
+                ):
+                    with patch.object(jobs_module, "datetime", FixedDateTime):
+                        jobs_module.post_overdue_projects()
+
+        self.assertEqual(len(posted), 1)
+        self.assertIn("*Overdue Projects*", posted[0])
+        self.assertIn("Late Alpha", posted[0])
+        self.assertIn("1d overdue - Lead: <@U1>", posted[0])
+        self.assertNotIn("Late Beta", posted[0])
+        self.assertNotIn("Late Gamma", posted[0])
+        self.assertNotIn("Due Today", posted[0])
+        self.assertNotIn("Completed Late", posted[0])
+        self.assertNotIn("Released Late", posted[0])
 
 
 if __name__ == "__main__":

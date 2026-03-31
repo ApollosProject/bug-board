@@ -41,6 +41,13 @@ RETRY_SLEEP_SECONDS = 5
 MAX_DIFF_CHARS = 12000
 MAX_DIFF_FILES = 20
 FLEET_HEALTH_REFRESH_DEFAULT_SECONDS = 60
+INACTIVE_PROJECT_STATUS_NAMES = {
+    "completed",
+    "incomplete",
+    "canceled",
+    "cancelled",
+    "released",
+}
 
 
 def _read_positive_int_env(name: str, default: int) -> int:
@@ -63,6 +70,46 @@ def _parse_linear_dt(value: str | None) -> datetime | None:
         except ValueError:
             continue
     return None
+
+
+def _parse_iso_date(value: str | None):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value).date()
+    except ValueError:
+        return None
+
+
+def _is_inactive_project(project: dict) -> bool:
+    status_name = ((project.get("status") or {}).get("name") or "").strip().lower()
+    return bool(project.get("completedAt")) or status_name in INACTIVE_PROJECT_STATUS_NAMES
+
+
+def _normalize_linear_display_name(name: str) -> str:
+    return name.replace(".", " ").replace("-", " ").title()
+
+
+def _is_engineering_lead_project(project: dict, people_config: dict) -> bool:
+    engineering_slugs = {
+        slug
+        for slug, info in people_config.items()
+        if info.get("team") == ENGINEERING_TEAM_SLUG
+    }
+    name_to_slug = {}
+    for slug, info in people_config.items():
+        username = info.get("linear_username") or slug
+        full = _normalize_linear_display_name(username)
+        name_to_slug[full] = slug
+        first = full.split()[0]
+        name_to_slug.setdefault(first, slug)
+
+    lead = (project.get("lead") or {}).get("displayName")
+    if not lead:
+        return False
+    normalized = _normalize_linear_display_name(lead)
+    slug = name_to_slug.get(normalized) or name_to_slug.get(normalized.split()[0])
+    return slug in engineering_slugs
 
 
 def post_to_slack(markdown: str):
@@ -612,37 +659,59 @@ def post_upcoming_projects():
 
 
 @with_retries
+def post_overdue_projects():
+    """Notify Slack about active projects whose target date has passed."""
+    projects = get_projects()
+    people_config = load_config().get("people", {})
+    today = datetime.now(timezone.utc).date()
+    overdue = []
+
+    for project in projects:
+        if _is_inactive_project(project):
+            continue
+        if not _is_engineering_lead_project(project, people_config):
+            continue
+
+        target_dt = _parse_iso_date(project.get("targetDate"))
+        if not target_dt or target_dt >= today:
+            continue
+
+        lead = (project.get("lead") or {}).get("displayName")
+        lead_md = get_slack_markdown_by_linear_username(lead) if lead else "No Lead"
+        days_overdue = (today - target_dt).days
+        overdue.append(
+            {
+                "days_overdue": days_overdue,
+                "name": project.get("name") or "Untitled Project",
+                "line": (
+                    f"- <{project['url']}|{project['name']}> - "
+                    f"{days_overdue}d overdue - Lead: {lead_md}"
+                ),
+            }
+        )
+
+    if overdue:
+        ordered_lines = [
+            item["line"]
+            for item in sorted(
+                overdue,
+                key=lambda item: (-item["days_overdue"], item["name"].lower()),
+            )
+        ]
+        markdown = "*Overdue Projects*\n\n" + "\n".join(ordered_lines)
+        post_to_slack(markdown)
+
+
+@with_retries
 def post_friday_deadlines():
     """Notify leads about projects ending on Friday."""
     projects = get_projects()
-    config = load_config()
-    people_config = config.get("people", {})
-    engineering_slugs = {
-        slug
-        for slug, info in people_config.items()
-        if info.get("team") == ENGINEERING_TEAM_SLUG
-    }
-
-    def normalize(name: str) -> str:
-        return name.replace(".", " ").replace("-", " ").title()
-
-    name_to_slug = {}
-    for slug, info in people_config.items():
-        username = info.get("linear_username") or slug
-        full = normalize(username)
-        name_to_slug[full] = slug
-        first = full.split()[0]
-        name_to_slug.setdefault(first, slug)
-
-    def is_engineering_lead_project(project: dict) -> bool:
-        lead = (project.get("lead") or {}).get("displayName")
-        if not lead:
-            return False
-        normalized = normalize(lead)
-        slug = name_to_slug.get(normalized) or name_to_slug.get(normalized.split()[0])
-        return slug in engineering_slugs
-
-    projects = [p for p in projects if is_engineering_lead_project(p)]
+    people_config = load_config().get("people", {})
+    projects = [
+        project
+        for project in projects
+        if _is_engineering_lead_project(project, people_config)
+    ]
 
     upcoming = []
     today = datetime.now(timezone.utc).date()
@@ -792,6 +861,7 @@ def run_debug_jobs() -> None:
     # post_leaderboard()
     # post_weekly_changelog()
     post_stale()
+    post_overdue_projects()
     post_upcoming_projects()
     post_friday_deadlines()
 
@@ -820,6 +890,7 @@ def configure_scheduled_jobs() -> None:
     # schedule.every().friday.at("20:00").do(post_leaderboard)
     # schedule.every().thursday.at("19:00").do(post_weekly_changelog)
     schedule.every().day.at("14:00").do(post_stale)
+    schedule.every().day.at("14:00", "America/New_York").do(post_overdue_projects)
     schedule.every().friday.at("12:00").do(post_upcoming_projects)
     schedule.every().monday.at("12:00").do(post_friday_deadlines)
 
