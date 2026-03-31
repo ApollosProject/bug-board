@@ -1231,20 +1231,6 @@ def _build_team_context(_cache_epoch: int) -> dict:
                 return True
         return False
 
-    platform_teams = {}
-    for slug, info in config.get("platforms", {}).items():
-        lead = info.get("lead")
-        developers = [
-            dev for dev in info.get("developers", []) if dev and dev != lead
-        ]
-        developers = sorted(developers, key=lambda d: format_name(d))
-        members = []
-        if lead:
-            members.append({"name": format_name(lead), "lead": True})
-        members.extend(
-            {"name": format_name(dev), "lead": False} for dev in developers
-        )
-        platform_teams[slug] = members
     cycle_projects = get_projects()
     # attach start/target date info and compute days left
     for proj in cycle_projects:
@@ -1369,7 +1355,6 @@ def _build_team_context(_cache_epoch: int) -> dict:
             ]
 
     return {
-        "platform_teams": platform_teams,
         "developers": developers,
         "developer_projects": member_projects_list,
         "cycle_projects_by_initiative": projects_by_initiative,

@@ -680,6 +680,7 @@ class TeamContextProjectFilteringTest(unittest.TestCase):
         self.assertEqual(context["developers"], [])
         self.assertEqual(context["developer_projects"], {})
         self.assertEqual(context["cycle_projects_by_initiative"], {})
+        self.assertNotIn("platform_teams", context)
         self.assertEqual(
             [project["name"] for project in context["completed_cycle_projects"]],
             ["16KB Page Sizes for Android"],
