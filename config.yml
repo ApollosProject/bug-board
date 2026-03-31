@@ -24,11 +24,6 @@ people:
     slack_id: U15CT1KEF
     linear_username: vincent
     github_username: vinnyjth
-  darryl:
-    team: engineering
-    slack_id: U07SM59JTD2
-    linear_username: darryl
-    github_username: darrylyip
   vitor:
     team: engineering
     slack_id: U07KCR739QR
@@ -102,11 +97,9 @@ platforms:
     developers:
       - vitor
   mobile:
-    lead: darryl
     developers:
       - vitor
   tv:
-    lead: darryl
     developers:
       - vitor
   roku:
@@ -122,7 +115,6 @@ platforms:
   cluster:
     lead: vincent
     developers:
-      - darryl
       - vitor
   rock-plugin:
     lead: vincent
