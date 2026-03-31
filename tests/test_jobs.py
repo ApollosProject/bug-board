@@ -443,7 +443,7 @@ class PostPriorityBugsTest(unittest.TestCase):
 
 
 class PostOverdueProjectsTest(unittest.TestCase):
-    def test_posts_active_projects_with_past_target_dates(self):
+    def test_posts_only_engineering_led_active_projects_with_past_target_dates(self):
         posted = []
         projects = [
             {
@@ -458,6 +458,13 @@ class PostOverdueProjectsTest(unittest.TestCase):
                 "url": "https://linear.app/project/late-beta",
                 "targetDate": "2026-03-11",
                 "status": {"name": "Planned"},
+                "lead": {"displayName": "Pat"},
+            },
+            {
+                "name": "Late Gamma",
+                "url": "https://linear.app/project/late-gamma",
+                "targetDate": "2026-03-13",
+                "status": {"name": "Active"},
                 "lead": None,
             },
             {
@@ -482,7 +489,20 @@ class PostOverdueProjectsTest(unittest.TestCase):
                 "lead": {"displayName": "Alex"},
             },
         ]
-        config = {"people": {"alex": {"linear_username": "Alex", "slack_id": "U1"}}}
+        config = {
+            "people": {
+                "alex": {
+                    "linear_username": "Alex",
+                    "slack_id": "U1",
+                    "team": "engineering",
+                },
+                "pat": {
+                    "linear_username": "Pat",
+                    "slack_id": "U2",
+                    "team": "product",
+                },
+            }
+        }
 
         with patch.object(jobs_module, "load_config", return_value=config):
             with patch.object(jobs_module, "get_projects", return_value=projects):
@@ -495,13 +515,12 @@ class PostOverdueProjectsTest(unittest.TestCase):
         self.assertEqual(len(posted), 1)
         self.assertIn("*Overdue Projects*", posted[0])
         self.assertIn("Late Alpha", posted[0])
-        self.assertIn("Late Beta", posted[0])
         self.assertIn("1d overdue - Lead: <@U1>", posted[0])
-        self.assertIn("4d overdue - Lead: No Lead", posted[0])
+        self.assertNotIn("Late Beta", posted[0])
+        self.assertNotIn("Late Gamma", posted[0])
         self.assertNotIn("Due Today", posted[0])
         self.assertNotIn("Completed Late", posted[0])
         self.assertNotIn("Released Late", posted[0])
-        self.assertLess(posted[0].index("Late Beta"), posted[0].index("Late Alpha"))
 
 
 if __name__ == "__main__":

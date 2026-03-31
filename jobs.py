@@ -86,6 +86,32 @@ def _is_inactive_project(project: dict) -> bool:
     return bool(project.get("completedAt")) or status_name in INACTIVE_PROJECT_STATUS_NAMES
 
 
+def _normalize_linear_display_name(name: str) -> str:
+    return name.replace(".", " ").replace("-", " ").title()
+
+
+def _is_engineering_lead_project(project: dict, people_config: dict) -> bool:
+    engineering_slugs = {
+        slug
+        for slug, info in people_config.items()
+        if info.get("team") == ENGINEERING_TEAM_SLUG
+    }
+    name_to_slug = {}
+    for slug, info in people_config.items():
+        username = info.get("linear_username") or slug
+        full = _normalize_linear_display_name(username)
+        name_to_slug[full] = slug
+        first = full.split()[0]
+        name_to_slug.setdefault(first, slug)
+
+    lead = (project.get("lead") or {}).get("displayName")
+    if not lead:
+        return False
+    normalized = _normalize_linear_display_name(lead)
+    slug = name_to_slug.get(normalized) or name_to_slug.get(normalized.split()[0])
+    return slug in engineering_slugs
+
+
 def post_to_slack(markdown: str):
     """Send a message to Slack and raise or log on failure."""
     url = os.environ.get("SLACK_WEBHOOK_URL")
@@ -636,11 +662,14 @@ def post_upcoming_projects():
 def post_overdue_projects():
     """Notify Slack about active projects whose target date has passed."""
     projects = get_projects()
+    people_config = load_config().get("people", {})
     today = datetime.now(timezone.utc).date()
     overdue = []
 
     for project in projects:
         if _is_inactive_project(project):
+            continue
+        if not _is_engineering_lead_project(project, people_config):
             continue
 
         target_dt = _parse_iso_date(project.get("targetDate"))
@@ -677,34 +706,12 @@ def post_overdue_projects():
 def post_friday_deadlines():
     """Notify leads about projects ending on Friday."""
     projects = get_projects()
-    config = load_config()
-    people_config = config.get("people", {})
-    engineering_slugs = {
-        slug
-        for slug, info in people_config.items()
-        if info.get("team") == ENGINEERING_TEAM_SLUG
-    }
-
-    def normalize(name: str) -> str:
-        return name.replace(".", " ").replace("-", " ").title()
-
-    name_to_slug = {}
-    for slug, info in people_config.items():
-        username = info.get("linear_username") or slug
-        full = normalize(username)
-        name_to_slug[full] = slug
-        first = full.split()[0]
-        name_to_slug.setdefault(first, slug)
-
-    def is_engineering_lead_project(project: dict) -> bool:
-        lead = (project.get("lead") or {}).get("displayName")
-        if not lead:
-            return False
-        normalized = normalize(lead)
-        slug = name_to_slug.get(normalized) or name_to_slug.get(normalized.split()[0])
-        return slug in engineering_slugs
-
-    projects = [p for p in projects if is_engineering_lead_project(p)]
+    people_config = load_config().get("people", {})
+    projects = [
+        project
+        for project in projects
+        if _is_engineering_lead_project(project, people_config)
+    ]
 
     upcoming = []
     today = datetime.now(timezone.utc).date()
