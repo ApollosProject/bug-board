@@ -28,7 +28,7 @@ multidict==6.7.1
 mypy-extensions==1.1.0
 packaging==26.0
 pathspec==1.0.4
-platformdirs==4.5.1
+platformdirs==4.9.4
 propcache==0.4.1
 pycodestyle==2.14.0
 pyflakes==3.4.0
