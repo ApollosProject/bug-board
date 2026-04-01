@@ -632,10 +632,13 @@ def post_inactive_engineers():
 def post_upcoming_projects():
     """Notify leads about projects starting on Monday."""
     projects = get_projects()
+    people_config = load_config().get("people", {})
     upcoming = []
     today = datetime.now(timezone.utc).date()
     canceled_statuses = {"canceled", "cancelled"}
     for project in projects:
+        if not _is_engineering_lead_project(project, people_config):
+            continue
         start = project.get("startDate")
         if not start:
             continue
