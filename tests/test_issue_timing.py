@@ -23,6 +23,12 @@ class IssueSlaFormattingTest(unittest.TestCase):
 
         self.assertEqual(format_issue_sla_text(issue, now=now), "2d")
 
+    def test_uses_elapsed_days_for_overdue_sla(self):
+        now = datetime(2026, 4, 1, 12, 0, tzinfo=timezone.utc)
+        issue = {"slaBreachesAt": "2026-03-31T11:00:00.000Z"}
+
+        self.assertEqual(format_issue_sla_text(issue, now=now), "1d overdue")
+
 
 if __name__ == "__main__":
     unittest.main()
