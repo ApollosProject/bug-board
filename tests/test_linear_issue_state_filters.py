@@ -67,6 +67,7 @@ class LinearIssueStateFiltersTest(unittest.TestCase):
                         "updatedAt": "2026-03-08T12:00:00.000Z",
                         "labels": {"nodes": [{"name": "Bug"}, {"name": "Mobile"}]},
                         "priority": 2,
+                        "slaBreachesAt": "2026-03-08T19:00:00.000Z",
                     }
                 ]
             }
@@ -95,6 +96,7 @@ class LinearIssueStateFiltersTest(unittest.TestCase):
         self.assertIn("slaBreachesAt", query_text)
         self.assertEqual(issues[0]["platform"], "Mobile")
         self.assertEqual(issues[0]["daysOpen"], 1)
+        self.assertEqual(issues[0]["slaText"], "5h overdue")
 
     def test_get_completed_issues_summary_uses_completed_state_type(self):
         execute_calls = []

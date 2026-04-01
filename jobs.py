@@ -19,6 +19,7 @@ from github import (
     merged_prs_by_author,
     merged_prs_by_reviewer,
 )
+from issue_timing import format_issue_sla_text, parse_linear_dt
 from leaderboard import (
     calculate_cycle_project_lead_points,
     calculate_cycle_project_member_points,
@@ -145,13 +146,8 @@ def post_to_manager_slack(markdown: str):
 
 def format_bug_line(bug):
     """Return a formatted Slack message line for a bug."""
-
-    def signed_sla_days_text() -> str:
-        breaches_at = _parse_linear_dt(bug.get("slaBreachesAt"))
-        if not breaches_at:
-            return f"+{bug['daysOpen']}d"
-        delta_days = (datetime.now(timezone.utc) - breaches_at).days
-        return f"{delta_days:+d}d"
+    sla_text = format_issue_sla_text(bug, now=datetime.now(timezone.utc))
+    timing_text = sla_text or f"+{bug['daysOpen']}d"
 
     reviewer = (
         get_slack_markdown_by_linear_username(bug["assignee"]["displayName"])
@@ -162,7 +158,7 @@ def format_bug_line(bug):
     reviewer_text = f", {reviewer}" if reviewer else ""
     content = (
         f"<{bug['url']}|{bug['title']}> "
-        f"({signed_sla_days_text()}{platform_text}{reviewer_text})"
+        f"({timing_text}{platform_text}{reviewer_text})"
     )
     if bug.get("priority") == 1:
         return f"- \U0001f6a8 {content} \U0001f6a8"
@@ -297,7 +293,7 @@ def post_priority_bugs():
         )
 
     def issue_reached_sla(issue: dict, field_name: str) -> bool:
-        reached_at = _parse_linear_dt(issue.get(field_name))
+        reached_at = parse_linear_dt(issue.get(field_name))
         if not reached_at:
             return False
         return reached_at <= now
