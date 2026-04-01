@@ -31,7 +31,7 @@ def format_issue_sla_text(issue: dict, now: datetime | None = None) -> str | Non
             return f"{hours}h"
         return f"{hours}h overdue"
 
-    days = abs(delta.days)
+    days = abs_delta.days
     if delta_seconds >= 0:
         return f"{days}d"
     return f"{days}d overdue"
