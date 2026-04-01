@@ -523,5 +523,70 @@ class PostOverdueProjectsTest(unittest.TestCase):
         self.assertNotIn("Released Late", posted[0])
 
 
+class PostUpcomingProjectsTest(unittest.TestCase):
+    def test_posts_only_monday_projects_with_engineering_leads(self):
+        posted = []
+        projects = [
+            {
+                "name": "Monday Engineering",
+                "url": "https://linear.app/project/monday-engineering",
+                "startDate": "2026-03-16",
+                "status": {"name": "Planned"},
+                "lead": {"displayName": "Alex"},
+            },
+            {
+                "name": "Monday Product",
+                "url": "https://linear.app/project/monday-product",
+                "startDate": "2026-03-16",
+                "status": {"name": "Planned"},
+                "lead": {"displayName": "Pat"},
+            },
+            {
+                "name": "Monday No Lead",
+                "url": "https://linear.app/project/monday-no-lead",
+                "startDate": "2026-03-16",
+                "status": {"name": "Planned"},
+                "lead": None,
+            },
+            {
+                "name": "Canceled Monday",
+                "url": "https://linear.app/project/canceled-monday",
+                "startDate": "2026-03-16",
+                "status": {"name": "Canceled"},
+                "lead": {"displayName": "Alex"},
+            },
+        ]
+        config = {
+            "people": {
+                "alex": {
+                    "linear_username": "Alex",
+                    "slack_id": "U1",
+                    "team": "engineering",
+                },
+                "pat": {
+                    "linear_username": "Pat",
+                    "slack_id": "U2",
+                    "team": "product",
+                },
+            }
+        }
+
+        with patch.object(jobs_module, "load_config", return_value=config):
+            with patch.object(jobs_module, "get_projects", return_value=projects):
+                with patch.object(
+                    jobs_module, "post_to_slack", side_effect=posted.append
+                ):
+                    with patch.object(jobs_module, "datetime", FixedDateTime):
+                        jobs_module.post_upcoming_projects()
+
+        self.assertEqual(len(posted), 1)
+        self.assertIn("*Projects Starting Monday*", posted[0])
+        self.assertIn("Monday Engineering", posted[0])
+        self.assertIn("Lead: <@U1>", posted[0])
+        self.assertNotIn("Monday Product", posted[0])
+        self.assertNotIn("Monday No Lead", posted[0])
+        self.assertNotIn("Canceled Monday", posted[0])
+
+
 if __name__ == "__main__":
     unittest.main()
