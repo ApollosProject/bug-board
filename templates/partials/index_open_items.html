@@ -7,8 +7,8 @@
       <article>
         <a href="{{ issue.url }}">{{ issue.title }}</a>
         <small
-          >({% if issue.platform %}{{ issue.platform }}, {% endif %}+{{
-          issue.daysOpen }}d{% if issue.assignee %}, {{ issue.assignee.name|first_name
+          >({% if issue.platform %}{{ issue.platform }}, {% endif %}{{
+          issue.slaText or ('+' ~ issue.daysOpen ~ 'd') }}{% if issue.assignee %}, {{ issue.assignee.name|first_name
           }}{% endif %})
         </small>
       </article>

@@ -1,9 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from gql import gql
 
 from config import get_linear_team_key, get_platforms
 from constants import PRIORITY_TO_SCORE
+from issue_timing import format_issue_sla_text
 from .client import _compute_assignee_time_to_fix, _execute
 
 
@@ -55,6 +56,7 @@ def get_open_issues(priority, label):
     issues = [
         issue for issue in data["issues"]["nodes"] if issue.get("priority", 0) > 0
     ]
+    now = datetime.utcnow().replace(tzinfo=timezone.utc)
     for issue in issues:
         platforms = [
             tag["name"]
@@ -67,6 +69,7 @@ def get_open_issues(priority, label):
             datetime.utcnow()
             - datetime.strptime(issue["createdAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
         ).days
+        issue["slaText"] = format_issue_sla_text(issue, now=now)
     return issues
 
 

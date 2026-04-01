@@ -730,6 +730,45 @@ class TeamContextProjectFilteringTest(unittest.TestCase):
         self.assertEqual(context["lead_completed_projects"], 1)
         self.assertEqual(context["lead_incomplete_projects"], 0)
 
+    def test_project_deadline_uses_hours_when_less_than_day_left(self):
+        config = {
+            "people": {
+                "darryl": {
+                    "team": "engineering",
+                    "linear_username": "Darryl",
+                }
+            },
+            "platforms": {},
+        }
+        active_project = {
+            "id": "proj-1",
+            "name": "Late Night Cutoff",
+            "url": "https://linear.example/project/late-night",
+            "health": "onTrack",
+            "status": {"name": "Active"},
+            "completedAt": None,
+            "startDate": None,
+            "targetDate": "2026-03-08",
+            "lead": {"displayName": "Darryl"},
+            "initiatives": {"nodes": [{"id": "init-1", "name": "Cycle"}]},
+            "members": [],
+        }
+
+        class EveningDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return datetime(2026, 3, 8, 18, 0, tzinfo=timezone.utc)
+
+        with patch.object(app_module, "datetime", EveningDateTime):
+            with patch.object(app_module, "load_config", return_value=config):
+                with patch.object(app_module, "get_projects", return_value=[active_project]):
+                    with patch.object(app_module, "get_support_slugs", return_value=[]):
+                        with patch.object(app_module, "get_open_issues", return_value=[]):
+                            context = app_module._build_team_context(1)
+
+        project = context["cycle_projects_by_initiative"]["Cycle"][0]
+        self.assertEqual(project["target_status_text"], "6h left")
+
 
 if __name__ == "__main__":
     unittest.main()
