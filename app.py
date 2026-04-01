@@ -3,7 +3,7 @@ import re
 import time
 import os
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any, TypedDict, TypeVar
 from urllib.parse import quote
@@ -31,6 +31,11 @@ from linear.issues import (
     get_time_data,
 )
 from linear.projects import get_projects
+from project_dates import (
+    format_project_start_status,
+    format_project_target_status,
+    parse_iso_date,
+)
 from support import get_support_slugs
 from leaderboard import (
     calculate_cycle_project_lead_points,
@@ -83,6 +88,41 @@ def is_inactive_project(project: dict[str, Any]) -> bool:
     return bool(project.get("completedAt")) or (
         get_project_status_name(project) in INACTIVE_PROJECT_STATUS_NAMES
     )
+
+
+def _annotate_project_schedule_fields(projects: list[dict[str, Any]]) -> None:
+    now = datetime.now(timezone.utc)
+    for project in projects:
+        target = project.get("targetDate")
+        start = project.get("startDate")
+        target_date = parse_iso_date(target)
+        start_date = parse_iso_date(start)
+
+        if target and target_date is None:
+            app.logger.warning(
+                "Invalid targetDate %r for project %r",
+                target,
+                project.get("id"),
+            )
+        if start and start_date is None:
+            app.logger.warning(
+                "Invalid startDate %r for project %r",
+                start,
+                project.get("id"),
+            )
+
+        days_left, target_status_text = format_project_target_status(
+            target_date,
+            now=now,
+        )
+        starts_in, start_status_text = format_project_start_status(
+            start_date,
+            now=now,
+        )
+        project["days_left"] = days_left
+        project["starts_in"] = starts_in
+        project["target_status_text"] = target_status_text
+        project["start_status_text"] = start_status_text
 
 
 app = Flask(__name__)
@@ -1232,28 +1272,8 @@ def _build_team_context(_cache_epoch: int) -> dict:
         return False
 
     cycle_projects = get_projects()
-    # attach start/target date info and compute days left
+    _annotate_project_schedule_fields(cycle_projects)
     for proj in cycle_projects:
-        target = proj.get("targetDate")
-        start = proj.get("startDate")
-        days_left = None
-        starts_in = None
-        if target:
-            try:
-                target_dt = datetime.fromisoformat(target).date()
-                days_left = (target_dt - datetime.utcnow().date()).days
-            except ValueError:
-                # If the target date is malformed, treat it as missing and log a warning.
-                app.logger.warning("Invalid targetDate %r for project %r", target, proj.get("id"))
-        if start:
-            try:
-                start_dt = datetime.fromisoformat(start).date()
-                starts_in = (start_dt - datetime.utcnow().date()).days
-            except ValueError:
-                # If the start date is malformed, treat it as missing and log a warning.
-                app.logger.warning("Invalid startDate %r for project %r", start, proj.get("id"))
-        proj["days_left"] = days_left
-        proj["starts_in"] = starts_in
         proj["is_inactive"] = is_inactive_project(proj)
 
     # group projects by initiatives
@@ -1445,28 +1465,8 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
 
     # Fetch all projects and annotate date helpers
     cycle_projects = get_projects()
-    # attach start/target date info and compute days left
+    _annotate_project_schedule_fields(cycle_projects)
     for proj in cycle_projects:
-        target = proj.get("targetDate")
-        start = proj.get("startDate")
-        days_left = None
-        starts_in = None
-        if target:
-            try:
-                target_dt = datetime.fromisoformat(target).date()
-                days_left = (target_dt - datetime.utcnow().date()).days
-            except ValueError:
-                # If the target date is not in a valid ISO format, treat it as missing.
-                pass
-        if start:
-            try:
-                start_dt = datetime.fromisoformat(start).date()
-                starts_in = (start_dt - datetime.utcnow().date()).days
-            except ValueError:
-                # If the start date is not in a valid ISO format, treat it as missing.
-                pass
-        proj["days_left"] = days_left
-        proj["starts_in"] = starts_in
         proj["is_inactive"] = is_inactive_project(proj)
 
     def _normalize_text(value: str | None) -> str:

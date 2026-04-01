@@ -515,7 +515,7 @@ class PostOverdueProjectsTest(unittest.TestCase):
         self.assertEqual(len(posted), 1)
         self.assertIn("*Overdue Projects*", posted[0])
         self.assertIn("Late Alpha", posted[0])
-        self.assertIn("1d overdue - Lead: <@U1>", posted[0])
+        self.assertIn("12h overdue - Lead: <@U1>", posted[0])
         self.assertNotIn("Late Beta", posted[0])
         self.assertNotIn("Late Gamma", posted[0])
         self.assertNotIn("Due Today", posted[0])

@@ -31,6 +31,7 @@ from linear.issues import (
 )
 from linear.projects import get_projects
 from openai_client import get_chat_function_call
+from project_dates import format_project_target_status, parse_iso_date
 from support import get_support_slugs
 
 load_dotenv()
@@ -70,15 +71,6 @@ def _parse_linear_dt(value: str | None) -> datetime | None:
         except ValueError:
             continue
     return None
-
-
-def _parse_iso_date(value: str | None):
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value).date()
-    except ValueError:
-        return None
 
 
 def _is_inactive_project(project: dict) -> bool:
@@ -663,7 +655,7 @@ def post_overdue_projects():
     """Notify Slack about active projects whose target date has passed."""
     projects = get_projects()
     people_config = load_config().get("people", {})
-    today = datetime.now(timezone.utc).date()
+    now = datetime.now(timezone.utc)
     overdue = []
 
     for project in projects:
@@ -672,20 +664,25 @@ def post_overdue_projects():
         if not _is_engineering_lead_project(project, people_config):
             continue
 
-        target_dt = _parse_iso_date(project.get("targetDate"))
-        if not target_dt or target_dt >= today:
+        target_dt = parse_iso_date(project.get("targetDate"))
+        _days_left, target_status_text = format_project_target_status(
+            target_dt,
+            now=now,
+        )
+        if not target_dt or not target_status_text or not target_status_text.endswith(
+            "overdue"
+        ):
             continue
 
         lead = (project.get("lead") or {}).get("displayName")
         lead_md = get_slack_markdown_by_linear_username(lead) if lead else "No Lead"
-        days_overdue = (today - target_dt).days
         overdue.append(
             {
-                "days_overdue": days_overdue,
                 "name": project.get("name") or "Untitled Project",
+                "target_dt": target_dt,
                 "line": (
                     f"- <{project['url']}|{project['name']}> - "
-                    f"{days_overdue}d overdue - Lead: {lead_md}"
+                    f"{target_status_text} - Lead: {lead_md}"
                 ),
             }
         )
@@ -695,7 +692,7 @@ def post_overdue_projects():
             item["line"]
             for item in sorted(
                 overdue,
-                key=lambda item: (-item["days_overdue"], item["name"].lower()),
+                key=lambda item: (item["target_dt"], item["name"].lower()),
             )
         ]
         markdown = "*Overdue Projects*\n\n" + "\n".join(ordered_lines)
