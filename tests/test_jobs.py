@@ -175,6 +175,16 @@ class ConfigureScheduledJobsTest(unittest.TestCase):
         self.assertIn(
             {
                 "interval": None,
+                "unit": "friday",
+                "at_time": "20:00",
+                "timezone": None,
+                "func": jobs_module.post_leaderboard,
+            },
+            recorded_jobs,
+        )
+        self.assertIn(
+            {
+                "interval": None,
                 "unit": "day",
                 "at_time": "14:00",
                 "timezone": None,
@@ -215,21 +225,23 @@ class ConfigureScheduledJobsTest(unittest.TestCase):
 
 
 class RunDebugJobsTest(unittest.TestCase):
-    def test_runs_overdue_projects_upcoming_projects_and_friday_deadlines(self):
+    def test_runs_leaderboard_overdue_projects_upcoming_projects_and_friday_deadlines(self):
         with patch.object(jobs_module, "should_use_redis_cache", return_value=False):
             with patch.object(jobs_module, "post_priority_bugs"):
-                with patch.object(jobs_module, "post_stale") as stale:
-                    with patch.object(
-                        jobs_module, "post_overdue_projects"
-                    ) as overdue:
+                with patch.object(jobs_module, "post_leaderboard") as leaderboard:
+                    with patch.object(jobs_module, "post_stale") as stale:
                         with patch.object(
-                            jobs_module, "post_upcoming_projects"
-                        ) as upcoming:
+                            jobs_module, "post_overdue_projects"
+                        ) as overdue:
                             with patch.object(
-                                jobs_module, "post_friday_deadlines"
-                            ) as friday_deadlines:
-                                jobs_module.run_debug_jobs()
+                                jobs_module, "post_upcoming_projects"
+                            ) as upcoming:
+                                with patch.object(
+                                    jobs_module, "post_friday_deadlines"
+                                ) as friday_deadlines:
+                                    jobs_module.run_debug_jobs()
 
+        leaderboard.assert_called_once_with()
         stale.assert_called_once_with()
         overdue.assert_called_once_with()
         upcoming.assert_called_once_with()
