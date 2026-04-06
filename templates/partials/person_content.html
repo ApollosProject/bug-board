@@ -124,6 +124,16 @@
       <h1>{{ lead_incomplete_projects }}</h1>
     </article>
   </div>
+  <div>
+    <article>
+      <header><a href="https://linear.app/differential/projects/all">Avg Days Early/Late</a></header>
+      {% if lead_completed_projects_avg_early_late %}
+      <h1>{{ lead_completed_projects_avg_early_late }}</h1>
+      {% else %}
+      <h1>n/a</h1>
+      {% endif %}
+    </article>
+  </div>
 </div>
 {% if work_by_platform %}
 <hr />

@@ -125,6 +125,32 @@ def _annotate_project_schedule_fields(projects: list[dict[str, Any]]) -> None:
         project["start_status_text"] = start_status_text
 
 
+def get_project_schedule_variance_days(project: dict[str, Any]) -> int | None:
+    target_date = parse_iso_date(project.get("targetDate"))
+    completed_date = parse_iso_date(project.get("completedAt"))
+    if target_date is None or completed_date is None:
+        return None
+    return (completed_date - target_date).days
+
+
+def format_average_project_schedule_variance(
+    average_variance_days: float | None,
+) -> str | None:
+    if average_variance_days is None:
+        return None
+    if abs(average_variance_days) < 0.05:
+        return "on time"
+
+    magnitude = abs(average_variance_days)
+    if magnitude.is_integer():
+        display = str(int(magnitude))
+    else:
+        display = f"{magnitude:.1f}".rstrip("0").rstrip(".")
+
+    direction = "late" if average_variance_days > 0 else "early"
+    return f"{display}d {direction}"
+
+
 app = Flask(__name__)
 
 
@@ -1504,6 +1530,20 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
         for project in led_projects
         if not project.get("is_inactive")
     )
+    lead_completed_project_variances = [
+        variance_days
+        for project in led_projects
+        if is_completed_project(project)
+        for variance_days in [get_project_schedule_variance_days(project)]
+        if variance_days is not None
+    ]
+    if lead_completed_project_variances:
+        average_completed_project_variance = sum(
+            lead_completed_project_variances
+        ) / len(lead_completed_project_variances)
+    else:
+        average_completed_project_variance = None
+
     project_names = {
         proj.get("name") for proj in cycle_projects if proj.get("name")
     }
@@ -1556,6 +1596,9 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
         "lead_completed_projects": lead_completed_projects,
         "lead_current_projects": lead_current_projects,
         "lead_incomplete_projects": lead_incomplete_projects,
+        "lead_completed_projects_avg_early_late": format_average_project_schedule_variance(
+            average_completed_project_variance
+        ),
         "platform_labels": platform_labels,
         "platform_values": platform_values,
     }
