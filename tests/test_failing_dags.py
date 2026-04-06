@@ -729,6 +729,65 @@ class TeamContextProjectFilteringTest(unittest.TestCase):
         self.assertEqual(context["lead_current_projects"], 0)
         self.assertEqual(context["lead_completed_projects"], 1)
         self.assertEqual(context["lead_incomplete_projects"], 0)
+        self.assertEqual(context["lead_completed_projects_avg_early_late"], "on time")
+
+    def test_completed_project_average_shows_mixed_early_and_late_timing(self):
+        config = {
+            "people": {
+                "darryl": {
+                    "team": "engineering",
+                    "linear_username": "Darryl",
+                }
+            }
+        }
+        completed_projects = [
+            {
+                "id": "proj-1",
+                "name": "Launch Web Revamp",
+                "url": "https://linear.example/project/web-revamp",
+                "health": "onTrack",
+                "status": {"name": "Released"},
+                "completedAt": "2025-11-08T00:00:00.000Z",
+                "startDate": "2025-11-01",
+                "targetDate": "2025-11-10",
+                "lead": {"displayName": "Darryl"},
+                "initiatives": {"nodes": [{"id": "init-1", "name": "Cycle"}]},
+                "members": [],
+            },
+            {
+                "id": "proj-2",
+                "name": "Android Polish",
+                "url": "https://linear.example/project/android-polish",
+                "health": "onTrack",
+                "status": {"name": "Completed"},
+                "completedAt": "2025-11-16T00:00:00.000Z",
+                "startDate": "2025-11-01",
+                "targetDate": "2025-11-12",
+                "lead": {"displayName": "Darryl"},
+                "initiatives": {"nodes": [{"id": "init-1", "name": "Cycle"}]},
+                "members": [],
+            },
+        ]
+
+        with patch.object(app_module, "load_config", return_value=config):
+            with patch.object(app_module, "get_open_issues_for_person", return_value=[]):
+                with patch.object(
+                    app_module,
+                    "get_completed_issues_for_person",
+                    return_value=[],
+                ):
+                    with patch.object(app_module, "by_project", return_value={}):
+                        with patch.object(app_module, "by_platform", return_value={}):
+                            with patch.object(
+                                app_module,
+                                "get_projects",
+                                return_value=completed_projects,
+                            ):
+                                with patch.object(app_module, "get_support_slugs", return_value=[]):
+                                    context = app_module._build_person_context("darryl", 7, 1)
+
+        self.assertEqual(context["lead_completed_projects"], 2)
+        self.assertEqual(context["lead_completed_projects_avg_early_late"], "1d late")
 
     def test_project_deadline_uses_hours_when_less_than_day_left(self):
         config = {
