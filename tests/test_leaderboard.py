@@ -1,0 +1,38 @@
+import sys
+import types
+from datetime import datetime, timezone
+from unittest import TestCase
+from unittest.mock import patch
+
+linear_package = types.ModuleType("linear")
+linear_package.__path__ = []
+sys.modules.setdefault("linear", linear_package)
+
+linear_projects_module = types.ModuleType("linear.projects")
+linear_projects_module.get_projects = lambda *args, **kwargs: []
+sys.modules.setdefault("linear.projects", linear_projects_module)
+
+import leaderboard
+
+
+class CycleProjectPointsTest(TestCase):
+    def test_released_project_counts_toward_leaderboard(self):
+        projects = [
+            {
+                "name": "Google Pay",
+                "status": {"name": "Released"},
+                "completedAt": "2026-04-03T00:00:00.000Z",
+                "startDate": "2026-02-09",
+                "targetDate": "2026-03-30",
+                "lead": {"displayName": "nick"},
+                "members": ["Austin"],
+            }
+        ]
+        now = datetime(2026, 4, 7, tzinfo=timezone.utc)
+
+        with patch.object(leaderboard, "get_projects", return_value=projects):
+            lead_points = leaderboard.calculate_cycle_project_lead_points(30, now)
+            member_points = leaderboard.calculate_cycle_project_member_points(30, now)
+
+        self.assertEqual(lead_points, {"nick": 120})
+        self.assertEqual(member_points, {"Austin": 60})

@@ -21,6 +21,11 @@ def _parse_date(value: str | None) -> datetime | None:
     return parsed
 
 
+def _is_completed_project(project: dict) -> bool:
+    status_name = ((project.get("status") or {}).get("name") or "").strip().lower()
+    return bool(project.get("completedAt")) or status_name in {"completed", "released"}
+
+
 def _build_week_segments(
     timeframe_start: datetime, now: datetime
 ) -> list[tuple[datetime, datetime]]:
@@ -45,8 +50,7 @@ def _calculate_cycle_project_points(
     points_by_lead: dict[str, int] = {}
     points_by_member: dict[str, int] = {}
     for project in projects:
-        status_name = (project.get("status") or {}).get("name")
-        if status_name != "Completed":
+        if not _is_completed_project(project):
             continue
         lead_name = (project.get("lead") or {}).get("displayName")
         if not lead_name:
