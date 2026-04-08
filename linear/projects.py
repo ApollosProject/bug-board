@@ -31,6 +31,7 @@ def get_projects():
                   health
                   status {
                     name
+                    type
                   }
                   completedAt
                   startDate
