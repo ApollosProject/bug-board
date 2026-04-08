@@ -21,9 +21,13 @@ def _parse_date(value: str | None) -> datetime | None:
     return parsed
 
 
+def _get_project_status_type(project: dict) -> str:
+    status_type = ((project.get("status") or {}).get("type") or "").strip().lower()
+    return status_type
+
+
 def _is_completed_project(project: dict) -> bool:
-    status_name = ((project.get("status") or {}).get("name") or "").strip().lower()
-    return bool(project.get("completedAt")) or status_name in {"completed", "released"}
+    return _get_project_status_type(project) == "completed"
 
 
 def _build_week_segments(

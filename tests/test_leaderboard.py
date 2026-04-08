@@ -38,7 +38,7 @@ class CycleProjectPointsTest(TestCase):
         projects = [
             {
                 "name": "Google Pay",
-                "status": {"name": "Released"},
+                "status": {"name": "Released", "type": "completed"},
                 "completedAt": "2026-04-03T00:00:00.000Z",
                 "startDate": "2026-02-09",
                 "targetDate": "2026-03-30",
@@ -58,3 +58,29 @@ class CycleProjectPointsTest(TestCase):
 
         self.assertEqual(lead_points, {"nick": 120})
         self.assertEqual(member_points, {"Austin": 60})
+
+    def test_canceled_project_does_not_count_even_with_completed_at(self):
+        leaderboard_module = _import_leaderboard_with_stub()
+        projects = [
+            {
+                "name": "Canceled Project",
+                "status": {"name": "Canceled", "type": "canceled"},
+                "completedAt": "2026-04-03T00:00:00.000Z",
+                "startDate": "2026-02-09",
+                "targetDate": "2026-03-30",
+                "lead": {"displayName": "nick"},
+                "members": ["Austin"],
+            }
+        ]
+        now = datetime(2026, 4, 7, tzinfo=timezone.utc)
+
+        with patch.object(leaderboard_module, "get_projects", return_value=projects):
+            lead_points = leaderboard_module.calculate_cycle_project_lead_points(
+                30, now
+            )
+            member_points = leaderboard_module.calculate_cycle_project_member_points(
+                30, now
+            )
+
+        self.assertEqual(lead_points, {})
+        self.assertEqual(member_points, {})
