@@ -218,6 +218,33 @@ def get_slack_markdown_by_github_username(username):
     return username
 
 
+def _normalize_platform_name(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip().lower().replace(" ", "-")
+    return normalized or None
+
+
+def _person_matches_any_unassigned_platform(person: dict, bugs: list[dict]) -> bool:
+    platform_whitelist = person.get("platform_whitelist")
+    if platform_whitelist is None:
+        return True
+
+    allowed_platforms = {
+        normalized
+        for normalized in (
+            _normalize_platform_name(platform) for platform in platform_whitelist
+        )
+        if normalized
+    }
+    if not allowed_platforms:
+        return False
+
+    return any(
+        _normalize_platform_name(bug.get("platform")) in allowed_platforms for bug in bugs
+    )
+
+
 def _get_pr_diffs(issue):
     """Return a list of diffs for PRs linked in the issue attachments."""
 
@@ -337,6 +364,8 @@ def post_priority_bugs():
             if not person:
                 continue
             if person.get("linear_username") in assigned:
+                continue
+            if not _person_matches_any_unassigned_platform(person, unassigned):
                 continue
             slack_id = person.get("slack_id")
             if not slack_id:

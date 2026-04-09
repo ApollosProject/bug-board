@@ -453,6 +453,70 @@ class PostPriorityBugsTest(unittest.TestCase):
         self.assertNotIn("<@U1>", posted[0])
         self.assertNotIn("Lead)", posted[0])
 
+    def test_unassigned_priority_bug_only_notifies_matching_platform_whitelists(self):
+        posted = []
+        bugs = [
+            {
+                "id": "unassigned-bug",
+                "title": "Unassigned mobile bug",
+                "assignee": None,
+                "url": "https://linear.app/issue/unassigned-bug",
+                "platform": "Mobile",
+                "daysOpen": 14,
+                "priority": 2,
+                "slaMediumRiskAt": "2026-03-14T08:00:00.000Z",
+                "slaHighRiskAt": "2026-03-16T10:00:00.000Z",
+                "slaBreachesAt": "2026-03-17T12:00:00.000Z",
+            },
+            {
+                "id": "assigned-bug",
+                "title": "Assigned bug",
+                "assignee": {"displayName": "Alex"},
+                "url": "https://linear.app/issue/assigned-bug",
+                "platform": "Web",
+                "daysOpen": 3,
+                "priority": 2,
+                "slaMediumRiskAt": "2026-03-14T08:00:00.000Z",
+                "slaHighRiskAt": "2026-03-16T10:00:00.000Z",
+                "slaBreachesAt": "2026-03-17T12:00:00.000Z",
+            },
+        ]
+        config = {
+            "people": {
+                "alex": {"linear_username": "Alex", "slack_id": "U1"},
+                "blair": {
+                    "linear_username": "Blair",
+                    "slack_id": "U2",
+                    "platform_whitelist": ["mobile"],
+                },
+                "casey": {
+                    "linear_username": "Casey",
+                    "slack_id": "U3",
+                    "platform_whitelist": ["web"],
+                },
+                "devon": {"linear_username": "Devon", "slack_id": "U4"},
+            },
+            "platforms": {},
+        }
+
+        with patch.object(jobs_module, "load_config", return_value=config):
+            with patch.object(jobs_module, "get_open_issues", return_value=bugs):
+                with patch.object(
+                    jobs_module,
+                    "get_support_slugs",
+                    return_value={"alex", "blair", "casey", "devon"},
+                ):
+                    with patch.object(
+                        jobs_module, "post_to_slack", side_effect=posted.append
+                    ):
+                        with patch.object(jobs_module, "datetime", FixedDateTime):
+                            jobs_module.post_priority_bugs()
+
+        self.assertEqual(len(posted), 1)
+        self.assertIn("attn:\n\n<@U2>\n<@U4>", posted[0])
+        self.assertNotIn("<@U1>", posted[0])
+        self.assertNotIn("<@U3>", posted[0])
+
 
 class PostOverdueProjectsTest(unittest.TestCase):
     def test_posts_only_engineering_led_active_projects_with_past_target_dates(self):
