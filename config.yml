@@ -14,6 +14,8 @@ people:
     slack_id: U080E70RQ4U
     linear_username: andy.smith
     github_username: AndySmith1965
+    platform_whitelist:
+      - roku
   nathan:
     team: engineering
     slack_id: U022N4RTD40
