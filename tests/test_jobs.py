@@ -256,6 +256,30 @@ class FixedDateTime(datetime):
         return datetime(2026, 3, 15, 12, 0, 0, tzinfo=tz)
 
 
+class PlatformWhitelistMatchingTest(unittest.TestCase):
+    def test_matches_when_platform_whitelist_and_bug_platform_normalize_to_same_value(self):
+        person = {"platform_whitelist": ["  Mobile Web  ", "Roku"]}
+        bugs = [
+            {"platform": "mobile-web"},
+            {"platform": "Admin"},
+        ]
+
+        self.assertTrue(
+            jobs_module._person_matches_any_unassigned_platform(person, bugs)
+        )
+
+    def test_returns_false_when_platform_whitelist_has_no_valid_entries(self):
+        person = {"platform_whitelist": ["   ", None]}
+        bugs = [
+            {"platform": "Web"},
+            {"platform": None},
+        ]
+
+        self.assertFalse(
+            jobs_module._person_matches_any_unassigned_platform(person, bugs)
+        )
+
+
 class PostPriorityBugsTest(unittest.TestCase):
     def test_uses_linear_sla_windows_for_at_risk_and_overdue(self):
         posted = []
