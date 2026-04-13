@@ -518,6 +518,40 @@ class PostPriorityBugsTest(unittest.TestCase):
         self.assertNotIn("<@U3>", posted[0])
 
 
+class UnassignedPlatformWhitelistMatchingTest(unittest.TestCase):
+    def test_matches_when_whitelist_is_missing(self):
+        person = {"linear_username": "Alex"}
+        bugs = [{"platform": "Mobile"}]
+
+        self.assertTrue(
+            jobs_module._person_matches_any_unassigned_platform(person, bugs)
+        )
+
+    def test_does_not_match_when_whitelist_has_no_valid_platforms(self):
+        person = {"platform_whitelist": ["", "   ", None]}
+        bugs = [{"platform": "Mobile"}]
+
+        self.assertFalse(
+            jobs_module._person_matches_any_unassigned_platform(person, bugs)
+        )
+
+    def test_matches_after_normalizing_whitelist_and_bug_platform_values(self):
+        person = {"platform_whitelist": ["Mobile App", "Api"]}
+        bugs = [{"platform": " mobile-app "}, {"platform": "Web"}]
+
+        self.assertTrue(
+            jobs_module._person_matches_any_unassigned_platform(person, bugs)
+        )
+
+    def test_does_not_match_when_bug_platforms_are_missing(self):
+        person = {"platform_whitelist": ["Web"]}
+        bugs = [{"platform": None}, {"platform": "  "}]
+
+        self.assertFalse(
+            jobs_module._person_matches_any_unassigned_platform(person, bugs)
+        )
+
+
 class PostOverdueProjectsTest(unittest.TestCase):
     def test_posts_only_engineering_led_active_projects_with_past_target_dates(self):
         posted = []
