@@ -212,7 +212,7 @@ def _get_airflow_fleet_health_payload(
 
     try:
         return evaluate_fleet_health()
-    except AirflowFleetHealthError as exc:
+    except AirflowFleetHealthError:
         payload = _add_missing_airflow_config_details(
             {
                 "status": "unknown",
