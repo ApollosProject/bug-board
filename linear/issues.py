@@ -5,6 +5,7 @@ from gql import gql
 from config import get_linear_team_key, get_platforms
 from constants import PRIORITY_TO_SCORE
 from issue_timing import format_issue_sla_text
+
 from .client import _compute_assignee_time_to_fix, _execute
 
 
@@ -53,21 +54,17 @@ def get_open_issues(priority, label):
     )
 
     data = _execute(query, variable_values=params)
-    issues = [
-        issue for issue in data["issues"]["nodes"] if issue.get("priority", 0) > 0
-    ]
+    issues = [issue for issue in data["issues"]["nodes"] if issue.get("priority", 0) > 0]
     now = datetime.utcnow().replace(tzinfo=timezone.utc)
     for issue in issues:
         platforms = [
             tag["name"]
             for tag in issue["labels"]["nodes"]
-            if tag["name"] != label
-            and tag["name"].lower().replace(" ", "-") in get_platforms()
+            if tag["name"] != label and tag["name"].lower().replace(" ", "-") in get_platforms()
         ]
         issue["platform"] = platforms[0] if platforms else None
         issue["daysOpen"] = (
-            datetime.utcnow()
-            - datetime.strptime(issue["createdAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
+            datetime.utcnow() - datetime.strptime(issue["createdAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
         ).days
         issue["slaText"] = format_issue_sla_text(issue, now=now)
     return issues
@@ -306,19 +303,12 @@ def get_created_issues(priority, label, days=30):
         platforms = [
             tag["name"]
             for tag in issue["labels"]["nodes"]
-            if tag["name"] != label
-            and tag["name"].lower().replace(" ", "-") in get_platforms()
+            if tag["name"] != label and tag["name"].lower().replace(" ", "-") in get_platforms()
         ]
         issue["platform"] = platforms[0] if platforms else None
-        assignee = (
-            issue.get("assignee", {}).get("displayName")
-            if issue.get("assignee")
-            else None
-        )
+        assignee = issue.get("assignee", {}).get("displayName") if issue.get("assignee") else None
         if assignee:
-            issue["assignee_time_to_fix"] = _compute_assignee_time_to_fix(
-                issue, assignee
-            )
+            issue["assignee_time_to_fix"] = _compute_assignee_time_to_fix(issue, assignee)
         else:
             issue["assignee_time_to_fix"] = None
     return issues
@@ -515,12 +505,10 @@ def get_open_issues_for_person(login: str):
         ]
         issue["platform"] = platforms[0] if platforms else None
         issue["daysOpen"] = (
-            datetime.utcnow()
-            - datetime.strptime(issue["createdAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
+            datetime.utcnow() - datetime.strptime(issue["createdAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
         ).days
         issue["daysUpdated"] = (
-            datetime.utcnow()
-            - datetime.strptime(issue["updatedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
+            datetime.utcnow() - datetime.strptime(issue["updatedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
         ).days
     return issues
 
@@ -684,8 +672,7 @@ def get_completed_issues_for_person(login: str, days=30):
         ]
         issue["platform"] = platforms[0] if platforms else None
         issue["daysCompleted"] = (
-            datetime.utcnow()
-            - datetime.strptime(issue["completedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
+            datetime.utcnow() - datetime.strptime(issue["completedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
         ).days
         issue["assignee_time_to_fix"] = _compute_assignee_time_to_fix(issue, login)
     return issues

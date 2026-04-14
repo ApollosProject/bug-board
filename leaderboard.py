@@ -72,35 +72,27 @@ def _calculate_cycle_project_points(
         if window_end <= window_start:
             continue
         members = {
-            member
-            for member in project.get("members", []) or []
-            if member and member != lead_name
+            member for member in project.get("members", []) or [] if member and member != lead_name
         }
         for segment_start, segment_end in week_segments:
             overlap_start = max(window_start, segment_start)
             overlap_end = min(window_end, segment_end)
             if overlap_end > overlap_start:
                 points_by_lead[lead_name] = (
-                    points_by_lead.get(lead_name, 0)
-                    + CYCLE_PROJECT_LEAD_POINTS_PER_WEEK
+                    points_by_lead.get(lead_name, 0) + CYCLE_PROJECT_LEAD_POINTS_PER_WEEK
                 )
                 for member in members:
                     points_by_member[member] = (
-                        points_by_member.get(member, 0)
-                        + CYCLE_PROJECT_MEMBER_POINTS_PER_WEEK
+                        points_by_member.get(member, 0) + CYCLE_PROJECT_MEMBER_POINTS_PER_WEEK
                     )
     return points_by_lead, points_by_member
 
 
-def calculate_cycle_project_lead_points(
-    days: int, now: datetime | None = None
-) -> dict[str, int]:
+def calculate_cycle_project_lead_points(days: int, now: datetime | None = None) -> dict[str, int]:
     lead_points, _ = _calculate_cycle_project_points(days, now)
     return lead_points
 
 
-def calculate_cycle_project_member_points(
-    days: int, now: datetime | None = None
-) -> dict[str, int]:
+def calculate_cycle_project_member_points(days: int, now: datetime | None = None) -> dict[str, int]:
     _, member_points = _calculate_cycle_project_points(days, now)
     return member_points

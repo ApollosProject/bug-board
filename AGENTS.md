@@ -19,7 +19,9 @@ The app starts and serves pages without any API keys configured. Routes like `/`
 
 All standard — see `README.md`. Quick reference:
 
-- **Lint:** `flake8 *.py`
+- **Lint:** `ruff check .`
+- **Autofix:** `ruff check . --fix`
+- **Format:** `ruff format .`
 - **Type check:** `mypy .`
 - **Unit tests:** `python -m unittest discover -s tests -p 'test_*.py'`
 

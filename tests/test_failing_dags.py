@@ -158,12 +158,8 @@ class FetchActiveDagsPaginationTest(unittest.TestCase):
             offsets_seen.append(offset)
             return page_by_offset[offset]
 
-        with patch.object(
-            airflow_fleet_health, "_request_json", side_effect=fake_request_json
-        ):
-            dags = airflow_fleet_health._fetch_active_dags(
-                object(), "https://airflow.example.com"
-            )
+        with patch.object(airflow_fleet_health, "_request_json", side_effect=fake_request_json):
+            dags = airflow_fleet_health._fetch_active_dags(object(), "https://airflow.example.com")
 
         self.assertEqual(offsets_seen, [0, 2, 4])
         self.assertIn("fairhaven_wordpress_content_item_dag", dags)
@@ -221,10 +217,7 @@ class FetchActiveDagsTest(unittest.TestCase):
             )
 
         expected_dags = {
-            dag["dag_id"]
-            for page in pages
-            for dag in page["dags"]
-            if not dag["is_paused"]
+            dag["dag_id"] for page in pages for dag in page["dags"] if not dag["is_paused"]
         }
         self.assertEqual(seen_offsets, [0, 100, 200])
         self.assertEqual(active_dags, expected_dags)
@@ -242,9 +235,7 @@ class FailingDagsDashboardTest(unittest.TestCase):
             "_get_airflow_fleet_health_payload",
             return_value=(payload, 200),
         ):
-            response = self.client.get(
-                "/failing-dags", headers={"X-Forwarded-Prefix": "/grid"}
-            )
+            response = self.client.get("/failing-dags", headers={"X-Forwarded-Prefix": "/grid"})
 
         body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
@@ -315,8 +306,7 @@ class FailingDagsDashboardTest(unittest.TestCase):
             app_module.os.environ,
             {
                 "AIRFLOW_API_BASE_URL": (
-                    "https://clnlmo4ly14938581uy6kk252z28.28.astronomer.run/"
-                    "dk252z28/api/v2"
+                    "https://clnlmo4ly14938581uy6kk252z28.28.astronomer.run/dk252z28/api/v2"
                 )
             },
             clear=False,

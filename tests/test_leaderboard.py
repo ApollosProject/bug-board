@@ -49,12 +49,8 @@ class CycleProjectPointsTest(TestCase):
         now = datetime(2026, 4, 7, tzinfo=timezone.utc)
 
         with patch.object(leaderboard_module, "get_projects", return_value=projects):
-            lead_points = leaderboard_module.calculate_cycle_project_lead_points(
-                30, now
-            )
-            member_points = leaderboard_module.calculate_cycle_project_member_points(
-                30, now
-            )
+            lead_points = leaderboard_module.calculate_cycle_project_lead_points(30, now)
+            member_points = leaderboard_module.calculate_cycle_project_member_points(30, now)
 
         self.assertEqual(lead_points, {"nick": 120})
         self.assertEqual(member_points, {"Austin": 60})
@@ -75,12 +71,8 @@ class CycleProjectPointsTest(TestCase):
         now = datetime(2026, 4, 7, tzinfo=timezone.utc)
 
         with patch.object(leaderboard_module, "get_projects", return_value=projects):
-            lead_points = leaderboard_module.calculate_cycle_project_lead_points(
-                30, now
-            )
-            member_points = leaderboard_module.calculate_cycle_project_member_points(
-                30, now
-            )
+            lead_points = leaderboard_module.calculate_cycle_project_lead_points(30, now)
+            member_points = leaderboard_module.calculate_cycle_project_member_points(30, now)
 
         self.assertEqual(lead_points, {})
         self.assertEqual(member_points, {})

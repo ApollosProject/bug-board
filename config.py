@@ -1,5 +1,6 @@
-from functools import lru_cache
 import os
+from functools import lru_cache
+
 import yaml
 
 
@@ -19,11 +20,7 @@ def get_platforms():
 def get_linear_team_key():
     """Return the Linear team key used for issue/project queries."""
     config = load_config()
-    return (
-        config.get("linear_team_key")
-        or os.getenv("LINEAR_TEAM_KEY")
-        or "APO"
-    )
+    return config.get("linear_team_key") or os.getenv("LINEAR_TEAM_KEY") or "APO"
 
 
 def get_github_orgs():

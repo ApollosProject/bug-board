@@ -96,9 +96,7 @@ def get_support_slugs() -> Set[str]:
     people_cfg = config.get("people", {})
     all_people_slugs: Set[str] = set(people_cfg.keys())
     available_slugs: Set[str] = {
-        slug
-        for slug, info in people_cfg.items()
-        if info.get("team") == ENGINEERING_TEAM_SLUG
+        slug for slug, info in people_cfg.items() if info.get("team") == ENGINEERING_TEAM_SLUG
     }
 
     # On support = available AND not assigned to an active cycle project
