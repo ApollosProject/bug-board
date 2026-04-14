@@ -63,17 +63,6 @@ def _read_positive_int_env(name: str, default: int) -> int:
     return parsed if parsed > 0 else default
 
 
-def _parse_linear_dt(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    for fmt in ("%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%SZ"):
-        try:
-            return datetime.strptime(value, fmt).replace(tzinfo=timezone.utc)
-        except ValueError:
-            continue
-    return None
-
-
 def _is_inactive_project(project: dict) -> bool:
     status_name = ((project.get("status") or {}).get("name") or "").strip().lower()
     return bool(project.get("completedAt")) or status_name in INACTIVE_PROJECT_STATUS_NAMES

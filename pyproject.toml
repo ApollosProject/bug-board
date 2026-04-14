@@ -18,3 +18,9 @@ exclude = [
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
+
+[tool.vulture]
+exclude = ["venv", ".venv", "env", ".env", "__pycache__", ".git", "static", "templates", ".tox", "build", "dist", "*.egg-info", "tests"]
+ignore_decorators = ["@app.route", "@app.template_filter"]
+ignore_names = ["breakdown", "post_weekly_changelog"]
+min_confidence = 60

@@ -334,27 +334,6 @@ def by_assignee(issues):
     )
 
 
-def by_reviewer(issues):
-    issues_by_approver = {}
-    for issue in issues:
-        for attachment in issue["attachments"]["nodes"]:
-            metadata = attachment["metadata"]
-            if metadata.get("reviews"):
-                for review in metadata["reviews"]:
-                    if review["state"] == "approved":
-                        author = review["reviewerLogin"]
-                        if author not in issues_by_approver:
-                            issues_by_approver[author] = []
-                        issues_by_approver[author].append(issue)
-    return dict(
-        sorted(
-            issues_by_approver.items(),
-            key=lambda x: len(x[1]),
-            reverse=True,
-        )
-    )
-
-
 def get_stale_issues_by_assignee(issues, days=30):
     """Return issues not updated in `days` days, grouped by assignee."""
     stale_issues = {}
@@ -510,89 +489,6 @@ def get_open_issues_for_person(login: str):
         issue["daysUpdated"] = (
             datetime.utcnow() - datetime.strptime(issue["updatedAt"], "%Y-%m-%dT%H:%M:%S.%fZ")
         ).days
-    return issues
-
-
-def get_open_issues_in_projects(project_names):
-    """Return open issues across the team limited to specified Linear project names.
-
-    project_names: iterable of project name strings to include.
-    """
-
-    # Ensure we work with a list for GraphQL variables
-    project_names = list(project_names)
-    team_key = get_linear_team_key()
-
-    query = gql(
-        """
-        query OpenIssuesInProjects(
-          $projectNames: [String!],
-          $team_key: String!,
-          $cursor: String
-        ) {
-          issues(
-            first: 50
-            after: $cursor
-            filter: {
-              team: { key: { eq: $team_key } }
-              state: { type: { nin: [\"completed\", \"canceled\"] } }
-              project: { name: { in: $projectNames } }
-            }
-            orderBy: updatedAt
-          ) {
-            nodes {
-              id
-              identifier
-              title
-              url
-              updatedAt
-              createdAt
-              dueDate
-              slaType
-              slaStartedAt
-              slaMediumRiskAt
-              slaHighRiskAt
-              slaBreachesAt
-              state { name type }
-              assignee { displayName }
-              project { name }
-              parent { id }
-              children(first: 50) {
-                nodes {
-                  id
-                  identifier
-                  title
-                  url
-                  state { name type }
-                  assignee { displayName }
-                  dueDate
-                  slaType
-                  slaStartedAt
-                  slaMediumRiskAt
-                  slaHighRiskAt
-                  slaBreachesAt
-                }
-              }
-            }
-            pageInfo { hasNextPage endCursor }
-          }
-        }
-        """,
-    )
-
-    cursor = None
-    issues = []
-    while True:
-        params = {
-            "projectNames": project_names,
-            "team_key": team_key,
-            "cursor": cursor,
-        }
-        data = _execute(query, variable_values=params)
-        issues += data["issues"]["nodes"]
-        if not data["issues"]["pageInfo"]["hasNextPage"]:
-            break
-        cursor = data["issues"]["pageInfo"]["endCursor"]
     return issues
 
 

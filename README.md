@@ -11,7 +11,7 @@ A small Flask application that displays Linear issues and GitHub pull request st
 ```bash
 python -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt  # includes ruff for linting, import sorting, and formatting
+pip install -r requirements.txt  # includes ruff and vulture for static analysis
 ```
 
 To lint, format, and type check your code before committing:
@@ -20,6 +20,7 @@ To lint, format, and type check your code before committing:
 ruff check .
 ruff check . --fix
 ruff format .
+vulture . --config pyproject.toml
 mypy .
 ```
 
