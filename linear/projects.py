@@ -75,20 +75,3 @@ def get_projects():
             break
     sorted_projects = sorted(projects, key=lambda project: project.get("name", ""))
     return _normalize_project_members(sorted_projects)
-
-
-def update_project_description(project_id: str, description: str) -> None:
-    """Update a Linear project's description."""
-    mutation = gql(
-        """
-        mutation ProjectUpdate($id: String!, $input: ProjectUpdateInput!) {
-          projectUpdate(id: $id, input: $input) {
-            success
-          }
-        }
-        """
-    )
-    _execute(
-        mutation,
-        variable_values={"id": project_id, "input": {"description": description}},
-    )
