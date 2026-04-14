@@ -214,7 +214,10 @@ def _get_airflow_fleet_health_payload(
         return evaluate_fleet_health()
     except AirflowFleetHealthError as exc:
         payload = _add_missing_airflow_config_details(
-            {"status": "unknown", "error_message": str(exc)}
+            {
+                "status": "unknown",
+                "error_message": "Unable to evaluate airflow fleet health",
+            }
         )
         if payload.get("error_type") == "missing_airflow_credentials":
             logging.warning(
