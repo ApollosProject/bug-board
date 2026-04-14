@@ -1,11 +1,11 @@
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any, Dict, List
-import requests
-import threading
-from concurrent.futures import ThreadPoolExecutor
 
+import requests
 from dotenv import load_dotenv
 from gql import Client, GraphQLRequest, gql
 from gql.transport.aiohttp import AIOHTTPTransport
@@ -194,9 +194,7 @@ def _parse_github_timestamp(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(
-            tzinfo=timezone.utc
-        )
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
     except ValueError:
         return None
 
@@ -207,9 +205,7 @@ def _get_all_prs(pr_states: List[str]) -> List[Dict[str, Any]]:
     if not repo_ids:
         return []
     with ThreadPoolExecutor(max_workers=len(repo_ids)) as executor:
-        futures = [
-            executor.submit(get_prs, repo_id, pr_states) for repo_id in repo_ids
-        ]
+        futures = [executor.submit(get_prs, repo_id, pr_states) for repo_id in repo_ids]
         all_prs: List[Dict[str, Any]] = []
         for future in futures:
             try:
@@ -270,9 +266,7 @@ def _get_merged_prs(days: int = 30):
     pages = 0
     while True:
         try:
-            data = _execute(
-                query, variable_values={"query": search_query, "cursor": cursor}
-            )
+            data = _execute(query, variable_values={"query": search_query, "cursor": cursor})
         except Exception:
             return []
         payload = data.get("search", {}) or {}
@@ -347,8 +341,7 @@ def get_prs_waiting_for_review_by_reviewer():
             ):
                 reviewer = review["requestedReviewer"]["login"]
                 open_review_requests = [
-                    req["requestedReviewer"]["login"]
-                    for req in pr["reviewRequests"]["nodes"]
+                    req["requestedReviewer"]["login"] for req in pr["reviewRequests"]["nodes"]
                 ]
                 if reviewer not in open_review_requests:
                     continue

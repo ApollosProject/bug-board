@@ -79,9 +79,7 @@ class LinearIssueStateFiltersTest(unittest.TestCase):
 
         with patch.object(issues_module, "_execute", side_effect=fake_execute):
             with patch.object(issues_module, "get_linear_team_key", return_value="APO"):
-                with patch.object(
-                    issues_module, "get_platforms", return_value={"mobile"}
-                ):
+                with patch.object(issues_module, "get_platforms", return_value={"mobile"}):
                     with patch.object(issues_module, "datetime", FixedDateTime):
                         issues = issues_module.get_open_issues(2, "Bug")
 
@@ -149,13 +147,9 @@ class LinearIssueStateFiltersTest(unittest.TestCase):
 
         with patch.object(issues_module, "_execute", side_effect=fake_execute):
             with patch.object(issues_module, "get_linear_team_key", return_value="APO"):
-                with patch.object(
-                    issues_module, "get_platforms", return_value={"mobile"}
-                ):
+                with patch.object(issues_module, "get_platforms", return_value={"mobile"}):
                     with patch.object(issues_module, "datetime", FixedDateTime):
-                        issues = issues_module.get_open_issues_for_person(
-                            "michael.neeley"
-                        )
+                        issues = issues_module.get_open_issues_for_person("michael.neeley")
 
         query_text = execute_calls[0][0]
         self.assertIn('state: { type: { nin: ["completed", "canceled"] } }', query_text)

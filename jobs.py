@@ -85,9 +85,7 @@ def _normalize_linear_display_name(name: str) -> str:
 
 def _is_engineering_lead_project(project: dict, people_config: dict) -> bool:
     engineering_slugs = {
-        slug
-        for slug, info in people_config.items()
-        if info.get("team") == ENGINEERING_TEAM_SLUG
+        slug for slug, info in people_config.items() if info.get("team") == ENGINEERING_TEAM_SLUG
     }
     name_to_slug = {}
     for slug, info in people_config.items():
@@ -138,9 +136,7 @@ def post_to_manager_slack(markdown: str):
         return
     response = requests.post(url, json={"text": markdown})
     if response.status_code != 200:
-        logging.error(
-            "Manager Slack API returned %s: %s", response.status_code, response.text
-        )
+        logging.error("Manager Slack API returned %s: %s", response.status_code, response.text)
     response.raise_for_status()
 
 
@@ -156,10 +152,7 @@ def format_bug_line(bug):
     )
     platform_text = f", {bug['platform']}" if bug["platform"] else ""
     reviewer_text = f", {reviewer}" if reviewer else ""
-    content = (
-        f"<{bug['url']}|{bug['title']}> "
-        f"({timing_text}{platform_text}{reviewer_text})"
-    )
+    content = f"<{bug['url']}|{bug['title']}> ({timing_text}{platform_text}{reviewer_text})"
     if bug.get("priority") == 1:
         return f"- \U0001f6a8 {content} \U0001f6a8"
     return f"- {content}"
@@ -186,9 +179,7 @@ def get_team_members(team_slug: str):
     """Return the subset of people config entries on a given team."""
     config = load_config()
     people = config.get("people", {})
-    return {
-        slug: info for slug, info in people.items() if info.get("team") == team_slug
-    }
+    return {slug: info for slug, info in people.items() if info.get("team") == team_slug}
 
 
 def get_slack_markdown_by_linear_username(username):
@@ -232,17 +223,13 @@ def _person_matches_any_unassigned_platform(person: dict, bugs: list[dict]) -> b
 
     allowed_platforms = {
         normalized
-        for normalized in (
-            _normalize_platform_name(platform) for platform in platform_whitelist
-        )
+        for normalized in (_normalize_platform_name(platform) for platform in platform_whitelist)
         if normalized
     }
     if not allowed_platforms:
         return False
 
-    return any(
-        _normalize_platform_name(bug.get("platform")) in allowed_platforms for bug in bugs
-    )
+    return any(_normalize_platform_name(bug.get("platform")) in allowed_platforms for bug in bugs)
 
 
 def _get_pr_diffs(issue):
@@ -268,10 +255,7 @@ def _get_pr_diffs(issue):
             file_list += f", +{total_files - MAX_DIFF_FILES} more"
         if not file_list:
             file_list = "File list unavailable"
-        return (
-            f"Diff too large ({len(diff_text)} chars). "
-            f"Files ({total_files}): {file_list}"
-        )
+        return f"Diff too large ({len(diff_text)} chars). Files ({total_files}): {file_list}"
 
     diffs = []
     for attachment in issue.get("attachments", {}).get("nodes", []):
@@ -328,9 +312,7 @@ def post_priority_bugs():
     open_priority_bugs = [bug for bug in open_priority_bugs if issue_has_sla(bug)]
     unassigned = [bug for bug in open_priority_bugs if bug["assignee"] is None]
 
-    overdue = [
-        bug for bug in open_priority_bugs if issue_reached_sla(bug, "slaBreachesAt")
-    ]
+    overdue = [bug for bug in open_priority_bugs if issue_reached_sla(bug, "slaBreachesAt")]
     overdue_ids = {bug["id"] for bug in overdue if bug.get("id")}
     at_risk = [
         bug
@@ -351,11 +333,7 @@ def post_priority_bugs():
                 )
             ]
         )
-        assigned = {
-            bug["assignee"]["displayName"]
-            for bug in open_priority_bugs
-            if bug["assignee"]
-        }
+        assigned = {bug["assignee"]["displayName"] for bug in open_priority_bugs if bug["assignee"]}
         notified_slack_ids: set[str] = set()
         slug_by_slack_id: dict[str, str] = {}
         support_slugs = get_support_slugs()
@@ -424,9 +402,7 @@ def post_leaderboard():
     config = load_config()
     people_config = config.get("people", {})
     engineering_team_slugs = {
-        slug
-        for slug, info in people_config.items()
-        if info.get("team") == ENGINEERING_TEAM_SLUG
+        slug for slug, info in people_config.items() if info.get("team") == ENGINEERING_TEAM_SLUG
     }
 
     def normalize_identity(value: str | None) -> str:
@@ -437,9 +413,7 @@ def post_leaderboard():
     alias_to_slug = {}
     for slug, info in people_config.items():
         linear_username = info.get("linear_username") or slug
-        display_alias = (
-            re.sub(r"[._-]+", " ", linear_username).title() if linear_username else slug
-        )
+        display_alias = re.sub(r"[._-]+", " ", linear_username).title() if linear_username else slug
         aliases = {slug, linear_username, display_alias}
         slack_id = info.get("slack_id")
         if slack_id:
@@ -500,9 +474,7 @@ def post_leaderboard():
         for assignee, score in leaderboard.items()
         if alias_to_slug.get(normalize_identity(assignee)) in engineering_team_slugs
     }
-    leaderboard = dict(
-        sorted(filtered_leaderboard.items(), key=lambda x: x[1], reverse=True)
-    )
+    leaderboard = dict(sorted(filtered_leaderboard.items(), key=lambda x: x[1], reverse=True))
     medals = ["🥇", "🥈", "🥉"]
     markdown = "*Weekly Leaderboard*\n\n"
     for rank, (assignee, score) in enumerate(leaderboard.items()):
@@ -558,16 +530,12 @@ def post_stale():
             filtered[reviewer] = keep
     prs = filtered
     if prs:
-        markdown += (
-            "*PRs - Checks Passing, Waiting for Review (+24h, <200 lines added)*\n"
-        )
+        markdown += "*PRs - Checks Passing, Waiting for Review (+24h, <200 lines added)*\n"
         for reviewer, pr_list in prs.items():
             if not pr_list:
                 continue
             unique_prs = {pr["url"]: pr for pr in pr_list}.values()
-            reviewer_slack_id = people_by_github_username.get(reviewer, {}).get(
-                "slack_id"
-            )
+            reviewer_slack_id = people_by_github_username.get(reviewer, {}).get("slack_id")
             if reviewer_slack_id:
                 reviewer_slack_markdown = f"<@{reviewer_slack_id}>"
             else:
@@ -610,9 +578,7 @@ def post_stale():
             assignee_slack_markdown = get_slack_markdown_by_linear_username(assignee)
             markdown += f"\n{assignee_slack_markdown}:\n\n"
             for issue in issues:
-                markdown += (
-                    f"- <{issue['url']}|{issue['title']}>" f" ({issue['daysStale']}d)\n"
-                )
+                markdown += f"- <{issue['url']}|{issue['title']}> ({issue['daysStale']}d)\n"
         markdown += "\n\n"
     markdown += f"<{os.getenv('APP_URL')}|View Bug Board>"
 
@@ -697,9 +663,7 @@ def post_overdue_projects():
             target_dt,
             now=now,
         )
-        if not target_dt or not target_status_text or not target_status_text.endswith(
-            "overdue"
-        ):
+        if not target_dt or not target_status_text or not target_status_text.endswith("overdue"):
             continue
 
         lead = (project.get("lead") or {}).get("displayName")
@@ -733,9 +697,7 @@ def post_friday_deadlines():
     projects = get_projects()
     people_config = load_config().get("people", {})
     projects = [
-        project
-        for project in projects
-        if _is_engineering_lead_project(project, people_config)
+        project for project in projects if _is_engineering_lead_project(project, people_config)
     ]
 
     upcoming = []
@@ -790,9 +752,7 @@ def post_weekly_changelog():
     chunks = []
     for issue in issues:
         desc = issue.get("description") or ""
-        comments = " ".join(
-            c.get("body", "") for c in issue.get("comments", {}).get("nodes", [])
-        )
+        comments = " ".join(c.get("body", "") for c in issue.get("comments", {}).get("nodes", []))
         diffs = _get_pr_diffs(issue)
         chunk_parts = [
             f"ID: {issue['id']}",
@@ -897,18 +857,14 @@ def configure_scheduled_jobs() -> None:
             "AIRFLOW_FLEET_HEALTH_REFRESH_SECONDS",
             FLEET_HEALTH_REFRESH_DEFAULT_SECONDS,
         )
-        schedule.every(refresh_interval_seconds).seconds.do(
-            refresh_airflow_fleet_health_cache_job
-        )
+        schedule.every(refresh_interval_seconds).seconds.do(refresh_airflow_fleet_health_cache_job)
         refresh_airflow_fleet_health_cache_job()
         logging.info(
             "Scheduled airflow fleet health cache refresh every %s seconds",
             refresh_interval_seconds,
         )
     else:
-        logging.info(
-            "REDIS_URL not set; airflow fleet health cache refresh is disabled"
-        )
+        logging.info("REDIS_URL not set; airflow fleet health cache refresh is disabled")
 
     schedule.every().friday.at("13:00").do(post_inactive_engineers)
     schedule.every().day.at("12:00").do(post_priority_bugs)

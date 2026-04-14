@@ -13,9 +13,7 @@ class GetCompletedIssuesForPersonTest(unittest.TestCase):
         def fake_execute(query, variable_values=None):
             query_document = query.document if hasattr(query, "document") else query
             captured["query"] = (
-                print_ast(query_document)
-                if not isinstance(query_document, str)
-                else query_document
+                print_ast(query_document) if not isinstance(query_document, str) else query_document
             )
             captured["variables"] = variable_values
             return {
@@ -43,9 +41,7 @@ class GetCompletedIssuesForPersonTest(unittest.TestCase):
                     "_compute_assignee_time_to_fix",
                     return_value=0,
                 ):
-                    issues = issues_module.get_completed_issues_for_person(
-                        "michael.neeley", 7
-                    )
+                    issues = issues_module.get_completed_issues_for_person("michael.neeley", 7)
 
         self.assertEqual(len(issues), 1)
         self.assertEqual(issues[0]["platform"], "Shovel")

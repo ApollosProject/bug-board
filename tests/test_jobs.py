@@ -22,7 +22,7 @@ def _install_import_shims() -> None:
 
     tenacity_module = cast(Any, types.ModuleType("tenacity"))
     tenacity_module.before_sleep_log = lambda *args, **kwargs: None
-    tenacity_module.retry = lambda *args, **kwargs: (lambda func: func)
+    tenacity_module.retry = lambda *args, **kwargs: lambda func: func
     tenacity_module.stop_after_attempt = lambda count: count
     tenacity_module.wait_fixed = lambda seconds: seconds
     sys.modules.setdefault("tenacity", tenacity_module)
@@ -44,9 +44,7 @@ def _install_import_shims() -> None:
     github_module = cast(Any, types.ModuleType("github"))
     github_module.get_pr_diff = lambda *args, **kwargs: ""
     github_module.get_prs_waiting_for_review_by_reviewer = lambda *args, **kwargs: {}
-    github_module.get_prs_with_changes_requested_by_reviewer = (
-        lambda *args, **kwargs: {}
-    )
+    github_module.get_prs_with_changes_requested_by_reviewer = lambda *args, **kwargs: {}
     github_module.merged_prs_by_author = lambda *args, **kwargs: {}
     github_module.merged_prs_by_reviewer = lambda *args, **kwargs: {}
     sys.modules.setdefault("github", github_module)
@@ -230,12 +228,8 @@ class RunDebugJobsTest(unittest.TestCase):
             with patch.object(jobs_module, "post_priority_bugs"):
                 with patch.object(jobs_module, "post_leaderboard") as leaderboard:
                     with patch.object(jobs_module, "post_stale") as stale:
-                        with patch.object(
-                            jobs_module, "post_overdue_projects"
-                        ) as overdue:
-                            with patch.object(
-                                jobs_module, "post_upcoming_projects"
-                            ) as upcoming:
+                        with patch.object(jobs_module, "post_overdue_projects") as overdue:
+                            with patch.object(jobs_module, "post_upcoming_projects") as upcoming:
                                 with patch.object(
                                     jobs_module, "post_friday_deadlines"
                                 ) as friday_deadlines:
@@ -312,13 +306,9 @@ class PostPriorityBugsTest(unittest.TestCase):
             },
         ]
 
-        with patch.object(
-            jobs_module, "load_config", return_value={"people": {}, "platforms": {}}
-        ):
+        with patch.object(jobs_module, "load_config", return_value={"people": {}, "platforms": {}}):
             with patch.object(jobs_module, "get_open_issues", return_value=bugs):
-                with patch.object(
-                    jobs_module, "post_to_slack", side_effect=posted.append
-                ):
+                with patch.object(jobs_module, "post_to_slack", side_effect=posted.append):
                     with patch.object(jobs_module, "datetime", FixedDateTime):
                         jobs_module.post_priority_bugs()
 
@@ -375,13 +365,9 @@ class PostPriorityBugsTest(unittest.TestCase):
             },
         ]
 
-        with patch.object(
-            jobs_module, "load_config", return_value={"people": {}, "platforms": {}}
-        ):
+        with patch.object(jobs_module, "load_config", return_value={"people": {}, "platforms": {}}):
             with patch.object(jobs_module, "get_open_issues", return_value=bugs):
-                with patch.object(
-                    jobs_module, "post_to_slack", side_effect=posted.append
-                ):
+                with patch.object(jobs_module, "post_to_slack", side_effect=posted.append):
                     with patch.object(jobs_module, "datetime", FixedDateTime):
                         jobs_module.post_priority_bugs()
 
@@ -442,9 +428,7 @@ class PostPriorityBugsTest(unittest.TestCase):
                     "get_support_slugs",
                     return_value={"alex", "blair", "casey", "devon"},
                 ):
-                    with patch.object(
-                        jobs_module, "post_to_slack", side_effect=posted.append
-                    ):
+                    with patch.object(jobs_module, "post_to_slack", side_effect=posted.append):
                         with patch.object(jobs_module, "datetime", FixedDateTime):
                             jobs_module.post_priority_bugs()
 
@@ -506,9 +490,7 @@ class PostPriorityBugsTest(unittest.TestCase):
                     "get_support_slugs",
                     return_value={"alex", "blair", "casey", "devon"},
                 ):
-                    with patch.object(
-                        jobs_module, "post_to_slack", side_effect=posted.append
-                    ):
+                    with patch.object(jobs_module, "post_to_slack", side_effect=posted.append):
                         with patch.object(jobs_module, "datetime", FixedDateTime):
                             jobs_module.post_priority_bugs()
 
@@ -523,33 +505,25 @@ class UnassignedPlatformWhitelistMatchingTest(unittest.TestCase):
         person = {"linear_username": "Alex"}
         bugs = [{"platform": "Mobile"}]
 
-        self.assertTrue(
-            jobs_module._person_matches_any_unassigned_platform(person, bugs)
-        )
+        self.assertTrue(jobs_module._person_matches_any_unassigned_platform(person, bugs))
 
     def test_does_not_match_when_whitelist_has_no_valid_platforms(self):
         person = {"platform_whitelist": ["", "   ", None]}
         bugs = [{"platform": "Mobile"}]
 
-        self.assertFalse(
-            jobs_module._person_matches_any_unassigned_platform(person, bugs)
-        )
+        self.assertFalse(jobs_module._person_matches_any_unassigned_platform(person, bugs))
 
     def test_matches_after_normalizing_whitelist_and_bug_platform_values(self):
         person = {"platform_whitelist": ["Mobile App", "Api"]}
         bugs = [{"platform": " mobile-app "}, {"platform": "Web"}]
 
-        self.assertTrue(
-            jobs_module._person_matches_any_unassigned_platform(person, bugs)
-        )
+        self.assertTrue(jobs_module._person_matches_any_unassigned_platform(person, bugs))
 
     def test_does_not_match_when_bug_platforms_are_missing(self):
         person = {"platform_whitelist": ["Web"]}
         bugs = [{"platform": None}, {"platform": "  "}]
 
-        self.assertFalse(
-            jobs_module._person_matches_any_unassigned_platform(person, bugs)
-        )
+        self.assertFalse(jobs_module._person_matches_any_unassigned_platform(person, bugs))
 
 
 class PostOverdueProjectsTest(unittest.TestCase):
@@ -616,9 +590,7 @@ class PostOverdueProjectsTest(unittest.TestCase):
 
         with patch.object(jobs_module, "load_config", return_value=config):
             with patch.object(jobs_module, "get_projects", return_value=projects):
-                with patch.object(
-                    jobs_module, "post_to_slack", side_effect=posted.append
-                ):
+                with patch.object(jobs_module, "post_to_slack", side_effect=posted.append):
                     with patch.object(jobs_module, "datetime", FixedDateTime):
                         jobs_module.post_overdue_projects()
 
@@ -683,9 +655,7 @@ class PostUpcomingProjectsTest(unittest.TestCase):
 
         with patch.object(jobs_module, "load_config", return_value=config):
             with patch.object(jobs_module, "get_projects", return_value=projects):
-                with patch.object(
-                    jobs_module, "post_to_slack", side_effect=posted.append
-                ):
+                with patch.object(jobs_module, "post_to_slack", side_effect=posted.append):
                     with patch.object(jobs_module, "datetime", FixedDateTime):
                         jobs_module.post_upcoming_projects()
 

@@ -56,16 +56,12 @@ def evaluate_fleet_health() -> tuple[dict[str, Any], int]:
 
     session = _build_session(api_token)
     active_dags = _fetch_active_dags(session, base_url)
-    latest_run_by_dag, failed_fetches = _fetch_latest_runs_by_dag(
-        base_url, api_token, active_dags
-    )
+    latest_run_by_dag, failed_fetches = _fetch_latest_runs_by_dag(base_url, api_token, active_dags)
     if active_dags and not latest_run_by_dag:
         raise AirflowFleetHealthError("Failed to fetch latest runs for all DAGs.")
     stats = _build_stats(active_dags, latest_run_by_dag, failed_fetches)
 
-    is_degraded = (
-        not stats.insufficient_volume and stats.failure_ratio >= FAILURE_THRESHOLD_RATIO
-    )
+    is_degraded = not stats.insufficient_volume and stats.failure_ratio >= FAILURE_THRESHOLD_RATIO
     status = "degraded" if is_degraded else "healthy"
     http_status = 503 if is_degraded else 200
     payload = {
@@ -145,9 +141,7 @@ def _fetch_latest_runs_by_dag(
     return latest_run_by_dag, failures
 
 
-def _fetch_last_run_for_dag(
-    base_url: str, api_token: str, dag_id: str
-) -> DagRunSummary:
+def _fetch_last_run_for_dag(base_url: str, api_token: str, dag_id: str) -> DagRunSummary:
     session = _build_session(api_token)
     dag_id_encoded = quote(dag_id, safe="")
     payload = _request_json(
@@ -183,9 +177,7 @@ def _build_stats(
     ]
     failed_runs = len(failed_dags)
     non_terminal_dags = sum(
-        1
-        for latest_run in latest_run_by_dag.values()
-        if latest_run["state"] not in TERMINAL_STATES
+        1 for latest_run in latest_run_by_dag.values() if latest_run["state"] not in TERMINAL_STATES
     )
     failure_ratio = failed_runs / evaluated_dags if evaluated_dags else 0.0
     insufficient_volume = evaluated_dags < MIN_EVALUATED_DAGS
@@ -211,9 +203,7 @@ def _build_session(api_token: str) -> requests.Session:
     return session
 
 
-def _request_json(
-    session: requests.Session, url: str, params: dict[str, Any]
-) -> dict[str, Any]:
+def _request_json(session: requests.Session, url: str, params: dict[str, Any]) -> dict[str, Any]:
     try:
         response = session.get(url, params=params, timeout=REQUEST_TIMEOUT_SECONDS)
         response.raise_for_status()
@@ -228,9 +218,7 @@ def _request_json(
     try:
         payload = response.json()
     except ValueError as exc:
-        raise AirflowFleetHealthError(
-            f"Airflow API returned invalid JSON for {url}"
-        ) from exc
+        raise AirflowFleetHealthError(f"Airflow API returned invalid JSON for {url}") from exc
     if not isinstance(payload, dict):
         raise AirflowFleetHealthError(f"Unexpected Airflow API response type for {url}")
     return payload
@@ -246,9 +234,7 @@ def _extract_dag_runs(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return []
 
 
-def _has_more(
-    batch_size: int, payload: dict[str, Any], offset: int, requested_limit: int
-) -> bool:
+def _has_more(batch_size: int, payload: dict[str, Any], offset: int, requested_limit: int) -> bool:
     total_entries = payload.get("total_entries")
     if isinstance(total_entries, int):
         return offset + batch_size < total_entries

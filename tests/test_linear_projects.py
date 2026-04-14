@@ -19,9 +19,7 @@ class GetProjectsTest(unittest.TestCase):
                                 "nodes": [
                                     {
                                         "name": "Web Giving",
-                                        "members": {
-                                            "nodes": [{"displayName": "Nathan Lewis"}]
-                                        },
+                                        "members": {"nodes": [{"displayName": "Nathan Lewis"}]},
                                     }
                                 ],
                             }
@@ -41,9 +39,7 @@ class GetProjectsTest(unittest.TestCase):
                                 "nodes": [
                                     {
                                         "name": "Giving History + Recurring Management",
-                                        "members": {
-                                            "nodes": [{"displayName": "Austin Witherow"}]
-                                        },
+                                        "members": {"nodes": [{"displayName": "Austin Witherow"}]},
                                     }
                                 ],
                             }

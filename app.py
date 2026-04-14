@@ -1,7 +1,7 @@
 import logging
+import os
 import re
 import time
-import os
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -19,12 +19,16 @@ from fleet_health_cache import (
     should_use_redis_cache,
 )
 from github import merged_prs_by_author, merged_prs_by_reviewer
+from leaderboard import (
+    calculate_cycle_project_lead_points,
+    calculate_cycle_project_member_points,
+)
 from linear.issues import (
     by_assignee,
     by_platform,
     by_project,
-    get_completed_issues_summary,
     get_completed_issues_for_person,
+    get_completed_issues_summary,
     get_created_issues,
     get_open_issues,
     get_open_issues_for_person,
@@ -37,10 +41,6 @@ from project_dates import (
     parse_iso_date,
 )
 from support import get_support_slugs
-from leaderboard import (
-    calculate_cycle_project_lead_points,
-    calculate_cycle_project_member_points,
-)
 
 
 def normalize_identity(value: str | None) -> str:
@@ -169,9 +169,7 @@ AIRFLOW_REQUIRED_ENV_VARS = ("AIRFLOW_API_BASE_URL", "AIRFLOW_API_TOKEN")
 
 def _get_missing_airflow_env_vars() -> list[str]:
     return [
-        env_name
-        for env_name in AIRFLOW_REQUIRED_ENV_VARS
-        if not os.getenv(env_name, "").strip()
+        env_name for env_name in AIRFLOW_REQUIRED_ENV_VARS if not os.getenv(env_name, "").strip()
     ]
 
 
@@ -220,8 +218,7 @@ def _get_airflow_fleet_health_payload(
         )
         if payload.get("error_type") == "missing_airflow_credentials":
             logging.warning(
-                "Airflow fleet health evaluation skipped because required env vars "
-                "are missing: %s",
+                "Airflow fleet health evaluation skipped because required env vars are missing: %s",
                 ", ".join(payload["missing_airflow_env_vars"]),
             )
         else:
@@ -354,9 +351,7 @@ def failing_dags_dashboard():
         checked_at=_format_checked_at(payload.get("checked_at")),
         dags_without_runs=payload.get("dags_without_runs"),
         evaluated_dags=payload.get("evaluated_dags"),
-        failed_dag_count=(
-            failed_runs if isinstance(failed_runs, int) else len(failed_dags)
-        ),
+        failed_dag_count=(failed_runs if isinstance(failed_runs, int) else len(failed_dags)),
         failed_dags=failed_dags,
         failed_fetches=payload.get("failed_fetches"),
         failure_ratio=payload.get("failure_ratio"),
@@ -387,9 +382,7 @@ def record_breakdown(
     person_points[category] = person_points.get(category, 0) + points
     if count_increment:
         person_counts = store_counts.setdefault(key, {})
-        person_counts[category] = (
-            person_counts.get(category, 0) + count_increment
-        )
+        person_counts[category] = person_counts.get(category, 0) + count_increment
 
 
 # Maximum time in seconds to wait for background tasks in the index context.
@@ -485,11 +478,12 @@ def mmdd_filter(date_str: str) -> str:
         return date_str
 
 
-ResultType = TypeVar('ResultType')
+ResultType = TypeVar("ResultType")
 
 
 class IndexFutures(TypedDict):
     """Named collection of futures used for building the index view."""
+
     created_priority: Future[list]
     open_priority: Future[list]
     completed_priority: Future[list]
@@ -504,9 +498,7 @@ class IndexFutures(TypedDict):
 
 
 def get_future_result_with_timeout(
-    future: Future[ResultType],
-    default_value: ResultType,
-    timeout: int = INDEX_FUTURE_TIMEOUT
+    future: Future[ResultType], default_value: ResultType, timeout: int = INDEX_FUTURE_TIMEOUT
 ) -> ResultType:
     """
     Get result from a future with a timeout, returning a default value on timeout.
@@ -535,16 +527,10 @@ def _submit_index_futures(
     This helper isolates the responsibility of scheduling concurrent work
     away from `_build_index_context`, improving readability and testability.
     """
-    created_priority_future = executor.submit(
-        get_created_issues, 2, "Bug", days
-    )
+    created_priority_future = executor.submit(get_created_issues, 2, "Bug", days)
     open_priority_future = executor.submit(get_open_issues, 2, "Bug")
-    completed_priority_future = executor.submit(
-        get_completed_issues_summary, 2, "Bug", days
-    )
-    completed_bugs_future = executor.submit(
-        get_completed_issues_summary, 5, "Bug", days
-    )
+    completed_priority_future = executor.submit(get_completed_issues_summary, 2, "Bug", days)
+    completed_bugs_future = executor.submit(get_completed_issues_summary, 5, "Bug", days)
     completed_new_features_future = executor.submit(
         get_completed_issues_summary, 5, "New Feature", days
     )
@@ -552,12 +538,8 @@ def _submit_index_futures(
         get_completed_issues_summary, 5, "Technical Change", days
     )
     open_bugs_future = executor.submit(get_open_issues, 5, "Bug")
-    open_new_features_future = executor.submit(
-        get_open_issues, 5, "New Feature"
-    )
-    open_technical_changes_future = executor.submit(
-        get_open_issues, 5, "Technical Change"
-    )
+    open_new_features_future = executor.submit(get_open_issues, 5, "New Feature")
+    open_technical_changes_future = executor.submit(get_open_issues, 5, "Technical Change")
     reviews_future = executor.submit(merged_prs_by_reviewer, days)
     authored_prs_future = executor.submit(merged_prs_by_author, days)
 
@@ -586,21 +568,13 @@ def _get_priority_bugs_from_futures(
 
     Only non-project issues are included in the completed list.
     """
-    created_priority_bugs = get_future_result_with_timeout(
-        created_priority_future, []
-    )
-    open_priority_bugs = get_future_result_with_timeout(
-        open_priority_future, []
-    )
+    created_priority_bugs = get_future_result_with_timeout(created_priority_future, [])
+    open_priority_bugs = get_future_result_with_timeout(open_priority_future, [])
 
     # Only include non-project issues in the index summary
-    completed_priority_result = get_future_result_with_timeout(
-        completed_priority_future, []
-    )
+    completed_priority_result = get_future_result_with_timeout(completed_priority_future, [])
     completed_priority_bugs = [
-        issue
-        for issue in completed_priority_result
-        if not issue.get("project")
+        issue for issue in completed_priority_result if not issue.get("project")
     ]
 
     return created_priority_bugs, open_priority_bugs, completed_priority_bugs
@@ -620,54 +594,33 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
         futures["open_priority"],
         futures["completed_priority"],
     )
-    completed_bugs_result = get_future_result_with_timeout(
-        futures["completed_bugs"], []
-    )
-    completed_bugs = [
-        issue
-        for issue in completed_bugs_result
-        if not issue.get("project")
-    ]
+    completed_bugs_result = get_future_result_with_timeout(futures["completed_bugs"], [])
+    completed_bugs = [issue for issue in completed_bugs_result if not issue.get("project")]
     completed_new_features_result = get_future_result_with_timeout(
         futures["completed_new_features"], []
     )
     completed_new_features = [
-        issue
-        for issue in completed_new_features_result
-        if not issue.get("project")
+        issue for issue in completed_new_features_result if not issue.get("project")
     ]
     completed_technical_changes_result = get_future_result_with_timeout(
         futures["completed_technical_changes"], []
     )
     completed_technical_changes = [
-        issue
-        for issue in completed_technical_changes_result
-        if not issue.get("project")
+        issue for issue in completed_technical_changes_result if not issue.get("project")
     ]
     open_bugs_result = get_future_result_with_timeout(futures["open_bugs"], [])
-    open_new_features_result = get_future_result_with_timeout(
-        futures["open_new_features"], []
-    )
+    open_new_features_result = get_future_result_with_timeout(futures["open_new_features"], [])
     open_technical_changes_result = get_future_result_with_timeout(
         futures["open_technical_changes"], []
     )
-    open_work = (
-        open_bugs_result
-        + open_new_features_result
-        + open_technical_changes_result
-    )
+    open_work = open_bugs_result + open_new_features_result + open_technical_changes_result
     time_data = get_time_data(completed_priority_bugs)
     fixes_per_day = (
-        len(completed_bugs + completed_new_features + completed_technical_changes)
-        / days
+        len(completed_bugs + completed_new_features + completed_technical_changes) / days
     )
 
-    merged_reviews = get_future_result_with_timeout(
-        futures["merged_prs_by_reviewer"], {}
-    )
-    merged_authored_prs = get_future_result_with_timeout(
-        futures["merged_prs_by_author"], {}
-    )
+    merged_reviews = get_future_result_with_timeout(futures["merged_prs_by_reviewer"], {})
+    merged_authored_prs = get_future_result_with_timeout(futures["merged_prs_by_author"], {})
     leaderboard_entries = _build_leaderboard_entries(
         days=days,
         completed_bugs=completed_bugs,
@@ -690,9 +643,7 @@ def _build_index_context(days: int, _cache_epoch: int) -> dict:
 
     return {
         "days": days,
-        "priority_issues": sorted(
-            open_priority_bugs, key=lambda x: x["createdAt"]
-        ),
+        "priority_issues": sorted(open_priority_bugs, key=lambda x: x["createdAt"]),
         "issue_count": len(created_priority_bugs),
         "priority_percentage": priority_percentage,
         "leaderboard_entries": leaderboard_entries,
@@ -724,9 +675,7 @@ def _build_leaderboard_entries(
     config_data = load_config()
     people_config = config_data.get("people", {})
     engineering_team_slugs = {
-        slug
-        for slug, info in people_config.items()
-        if info.get("team") == ENGINEERING_TEAM_SLUG
+        slug for slug, info in people_config.items() if info.get("team") == ENGINEERING_TEAM_SLUG
     }
 
     alias_to_slug = {}
@@ -764,18 +713,14 @@ def _build_leaderboard_entries(
     count_breakdown_by_slug: dict[str, dict[str, int]] = {}
     count_breakdown_by_external: dict[str, dict[str, int]] = {}
 
-    completed_work = (
-        completed_bugs + completed_new_features + completed_technical_changes
-    )
+    completed_work = completed_bugs + completed_new_features + completed_technical_changes
 
     for issue in completed_work:
         assignee = issue.get("assignee")
         if not assignee:
             continue
         raw_identity = assignee.get("name") or assignee.get("displayName") or ""
-        display_name = assignee.get("displayName") or format_display_name(
-            raw_identity
-        )
+        display_name = assignee.get("displayName") or format_display_name(raw_identity)
         slug = resolve_slug(assignee.get("name"), assignee.get("displayName"))
         priority = issue.get("priority")
         points = PRIORITY_TO_SCORE.get(priority, 0)
@@ -979,12 +924,8 @@ def _build_leaderboard_entries(
 def _build_priority_stats_context(days: int, _cache_epoch: int) -> dict:
     with ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS) as executor:
         created_priority_future = executor.submit(get_created_issues, 2, "Bug", days)
-        completed_priority_future = executor.submit(
-            get_completed_issues_summary, 2, "Bug", days
-        )
-        completed_bugs_future = executor.submit(
-            get_completed_issues_summary, 5, "Bug", days
-        )
+        completed_priority_future = executor.submit(get_completed_issues_summary, 2, "Bug", days)
+        completed_bugs_future = executor.submit(get_completed_issues_summary, 5, "Bug", days)
         completed_new_features_future = executor.submit(
             get_completed_issues_summary, 5, "New Feature", days
         )
@@ -992,46 +933,29 @@ def _build_priority_stats_context(days: int, _cache_epoch: int) -> dict:
             get_completed_issues_summary, 5, "Technical Change", days
         )
 
-    created_priority_bugs = get_future_result_with_timeout(
-        created_priority_future, []
-    )
-    completed_priority_result = get_future_result_with_timeout(
-        completed_priority_future, []
-    )
+    created_priority_bugs = get_future_result_with_timeout(created_priority_future, [])
+    completed_priority_result = get_future_result_with_timeout(completed_priority_future, [])
     completed_priority_bugs = [
-        issue
-        for issue in completed_priority_result
-        if not issue.get("project")
+        issue for issue in completed_priority_result if not issue.get("project")
     ]
-    completed_bugs_result = get_future_result_with_timeout(
-        completed_bugs_future, []
-    )
-    completed_bugs = [
-        issue
-        for issue in completed_bugs_result
-        if not issue.get("project")
-    ]
+    completed_bugs_result = get_future_result_with_timeout(completed_bugs_future, [])
+    completed_bugs = [issue for issue in completed_bugs_result if not issue.get("project")]
     completed_new_features_result = get_future_result_with_timeout(
         completed_new_features_future, []
     )
     completed_new_features = [
-        issue
-        for issue in completed_new_features_result
-        if not issue.get("project")
+        issue for issue in completed_new_features_result if not issue.get("project")
     ]
     completed_technical_changes_result = get_future_result_with_timeout(
         completed_technical_changes_future, []
     )
     completed_technical_changes = [
-        issue
-        for issue in completed_technical_changes_result
-        if not issue.get("project")
+        issue for issue in completed_technical_changes_result if not issue.get("project")
     ]
 
     time_data = get_time_data(completed_priority_bugs)
     fixes_per_day = (
-        len(completed_bugs + completed_new_features + completed_technical_changes)
-        / days
+        len(completed_bugs + completed_new_features + completed_technical_changes) / days
         if days
         else 0
     )
@@ -1048,9 +972,7 @@ def _build_priority_stats_context(days: int, _cache_epoch: int) -> dict:
 
     issues_by_platform = by_platform(created_priority_bugs)
     platform_labels = list(issues_by_platform.keys())
-    platform_values = [
-        len(issues_by_platform[label]) for label in platform_labels
-    ]
+    platform_values = [len(issues_by_platform[label]) for label in platform_labels]
 
     return {
         "days": days,
@@ -1069,34 +991,20 @@ def _build_open_items_context(days: int, _cache_epoch: int) -> dict:
     with ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS) as executor:
         open_priority_future = executor.submit(get_open_issues, 2, "Bug")
         open_bugs_future = executor.submit(get_open_issues, 5, "Bug")
-        open_new_features_future = executor.submit(
-            get_open_issues, 5, "New Feature"
-        )
-        open_technical_changes_future = executor.submit(
-            get_open_issues, 5, "Technical Change"
-        )
+        open_new_features_future = executor.submit(get_open_issues, 5, "New Feature")
+        open_technical_changes_future = executor.submit(get_open_issues, 5, "Technical Change")
 
-    open_priority_bugs = get_future_result_with_timeout(
-        open_priority_future, []
-    )
+    open_priority_bugs = get_future_result_with_timeout(open_priority_future, [])
     open_bugs_result = get_future_result_with_timeout(open_bugs_future, [])
-    open_new_features_result = get_future_result_with_timeout(
-        open_new_features_future, []
-    )
+    open_new_features_result = get_future_result_with_timeout(open_new_features_future, [])
     open_technical_changes_result = get_future_result_with_timeout(
         open_technical_changes_future, []
     )
-    open_work = (
-        open_bugs_result
-        + open_new_features_result
-        + open_technical_changes_result
-    )
+    open_work = open_bugs_result + open_new_features_result + open_technical_changes_result
 
     return {
         "days": days,
-        "priority_issues": sorted(
-            open_priority_bugs, key=lambda x: x["createdAt"]
-        ),
+        "priority_issues": sorted(open_priority_bugs, key=lambda x: x["createdAt"]),
         "open_assigned_work": sorted(
             [
                 issue
@@ -1112,9 +1020,7 @@ def _build_open_items_context(days: int, _cache_epoch: int) -> dict:
 @lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
 def _build_leaderboard_context(days: int, _cache_epoch: int) -> dict:
     with ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS) as executor:
-        completed_bugs_future = executor.submit(
-            get_completed_issues_summary, 5, "Bug", days
-        )
+        completed_bugs_future = executor.submit(get_completed_issues_summary, 5, "Bug", days)
         completed_new_features_future = executor.submit(
             get_completed_issues_summary, 5, "New Feature", days
         )
@@ -1124,29 +1030,19 @@ def _build_leaderboard_context(days: int, _cache_epoch: int) -> dict:
         reviews_future = executor.submit(merged_prs_by_reviewer, days)
         authored_prs_future = executor.submit(merged_prs_by_author, days)
 
-    completed_bugs_result = get_future_result_with_timeout(
-        completed_bugs_future, []
-    )
-    completed_bugs = [
-        issue
-        for issue in completed_bugs_result
-        if not issue.get("project")
-    ]
+    completed_bugs_result = get_future_result_with_timeout(completed_bugs_future, [])
+    completed_bugs = [issue for issue in completed_bugs_result if not issue.get("project")]
     completed_new_features_result = get_future_result_with_timeout(
         completed_new_features_future, []
     )
     completed_new_features = [
-        issue
-        for issue in completed_new_features_result
-        if not issue.get("project")
+        issue for issue in completed_new_features_result if not issue.get("project")
     ]
     completed_technical_changes_result = get_future_result_with_timeout(
         completed_technical_changes_future, []
     )
     completed_technical_changes = [
-        issue
-        for issue in completed_technical_changes_result
-        if not issue.get("project")
+        issue for issue in completed_technical_changes_result if not issue.get("project")
     ]
 
     merged_reviews = get_future_result_with_timeout(reviews_future, {})
@@ -1245,9 +1141,7 @@ def _build_team_context(_cache_epoch: int) -> dict:
     config = load_config()
     people_config = config.get("people", {})
     engineering_team_slugs = {
-        slug
-        for slug, info in people_config.items()
-        if info.get("team") == ENGINEERING_TEAM_SLUG
+        slug for slug, info in people_config.items() if info.get("team") == ENGINEERING_TEAM_SLUG
     }
 
     def format_name(key):
@@ -1317,9 +1211,7 @@ def _build_team_context(_cache_epoch: int) -> dict:
         primary_initiative = sorted(initiative_names)[0]
         projects_by_initiative.setdefault(primary_initiative, []).append(project)
     # sort initiatives alphabetically
-    projects_by_initiative = dict(
-        sorted(projects_by_initiative.items(), key=lambda x: x[0])
-    )
+    projects_by_initiative = dict(sorted(projects_by_initiative.items(), key=lambda x: x[0]))
 
     # Separate completed or incomplete projects from the initiative buckets
     completed_projects = []
@@ -1338,9 +1230,7 @@ def _build_team_context(_cache_epoch: int) -> dict:
             del projects_by_initiative[name]
 
     # Determine which team members are participating in active projects
-    active_projects = [
-        p for projs in projects_by_initiative.values() for p in projs
-    ]
+    active_projects = [p for projs in projects_by_initiative.values() for p in projs]
 
     cycle_member_slugs = set()
     member_projects: dict[str, set[tuple[str, str]]] = {}
@@ -1362,16 +1252,11 @@ def _build_team_context(_cache_epoch: int) -> dict:
                 if not isinstance(project_name, str) or not isinstance(project_url, str):
                     continue
                 cycle_member_slugs.add(slug)
-                member_projects.setdefault(slug, set()).add(
-                    (project_name, project_url)
-                )
+                member_projects.setdefault(slug, set()).add((project_name, project_url))
 
     # Convert sets back to sorted lists of dicts
     member_projects_list = {
-        slug: [
-            {"name": name, "url": url}
-            for name, url in sorted(projects, key=lambda x: x[0])
-        ]
+        slug: [{"name": name, "url": url} for name, url in sorted(projects, key=lambda x: x[0])]
         for slug, projects in member_projects.items()
     }
 
@@ -1380,9 +1265,7 @@ def _build_team_context(_cache_epoch: int) -> dict:
         key=lambda d: d["name"],
     )
 
-    support_slugs = [
-        slug for slug in get_support_slugs() if slug in engineering_team_slugs
-    ]
+    support_slugs = [slug for slug in get_support_slugs() if slug in engineering_team_slugs]
     on_call_support = sorted(
         [{"slug": name, "name": format_name(name)} for name in support_slugs],
         key=lambda d: d["name"],
@@ -1396,8 +1279,7 @@ def _build_team_context(_cache_epoch: int) -> dict:
         slug = slug_for_name(assignee)
         if slug and slug in engineering_team_slugs:
             support_issues[slug] = [
-                {"title": issue["title"], "url": issue["url"]}
-                for issue in data["issues"]
+                {"title": issue["title"], "url": issue["url"]} for issue in data["issues"]
             ]
 
     return {
@@ -1510,26 +1392,12 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
     led_projects = [
         project
         for project in cycle_projects
-        if normalize_display_name(
-            (project.get("lead") or {}).get("displayName")
-        )
+        if normalize_display_name((project.get("lead") or {}).get("displayName"))
         == normalized_person_name
     ]
-    lead_completed_projects = sum(
-        1
-        for project in led_projects
-        if is_completed_project(project)
-    )
-    lead_incomplete_projects = sum(
-        1
-        for project in led_projects
-        if is_incomplete_project(project)
-    )
-    lead_current_projects = sum(
-        1
-        for project in led_projects
-        if not project.get("is_inactive")
-    )
+    lead_completed_projects = sum(1 for project in led_projects if is_completed_project(project))
+    lead_incomplete_projects = sum(1 for project in led_projects if is_incomplete_project(project))
+    lead_current_projects = sum(1 for project in led_projects if not project.get("is_inactive"))
     lead_completed_project_variances = [
         variance_days
         for project in led_projects
@@ -1538,15 +1406,13 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
         if variance_days is not None
     ]
     if lead_completed_project_variances:
-        average_completed_project_variance = sum(
+        average_completed_project_variance = sum(lead_completed_project_variances) / len(
             lead_completed_project_variances
-        ) / len(lead_completed_project_variances)
+        )
     else:
         average_completed_project_variance = None
 
-    project_names = {
-        proj.get("name") for proj in cycle_projects if proj.get("name")
-    }
+    project_names = {proj.get("name") for proj in cycle_projects if proj.get("name")}
 
     on_support = slug in get_support_slugs()
     if on_support:
@@ -1562,14 +1428,10 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
         }
     else:
         open_current_cycle = {
-            proj: issues
-            for proj, issues in open_by_project.items()
-            if proj in project_names
+            proj: issues for proj, issues in open_by_project.items() if proj in project_names
         }
         open_other = {
-            proj: issues
-            for proj, issues in open_by_project.items()
-            if proj not in project_names
+            proj: issues for proj, issues in open_by_project.items() if proj not in project_names
         }
 
     work_by_platform = by_platform(open_items + completed_items)

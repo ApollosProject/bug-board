@@ -1,6 +1,7 @@
 from gql import gql
 
 from config import get_linear_team_key
+
 from .client import _execute
 
 

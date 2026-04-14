@@ -1,6 +1,6 @@
 import os
-from datetime import datetime
 import threading
+from datetime import datetime
 
 from dotenv import load_dotenv
 from gql import Client, GraphQLRequest
