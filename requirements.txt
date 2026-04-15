@@ -44,7 +44,7 @@ urllib3==2.6.3
 Werkzeug==3.1.8
 yarl==1.23.0
 openai==2.29.0
-mypy==1.20.0
+mypy==1.20.1
 types-PyYAML==6.0.12.20260408
 types-requests==2.33.0.20260408
 vulture==2.16
