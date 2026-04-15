@@ -4,7 +4,7 @@ aiosignal==1.4.0
 anyio==4.13.0
 attrs==25.1.0
 blinker==1.9.0
-botocore==1.42.88
+botocore==1.42.89
 certifi==2026.2.25
 charset-normalizer==3.4.7
 click==8.3.2
@@ -19,7 +19,7 @@ httpx==0.28.1
 idna==3.11
 itsdangerous==2.2.0
 Jinja2==3.1.6
-jmespath==1.0.1
+jmespath==1.1.0
 MarkupSafe==3.0.3
 multidict==6.7.1
 mypy-extensions==1.1.0
@@ -44,7 +44,7 @@ urllib3==2.6.3
 Werkzeug==3.1.8
 yarl==1.23.0
 openai==2.31.0
-mypy==1.20.0
+mypy==1.20.1
 types-PyYAML==6.0.12.20260408
 types-requests==2.33.0.20260408
 vulture==2.16
