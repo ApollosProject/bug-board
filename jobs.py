@@ -216,7 +216,16 @@ def _person_matches_any_unassigned_platform(person: dict, bugs: list[dict]) -> b
         if normalized
     }
     if not allowed_platforms:
-        return False
+        person_identifier = (
+            person.get("linear_username") or person.get("slack_id") or "unknown-person"
+        )
+        logging.warning(
+            "Ignoring empty or invalid platform_whitelist for %s; "
+            "falling back to unfiltered unassigned bug notifications (raw value: %r)",
+            person_identifier,
+            platform_whitelist,
+        )
+        return True
 
     return any(_normalize_platform_name(bug.get("platform")) in allowed_platforms for bug in bugs)
 
