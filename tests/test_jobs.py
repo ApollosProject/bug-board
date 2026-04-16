@@ -507,11 +507,14 @@ class UnassignedPlatformWhitelistMatchingTest(unittest.TestCase):
 
         self.assertTrue(jobs_module._person_matches_any_unassigned_platform(person, bugs))
 
-    def test_does_not_match_when_whitelist_has_no_valid_platforms(self):
+    def test_matches_when_whitelist_has_no_valid_platforms(self):
         person = {"platform_whitelist": ["", "   ", None]}
         bugs = [{"platform": "Mobile"}]
 
-        self.assertFalse(jobs_module._person_matches_any_unassigned_platform(person, bugs))
+        with patch.object(jobs_module.logging, "warning") as warning:
+            self.assertTrue(jobs_module._person_matches_any_unassigned_platform(person, bugs))
+
+        warning.assert_called_once()
 
     def test_matches_after_normalizing_whitelist_and_bug_platform_values(self):
         person = {"platform_whitelist": ["Mobile App", "Api"]}
@@ -524,6 +527,67 @@ class UnassignedPlatformWhitelistMatchingTest(unittest.TestCase):
         bugs = [{"platform": None}, {"platform": "  "}]
 
         self.assertFalse(jobs_module._person_matches_any_unassigned_platform(person, bugs))
+
+    def test_warns_and_matches_when_whitelist_is_an_empty_list(self):
+        person = {"linear_username": "Alex", "platform_whitelist": []}
+        bugs = [{"platform": "Web"}]
+
+        with patch.object(jobs_module.logging, "warning") as warning:
+            self.assertTrue(jobs_module._person_matches_any_unassigned_platform(person, bugs))
+
+        warning.assert_called_once()
+
+
+class PostPriorityBugsInvalidWhitelistFallbackTest(unittest.TestCase):
+    def test_unassigned_priority_bug_notifies_people_with_invalid_platform_whitelists(self):
+        posted = []
+        bugs = [
+            {
+                "id": "unassigned-bug",
+                "title": "Unassigned mobile bug",
+                "assignee": None,
+                "url": "https://linear.app/issue/unassigned-bug",
+                "platform": "Mobile",
+                "daysOpen": 14,
+                "priority": 2,
+                "slaMediumRiskAt": "2026-03-14T08:00:00.000Z",
+                "slaHighRiskAt": "2026-03-16T10:00:00.000Z",
+                "slaBreachesAt": "2026-03-17T12:00:00.000Z",
+            }
+        ]
+        config = {
+            "people": {
+                "alex": {"linear_username": "Alex", "slack_id": "U1"},
+                "blair": {
+                    "linear_username": "Blair",
+                    "slack_id": "U2",
+                    "platform_whitelist": ["", "   ", None],
+                },
+                "casey": {
+                    "linear_username": "Casey",
+                    "slack_id": "U3",
+                    "platform_whitelist": ["web"],
+                },
+            },
+            "platforms": {},
+        }
+
+        with patch.object(jobs_module, "load_config", return_value=config):
+            with patch.object(jobs_module, "get_open_issues", return_value=bugs):
+                with patch.object(
+                    jobs_module,
+                    "get_support_slugs",
+                    return_value={"alex", "blair", "casey"},
+                ):
+                    with patch.object(jobs_module, "post_to_slack", side_effect=posted.append):
+                        with patch.object(jobs_module, "datetime", FixedDateTime):
+                            with patch.object(jobs_module.logging, "warning") as warning:
+                                jobs_module.post_priority_bugs()
+
+        self.assertEqual(len(posted), 1)
+        self.assertIn("attn:\n\n<@U1>\n<@U2>", posted[0])
+        self.assertNotIn("<@U3>", posted[0])
+        warning.assert_called_once()
 
 
 class PostOverdueProjectsTest(unittest.TestCase):
