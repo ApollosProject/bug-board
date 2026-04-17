@@ -15,14 +15,17 @@ REQUEST_TIMEOUT_SECONDS = 20
 # Airflow caps /dags responses at 100 items even when a higher limit is requested.
 DAG_PAGE_SIZE = 100
 DAG_QUERY_WORKERS = 30
+DAG_RUN_PAGE_SIZE = 10
 FAILURE_THRESHOLD_RATIO = 0.10
 MIN_EVALUATED_DAGS = 20
 TOP_FAILED_DAGS_LIMIT = 10
 
 
-class DagRunSummary(TypedDict):
-    state: str
+class DagRunEvaluation(TypedDict):
+    latest_state: str
+    latest_terminal_state: str
     dag_run_id: str
+    has_runs: bool
 
 
 class FailedDagEntry(TypedDict):
@@ -115,11 +118,11 @@ def _fetch_active_dags(session: requests.Session, base_url: str) -> set[str]:
 
 def _fetch_latest_runs_by_dag(
     base_url: str, api_token: str, active_dags: set[str]
-) -> tuple[dict[str, DagRunSummary], int]:
+) -> tuple[dict[str, DagRunEvaluation], int]:
     if not active_dags:
         return {}, 0
 
-    latest_run_by_dag: dict[str, DagRunSummary] = {}
+    latest_run_by_dag: dict[str, DagRunEvaluation] = {}
     failures = 0
     worker_count = min(DAG_QUERY_WORKERS, len(active_dags))
 
@@ -135,37 +138,57 @@ def _fetch_latest_runs_by_dag(
             except AirflowFleetHealthError:
                 failures += 1
                 continue
-            if latest_run["state"]:
-                latest_run_by_dag[dag_id] = latest_run
+            latest_run_by_dag[dag_id] = latest_run
 
     return latest_run_by_dag, failures
 
 
-def _fetch_last_run_for_dag(base_url: str, api_token: str, dag_id: str) -> DagRunSummary:
+def _fetch_last_run_for_dag(base_url: str, api_token: str, dag_id: str) -> DagRunEvaluation:
     session = _build_session(api_token)
     dag_id_encoded = quote(dag_id, safe="")
     payload = _request_json(
         session,
         f"{base_url}{DAGS_ENDPOINT}/{dag_id_encoded}/dagRuns",
-        params={"limit": 1, "offset": 0, "order_by": "-logical_date"},
+        params={"limit": DAG_RUN_PAGE_SIZE, "offset": 0, "order_by": "-logical_date"},
     )
     dag_runs = _extract_dag_runs(payload)
     if not dag_runs:
-        return {"state": "", "dag_run_id": ""}
+        return {
+            "latest_state": "",
+            "latest_terminal_state": "",
+            "dag_run_id": "",
+            "has_runs": False,
+        }
 
-    latest_run = dag_runs[0]
+    latest_state = _extract_state(dag_runs[0])
+    latest_terminal_run = next(
+        (run for run in dag_runs if _extract_state(run) in TERMINAL_STATES),
+        None,
+    )
+    if latest_terminal_run is None:
+        return {
+            "latest_state": latest_state,
+            "latest_terminal_state": "",
+            "dag_run_id": "",
+            "has_runs": True,
+        }
+
     return {
-        "state": _extract_state(latest_run),
-        "dag_run_id": _extract_dag_run_id(latest_run),
+        "latest_state": latest_state,
+        "latest_terminal_state": _extract_state(latest_terminal_run),
+        "dag_run_id": _extract_dag_run_id(latest_terminal_run),
+        "has_runs": True,
     }
 
 
 def _build_stats(
     active_dags: set[str],
-    latest_run_by_dag: dict[str, DagRunSummary],
+    latest_run_by_dag: dict[str, DagRunEvaluation],
     failed_fetches: int,
 ) -> FleetStats:
-    evaluated_dags = len(latest_run_by_dag)
+    evaluated_dags = sum(
+        1 for latest_run in latest_run_by_dag.values() if latest_run["latest_terminal_state"]
+    )
     failed_dags: list[FailedDagEntry] = [
         {
             "dag_id": dag_id,
@@ -173,11 +196,13 @@ def _build_stats(
             "dag_run_id": latest_run["dag_run_id"],
         }
         for dag_id, latest_run in sorted(latest_run_by_dag.items())
-        if latest_run["state"] == "failed"
+        if latest_run["latest_terminal_state"] == "failed"
     ]
     failed_runs = len(failed_dags)
     non_terminal_dags = sum(
-        1 for latest_run in latest_run_by_dag.values() if latest_run["state"] not in TERMINAL_STATES
+        1
+        for latest_run in latest_run_by_dag.values()
+        if latest_run["has_runs"] and latest_run["latest_state"] not in TERMINAL_STATES
     )
     failure_ratio = failed_runs / evaluated_dags if evaluated_dags else 0.0
     insufficient_volume = evaluated_dags < MIN_EVALUATED_DAGS
@@ -187,7 +212,7 @@ def _build_stats(
         active_dags_total=len(active_dags),
         evaluated_dags=evaluated_dags,
         failed_fetches=failed_fetches,
-        dags_without_runs=max(0, len(active_dags) - evaluated_dags),
+        dags_without_runs=sum(1 for latest_run in latest_run_by_dag.values() if not latest_run["has_runs"]),
         non_terminal_dags=non_terminal_dags,
         failed_dags=failed_dags,
         failed_runs=failed_runs,

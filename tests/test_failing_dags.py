@@ -87,8 +87,10 @@ class EvaluateFleetHealthTest(unittest.TestCase):
         active_dags = {f"dag-{index:02d}" for index in range(1, 22)}
         latest_runs = {
             dag_id: {
-                "state": "failed" if dag_id <= "dag-11" else "success",
+                "latest_state": "failed" if dag_id <= "dag-11" else "success",
+                "latest_terminal_state": "failed" if dag_id <= "dag-11" else "success",
                 "dag_run_id": f"run-{dag_id}",
+                "has_runs": True,
             }
             for dag_id in active_dags
         }
@@ -121,6 +123,94 @@ class EvaluateFleetHealthTest(unittest.TestCase):
         self.assertEqual(payload["failed_dags"][0]["dag_run_id"], "run-dag-01")
         self.assertEqual(payload["failed_dags"][-1]["dag_id"], "dag-11")
         self.assertEqual(payload["failed_dags"][-1]["dag_run_id"], "run-dag-11")
+
+    def test_uses_latest_terminal_run_when_newest_run_is_still_running(self):
+        active_dags = {"one_church_planning_center_people_dag", "healthy_dag"}
+        latest_runs = {
+            "one_church_planning_center_people_dag": {
+                "latest_state": "running",
+                "latest_terminal_state": "failed",
+                "dag_run_id": "scheduled__2026-04-17T14:47:00+00:00",
+                "has_runs": True,
+            },
+            "healthy_dag": {
+                "latest_state": "success",
+                "latest_terminal_state": "success",
+                "dag_run_id": "scheduled__2026-04-17T15:17:00+00:00",
+                "has_runs": True,
+            },
+        }
+
+        with patch.object(airflow_fleet_health, "_require_env", side_effect=["x", "y"]):
+            with patch.object(airflow_fleet_health, "_build_session", return_value=object()):
+                with patch.object(
+                    airflow_fleet_health,
+                    "_fetch_active_dags",
+                    return_value=active_dags,
+                ):
+                    with patch.object(
+                        airflow_fleet_health,
+                        "_fetch_latest_runs_by_dag",
+                        return_value=(latest_runs, 0),
+                    ):
+                        with patch.object(
+                            airflow_fleet_health,
+                            "datetime",
+                            FixedDateTime,
+                        ):
+                            payload, status = airflow_fleet_health.evaluate_fleet_health()
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["failed_runs"], 1)
+        self.assertEqual(payload["non_terminal_dags"], 1)
+        self.assertEqual(
+            payload["failed_dags"],
+            [
+                {
+                    "dag_id": "one_church_planning_center_people_dag",
+                    "state": "failed",
+                    "dag_run_id": "scheduled__2026-04-17T14:47:00+00:00",
+                }
+            ],
+        )
+
+
+class FetchLastRunForDagTest(unittest.TestCase):
+    def test_uses_latest_terminal_run_when_latest_run_is_non_terminal(self):
+        payload = {
+            "dag_runs": [
+                {
+                    "dag_run_id": "scheduled__2026-04-17T15:17:00+00:00",
+                    "state": "running",
+                },
+                {
+                    "dag_run_id": "scheduled__2026-04-17T14:47:00+00:00",
+                    "state": "failed",
+                },
+            ]
+        }
+
+        with patch.object(airflow_fleet_health, "_build_session", return_value=object()):
+            with patch.object(
+                airflow_fleet_health,
+                "_request_json",
+                return_value=payload,
+            ):
+                latest_run = airflow_fleet_health._fetch_last_run_for_dag(
+                    "https://airflow.example.com",
+                    "token",
+                    "one_church_planning_center_people_dag",
+                )
+
+        self.assertEqual(
+            latest_run,
+            {
+                "latest_state": "running",
+                "latest_terminal_state": "failed",
+                "dag_run_id": "scheduled__2026-04-17T14:47:00+00:00",
+                "has_runs": True,
+            },
+        )
 
 
 class FetchActiveDagsPaginationTest(unittest.TestCase):
