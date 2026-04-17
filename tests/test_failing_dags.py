@@ -87,8 +87,10 @@ class EvaluateFleetHealthTest(unittest.TestCase):
         active_dags = {f"dag-{index:02d}" for index in range(1, 22)}
         latest_runs = {
             dag_id: {
-                "state": "failed" if dag_id <= "dag-11" else "success",
+                "latest_state": "failed" if dag_id <= "dag-11" else "success",
+                "latest_terminal_state": "failed" if dag_id <= "dag-11" else "success",
                 "dag_run_id": f"run-{dag_id}",
+                "has_runs": True,
             }
             for dag_id in active_dags
         }
@@ -121,6 +123,144 @@ class EvaluateFleetHealthTest(unittest.TestCase):
         self.assertEqual(payload["failed_dags"][0]["dag_run_id"], "run-dag-01")
         self.assertEqual(payload["failed_dags"][-1]["dag_id"], "dag-11")
         self.assertEqual(payload["failed_dags"][-1]["dag_run_id"], "run-dag-11")
+
+    def test_uses_latest_terminal_run_when_newest_run_is_still_running(self):
+        active_dags = {"one_church_planning_center_people_dag", "healthy_dag"}
+        latest_runs = {
+            "one_church_planning_center_people_dag": {
+                "latest_state": "running",
+                "latest_terminal_state": "failed",
+                "dag_run_id": "scheduled__2026-04-17T14:47:00+00:00",
+                "has_runs": True,
+            },
+            "healthy_dag": {
+                "latest_state": "success",
+                "latest_terminal_state": "success",
+                "dag_run_id": "scheduled__2026-04-17T15:17:00+00:00",
+                "has_runs": True,
+            },
+        }
+
+        with patch.object(airflow_fleet_health, "_require_env", side_effect=["x", "y"]):
+            with patch.object(airflow_fleet_health, "_build_session", return_value=object()):
+                with patch.object(
+                    airflow_fleet_health,
+                    "_fetch_active_dags",
+                    return_value=active_dags,
+                ):
+                    with patch.object(
+                        airflow_fleet_health,
+                        "_fetch_latest_runs_by_dag",
+                        return_value=(latest_runs, 0),
+                    ):
+                        with patch.object(
+                            airflow_fleet_health,
+                            "datetime",
+                            FixedDateTime,
+                        ):
+                            payload, status = airflow_fleet_health.evaluate_fleet_health()
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["failed_runs"], 1)
+        self.assertEqual(payload["non_terminal_dags"], 1)
+        self.assertEqual(
+            payload["failed_dags"],
+            [
+                {
+                    "dag_id": "one_church_planning_center_people_dag",
+                    "state": "failed",
+                    "dag_run_id": "scheduled__2026-04-17T14:47:00+00:00",
+                }
+            ],
+        )
+
+
+class FetchLastRunForDagTest(unittest.TestCase):
+    def test_uses_latest_terminal_run_when_latest_run_is_non_terminal(self):
+        payload = {
+            "dag_runs": [
+                {
+                    "dag_run_id": "scheduled__2026-04-17T15:17:00+00:00",
+                    "state": "running",
+                },
+                {
+                    "dag_run_id": "scheduled__2026-04-17T14:47:00+00:00",
+                    "state": "failed",
+                },
+            ]
+        }
+
+        with patch.object(airflow_fleet_health, "_build_session", return_value=object()):
+            with patch.object(
+                airflow_fleet_health,
+                "_request_json",
+                return_value=payload,
+            ):
+                latest_run = airflow_fleet_health._fetch_last_run_for_dag(
+                    "https://airflow.example.com",
+                    "token",
+                    "one_church_planning_center_people_dag",
+                )
+
+        self.assertEqual(
+            latest_run,
+            {
+                "latest_state": "running",
+                "latest_terminal_state": "failed",
+                "dag_run_id": "scheduled__2026-04-17T14:47:00+00:00",
+                "has_runs": True,
+            },
+        )
+
+    def test_paginates_until_terminal_run_is_found(self):
+        first_page = {
+            "dag_runs": [
+                {
+                    "dag_run_id": f"scheduled__2026-04-17T15:{index:02d}:00+00:00",
+                    "state": "running",
+                }
+                for index in range(10)
+            ],
+            "total_entries": 11,
+        }
+        second_page = {
+            "dag_runs": [
+                {
+                    "dag_run_id": "scheduled__2026-04-17T14:47:00+00:00",
+                    "state": "failed",
+                }
+            ],
+            "total_entries": 11,
+        }
+        seen_offsets: list[int] = []
+
+        def fake_request_json(session, url, params):
+            del session, url
+            seen_offsets.append(params["offset"])
+            return first_page if params["offset"] == 0 else second_page
+
+        with patch.object(airflow_fleet_health, "_build_session", return_value=object()):
+            with patch.object(
+                airflow_fleet_health,
+                "_request_json",
+                side_effect=fake_request_json,
+            ):
+                latest_run = airflow_fleet_health._fetch_last_run_for_dag(
+                    "https://airflow.example.com",
+                    "token",
+                    "one_church_planning_center_people_dag",
+                )
+
+        self.assertEqual(seen_offsets, [0, 10])
+        self.assertEqual(
+            latest_run,
+            {
+                "latest_state": "running",
+                "latest_terminal_state": "failed",
+                "dag_run_id": "scheduled__2026-04-17T14:47:00+00:00",
+                "has_runs": True,
+            },
+        )
 
 
 class FetchActiveDagsPaginationTest(unittest.TestCase):
@@ -488,9 +628,10 @@ class FailingDagsDashboardTest(unittest.TestCase):
             app_module.os.environ.pop("AIRFLOW_FLEET_MONITOR_TOKEN", None)
             app_module.os.environ.pop("REDIS_URL", None)
 
-            with patch.object(app_module, "should_use_redis_cache", return_value=False):
-                with patch.object(app_module, "evaluate_fleet_health") as evaluate_mock:
-                    response = self.client.get("/failing-dags")
+            with patch.object(app_module, "_is_development_mode", return_value=False):
+                with patch.object(app_module, "should_use_redis_cache", return_value=False):
+                    with patch.object(app_module, "evaluate_fleet_health") as evaluate_mock:
+                        response = self.client.get("/failing-dags")
 
         body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
@@ -507,14 +648,74 @@ class FailingDagsDashboardTest(unittest.TestCase):
                 "AIRFLOW_FLEET_MONITOR_TOKEN": "secret",
             },
         ):
-            with patch.object(app_module, "should_use_redis_cache", return_value=False):
-                with patch.object(app_module, "evaluate_fleet_health") as evaluate_mock:
-                    response = self.client.get("/failing-dags")
+            with patch.object(app_module, "_is_development_mode", return_value=False):
+                with patch.object(app_module, "should_use_redis_cache", return_value=False):
+                    with patch.object(app_module, "evaluate_fleet_health") as evaluate_mock:
+                        response = self.client.get("/failing-dags")
 
         body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
         self.assertIn("Failing DAG data is currently unavailable.", body)
         evaluate_mock.assert_not_called()
+
+    def test_dashboard_uses_live_eval_without_cache_in_debug_mode(self):
+        payload = {
+            "status": "degraded",
+            "checked_at": "2026-03-08T17:00:00+00:00",
+            "active_dags_total": 25,
+            "evaluated_dags": 21,
+            "failed_fetches": 1,
+            "dags_without_runs": 2,
+            "non_terminal_dags": 3,
+            "failed_runs": 4,
+            "failure_ratio": 4 / 21,
+            "threshold_ratio": 0.10,
+            "failed_dags": [
+                {
+                    "dag_id": "alpha_dag",
+                    "state": "failed",
+                    "dag_run_id": "run-alpha",
+                }
+            ],
+            "top_failed_dags": [
+                {
+                    "dag_id": "alpha_dag",
+                    "state": "failed",
+                    "dag_run_id": "run-alpha",
+                }
+            ],
+        }
+
+        with patch.dict(
+            app_module.os.environ,
+            {
+                "AIRFLOW_API_BASE_URL": "https://airflow.example.com",
+                "AIRFLOW_API_TOKEN": "token",
+            },
+            clear=False,
+        ):
+            app_module.os.environ.pop("AIRFLOW_FLEET_MONITOR_TOKEN", None)
+            app_module.os.environ.pop("REDIS_URL", None)
+
+            with patch.object(app_module, "_is_development_mode", return_value=True):
+                with patch.object(app_module, "should_use_redis_cache", return_value=False):
+                    with patch.object(
+                        app_module,
+                        "evaluate_fleet_health",
+                        return_value=(payload, 503),
+                    ) as evaluate_mock:
+                        response = self.client.get("/failing-dags")
+
+        body = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("alpha_dag", body)
+        self.assertIn("25", body)
+        self.assertIn("21", body)
+        self.assertIn("4", body)
+        self.assertIn("1", body)
+        self.assertIn("2", body)
+        self.assertIn("3", body)
+        evaluate_mock.assert_called_once_with()
 
     def test_dashboard_shows_setup_required_when_live_eval_is_disabled_and_creds_missing(self):
         with patch.dict(

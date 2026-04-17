@@ -165,6 +165,24 @@ DEFAULT_ASTRO_UI_BASE_URL = "https://cloud.astronomer.io/cljsvo8d800yz01giqt70a7
 AIRFLOW_REQUIRED_ENV_VARS = ("AIRFLOW_API_BASE_URL", "AIRFLOW_API_TOKEN")
 
 
+def _is_truthy_env_var(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_development_mode() -> bool:
+    if app.debug:
+        return True
+    if _is_truthy_env_var("FLASK_DEBUG"):
+        return True
+    if _is_truthy_env_var("DEBUG"):
+        return True
+    return os.getenv("FLASK_ENV", "").strip().lower() == "development"
+
+
+def _should_allow_live_airflow_eval_for_dashboard() -> bool:
+    return not should_use_redis_cache() and _is_development_mode()
+
+
 def _get_missing_airflow_env_vars() -> list[str]:
     return [
         env_name for env_name in AIRFLOW_REQUIRED_ENV_VARS if not os.getenv(env_name, "").strip()
@@ -325,7 +343,9 @@ def airflow_fleet_health():
 
 @app.route("/failing-dags")
 def failing_dags_dashboard():
-    payload, status = _get_airflow_fleet_health_payload(allow_live_eval=False)
+    payload, status = _get_airflow_fleet_health_payload(
+        allow_live_eval=_should_allow_live_airflow_eval_for_dashboard()
+    )
     failed_dags, is_partial_list = _get_failed_dag_entries(payload)
     failed_runs = payload.get("failed_runs")
     missing_airflow_env_vars = [
