@@ -578,9 +578,10 @@ class FailingDagsDashboardTest(unittest.TestCase):
             app_module.os.environ.pop("AIRFLOW_FLEET_MONITOR_TOKEN", None)
             app_module.os.environ.pop("REDIS_URL", None)
 
-            with patch.object(app_module, "should_use_redis_cache", return_value=False):
-                with patch.object(app_module, "evaluate_fleet_health") as evaluate_mock:
-                    response = self.client.get("/failing-dags")
+            with patch.object(app_module, "_is_development_mode", return_value=False):
+                with patch.object(app_module, "should_use_redis_cache", return_value=False):
+                    with patch.object(app_module, "evaluate_fleet_health") as evaluate_mock:
+                        response = self.client.get("/failing-dags")
 
         body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
@@ -597,14 +598,74 @@ class FailingDagsDashboardTest(unittest.TestCase):
                 "AIRFLOW_FLEET_MONITOR_TOKEN": "secret",
             },
         ):
-            with patch.object(app_module, "should_use_redis_cache", return_value=False):
-                with patch.object(app_module, "evaluate_fleet_health") as evaluate_mock:
-                    response = self.client.get("/failing-dags")
+            with patch.object(app_module, "_is_development_mode", return_value=False):
+                with patch.object(app_module, "should_use_redis_cache", return_value=False):
+                    with patch.object(app_module, "evaluate_fleet_health") as evaluate_mock:
+                        response = self.client.get("/failing-dags")
 
         body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
         self.assertIn("Failing DAG data is currently unavailable.", body)
         evaluate_mock.assert_not_called()
+
+    def test_dashboard_uses_live_eval_without_cache_in_debug_mode(self):
+        payload = {
+            "status": "degraded",
+            "checked_at": "2026-03-08T17:00:00+00:00",
+            "active_dags_total": 25,
+            "evaluated_dags": 21,
+            "failed_fetches": 1,
+            "dags_without_runs": 2,
+            "non_terminal_dags": 3,
+            "failed_runs": 4,
+            "failure_ratio": 4 / 21,
+            "threshold_ratio": 0.10,
+            "failed_dags": [
+                {
+                    "dag_id": "alpha_dag",
+                    "state": "failed",
+                    "dag_run_id": "run-alpha",
+                }
+            ],
+            "top_failed_dags": [
+                {
+                    "dag_id": "alpha_dag",
+                    "state": "failed",
+                    "dag_run_id": "run-alpha",
+                }
+            ],
+        }
+
+        with patch.dict(
+            app_module.os.environ,
+            {
+                "AIRFLOW_API_BASE_URL": "https://airflow.example.com",
+                "AIRFLOW_API_TOKEN": "token",
+            },
+            clear=False,
+        ):
+            app_module.os.environ.pop("AIRFLOW_FLEET_MONITOR_TOKEN", None)
+            app_module.os.environ.pop("REDIS_URL", None)
+
+            with patch.object(app_module, "_is_development_mode", return_value=True):
+                with patch.object(app_module, "should_use_redis_cache", return_value=False):
+                    with patch.object(
+                        app_module,
+                        "evaluate_fleet_health",
+                        return_value=(payload, 503),
+                    ) as evaluate_mock:
+                        response = self.client.get("/failing-dags")
+
+        body = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("alpha_dag", body)
+        self.assertIn("25", body)
+        self.assertIn("21", body)
+        self.assertIn("4", body)
+        self.assertIn("1", body)
+        self.assertIn("2", body)
+        self.assertIn("3", body)
+        evaluate_mock.assert_called_once_with()
 
     def test_dashboard_shows_setup_required_when_live_eval_is_disabled_and_creds_missing(self):
         with patch.dict(
