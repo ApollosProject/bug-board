@@ -21,17 +21,25 @@ MIN_EVALUATED_DAGS = 20
 TOP_FAILED_DAGS_LIMIT = 10
 
 
-class DagRunEvaluation(TypedDict):
-    latest_state: str
-    latest_terminal_state: str
-    dag_run_id: str
-    has_runs: bool
+DagRunEvaluation = TypedDict(
+    "DagRunEvaluation",
+    {
+        "latest_state": str,
+        "latest_terminal_state": str,
+        "dag_run_id": str,
+        "has_runs": bool,
+    },
+)
 
 
-class FailedDagEntry(TypedDict):
-    dag_id: str
-    state: str
-    dag_run_id: str
+FailedDagEntry = TypedDict(
+    "FailedDagEntry",
+    {
+        "dag_id": str,
+        "state": str,
+        "dag_run_id": str,
+    },
+)
 
 
 class AirflowFleetHealthError(RuntimeError):
@@ -212,7 +220,9 @@ def _build_stats(
         active_dags_total=len(active_dags),
         evaluated_dags=evaluated_dags,
         failed_fetches=failed_fetches,
-        dags_without_runs=sum(1 for latest_run in latest_run_by_dag.values() if not latest_run["has_runs"]),
+        dags_without_runs=sum(
+            1 for latest_run in latest_run_by_dag.values() if not latest_run["has_runs"]
+        ),
         non_terminal_dags=non_terminal_dags,
         failed_dags=failed_dags,
         failed_runs=failed_runs,
