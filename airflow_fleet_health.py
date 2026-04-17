@@ -154,39 +154,51 @@ def _fetch_latest_runs_by_dag(
 def _fetch_last_run_for_dag(base_url: str, api_token: str, dag_id: str) -> DagRunEvaluation:
     session = _build_session(api_token)
     dag_id_encoded = quote(dag_id, safe="")
-    payload = _request_json(
-        session,
-        f"{base_url}{DAGS_ENDPOINT}/{dag_id_encoded}/dagRuns",
-        params={"limit": DAG_RUN_PAGE_SIZE, "offset": 0, "order_by": "-logical_date"},
-    )
-    dag_runs = _extract_dag_runs(payload)
-    if not dag_runs:
-        return {
-            "latest_state": "",
-            "latest_terminal_state": "",
-            "dag_run_id": "",
-            "has_runs": False,
-        }
+    dag_runs_url = f"{base_url}{DAGS_ENDPOINT}/{dag_id_encoded}/dagRuns"
+    offset = 0
+    latest_state = ""
+    has_runs = False
 
-    latest_state = _extract_state(dag_runs[0])
-    latest_terminal_run = next(
-        (run for run in dag_runs if _extract_state(run) in TERMINAL_STATES),
-        None,
-    )
-    if latest_terminal_run is None:
-        return {
-            "latest_state": latest_state,
-            "latest_terminal_state": "",
-            "dag_run_id": "",
-            "has_runs": True,
-        }
+    while True:
+        payload = _request_json(
+            session,
+            dag_runs_url,
+            params={"limit": DAG_RUN_PAGE_SIZE, "offset": offset, "order_by": "-logical_date"},
+        )
+        dag_runs = _extract_dag_runs(payload)
+        if not dag_runs:
+            return {
+                "latest_state": latest_state,
+                "latest_terminal_state": "",
+                "dag_run_id": "",
+                "has_runs": has_runs,
+            }
 
-    return {
-        "latest_state": latest_state,
-        "latest_terminal_state": _extract_state(latest_terminal_run),
-        "dag_run_id": _extract_dag_run_id(latest_terminal_run),
-        "has_runs": True,
-    }
+        if not has_runs:
+            has_runs = True
+            latest_state = _extract_state(dag_runs[0])
+
+        latest_terminal_run = next(
+            (run for run in dag_runs if _extract_state(run) in TERMINAL_STATES),
+            None,
+        )
+        if latest_terminal_run is not None:
+            return {
+                "latest_state": latest_state,
+                "latest_terminal_state": _extract_state(latest_terminal_run),
+                "dag_run_id": _extract_dag_run_id(latest_terminal_run),
+                "has_runs": True,
+            }
+
+        batch_size = len(dag_runs)
+        if not _has_more(batch_size, payload, offset, DAG_RUN_PAGE_SIZE):
+            return {
+                "latest_state": latest_state,
+                "latest_terminal_state": "",
+                "dag_run_id": "",
+                "has_runs": True,
+            }
+        offset += batch_size
 
 
 def _build_stats(

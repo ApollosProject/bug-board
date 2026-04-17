@@ -212,6 +212,56 @@ class FetchLastRunForDagTest(unittest.TestCase):
             },
         )
 
+    def test_paginates_until_terminal_run_is_found(self):
+        first_page = {
+            "dag_runs": [
+                {
+                    "dag_run_id": f"scheduled__2026-04-17T15:{index:02d}:00+00:00",
+                    "state": "running",
+                }
+                for index in range(10)
+            ],
+            "total_entries": 11,
+        }
+        second_page = {
+            "dag_runs": [
+                {
+                    "dag_run_id": "scheduled__2026-04-17T14:47:00+00:00",
+                    "state": "failed",
+                }
+            ],
+            "total_entries": 11,
+        }
+        seen_offsets: list[int] = []
+
+        def fake_request_json(session, url, params):
+            del session, url
+            seen_offsets.append(params["offset"])
+            return first_page if params["offset"] == 0 else second_page
+
+        with patch.object(airflow_fleet_health, "_build_session", return_value=object()):
+            with patch.object(
+                airflow_fleet_health,
+                "_request_json",
+                side_effect=fake_request_json,
+            ):
+                latest_run = airflow_fleet_health._fetch_last_run_for_dag(
+                    "https://airflow.example.com",
+                    "token",
+                    "one_church_planning_center_people_dag",
+                )
+
+        self.assertEqual(seen_offsets, [0, 10])
+        self.assertEqual(
+            latest_run,
+            {
+                "latest_state": "running",
+                "latest_terminal_state": "failed",
+                "dag_run_id": "scheduled__2026-04-17T14:47:00+00:00",
+                "has_runs": True,
+            },
+        )
+
 
 class FetchActiveDagsPaginationTest(unittest.TestCase):
     def test_fetch_active_dags_uses_actual_batch_size_when_total_entries_exceeds_api_cap(self):
