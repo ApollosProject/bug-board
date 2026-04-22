@@ -32,6 +32,7 @@ from linear.issues import (
     get_created_issues,
     get_open_issues,
     get_open_issues_for_person,
+    get_resolution_time_by_priority,
     get_time_data,
 )
 from linear.projects import get_projects
@@ -918,6 +919,41 @@ def _build_leaderboard_context(days: int, _cache_epoch: int) -> dict:
     }
 
 
+@lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
+def _build_resolution_by_priority_context(days: int, _cache_epoch: int) -> dict:
+    with ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS) as executor:
+        completed_bugs_future = executor.submit(get_completed_issues_summary, 5, "Bug", days)
+        completed_new_features_future = executor.submit(
+            get_completed_issues_summary, 5, "New Feature", days
+        )
+        completed_technical_changes_future = executor.submit(
+            get_completed_issues_summary, 5, "Technical Change", days
+        )
+
+    completed_bugs_result = get_future_result_with_timeout(completed_bugs_future, [])
+    completed_new_features_result = get_future_result_with_timeout(
+        completed_new_features_future, []
+    )
+    completed_technical_changes_result = get_future_result_with_timeout(
+        completed_technical_changes_future, []
+    )
+
+    completed_non_project_issues = [
+        issue
+        for issue in completed_bugs_result
+        + completed_new_features_result
+        + completed_technical_changes_result
+        if not issue.get("project")
+    ]
+
+    resolution_stats = get_resolution_time_by_priority(completed_non_project_issues)
+
+    return {
+        "days": days,
+        "resolution_stats": resolution_stats,
+    }
+
+
 # use a query string parameter for days on the index route
 @app.route("/")
 def index():
@@ -931,6 +967,14 @@ def index_priority_stats_partial():
     cache_epoch = int(time.time() / INDEX_CACHE_TTL_SECONDS)
     context = _build_priority_stats_context(days, cache_epoch)
     return render_template("partials/index_priority_stats.html", **context)
+
+
+@app.route("/partials/index/resolution-by-priority")
+def index_resolution_by_priority_partial():
+    days = request.args.get("days", default=30, type=int)
+    cache_epoch = int(time.time() / INDEX_CACHE_TTL_SECONDS)
+    context = _build_resolution_by_priority_context(days, cache_epoch)
+    return render_template("partials/index_resolution_by_priority.html", **context)
 
 
 @app.route("/partials/index/open-items")

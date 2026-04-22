@@ -1,0 +1,22 @@
+<h2>Average Resolution Time by Priority</h2>
+<p>
+  <small
+    >Non-project items completed in the last {{ days }} day{{ '' if days == 1 else 's' }}.</small
+  >
+</p>
+{% if resolution_stats %}
+  <div class="grid">
+    {% for stat in resolution_stats %}
+    <div>
+      <article>
+        <header>{{ stat.label }}</header>
+        <h1>{{ stat.avg_days }}d</h1>
+        <small>{{ stat.count }} resolved &middot; p95 {{ stat.p95_days }}d</small>
+      </article>
+    </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <article>No resolved non-project items in this window.</article>
+{% endif %}
+<hr />
