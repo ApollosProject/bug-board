@@ -28,6 +28,7 @@
     </form>
     <div id="priority-stats" aria-busy="true"></div>
     #}
+    <section id="resolution-by-priority" aria-busy="true"></section>
     <section id="open-items" aria-busy="true"></section>
     <section id="leaderboard" aria-busy="true"></section>
 {% endblock %}
@@ -116,6 +117,10 @@
   //   `/partials/index/priority-stats?days=${days}`,
   //   renderPlatformChart
   // );
+  loadSection(
+    'resolution-by-priority',
+    `/partials/index/resolution-by-priority?days=${days}`
+  );
   loadSection('open-items', `/partials/index/open-items?days=${days}`);
   loadSection('leaderboard', `/partials/index/leaderboard?days=${days}`);
 </script>

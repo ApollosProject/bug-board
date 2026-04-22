@@ -426,7 +426,7 @@ def post_leaderboard():
 
     items = (
         get_completed_issues(5, "Bug", days)
-        + get_completed_issues(5, "New Feature", days)
+        + get_completed_issues(5, "Feature Request", days)
         + get_completed_issues(5, "Technical Change", days)
     )
     items = [item for item in items if not item.get("project")]
@@ -506,7 +506,7 @@ def post_stale():
     cr_prs = get_prs_with_changes_requested_by_reviewer()
     stale_issues = get_stale_issues_by_assignee(
         get_open_issues(5, "Bug")
-        + get_open_issues(5, "New Feature")
+        + get_open_issues(5, "Feature Request")
         + get_open_issues(5, "Technical Change"),
         7,
     )
@@ -729,7 +729,7 @@ def post_weekly_changelog():
 
     issues = (
         get_completed_issues(5, "Bug", 7)
-        + get_completed_issues(5, "New Feature", 7)
+        + get_completed_issues(5, "Feature Request", 7)
         + get_completed_issues(5, "Technical Change", 7)
     )
     if not issues:

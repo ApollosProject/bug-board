@@ -376,6 +376,54 @@ def by_platform(issues):
     )
 
 
+PRIORITY_LABELS = {
+    1: "Urgent",
+    2: "High",
+    3: "Medium",
+    4: "Low",
+    5: "Very Low",
+}
+
+
+def by_priority(issues):
+    priority_issues = {}
+    for issue in issues:
+        priority = issue.get("priority")
+        if priority is None:
+            continue
+        priority_issues.setdefault(priority, []).append(issue)
+    return dict(sorted(priority_issues.items()))
+
+
+def get_resolution_time_by_priority(issues):
+    """Return average/p95 resolution time (in days) per priority level.
+
+    Only issues with both createdAt and completedAt populated are included.
+    Priorities with no resolved issues in the window are omitted.
+    """
+    stats = []
+    for priority, priority_issues in by_priority(issues).items():
+        time_data = get_time_data(priority_issues)
+        resolved_count = sum(
+            1
+            for issue in priority_issues
+            if _parse_linear_datetime(issue.get("completedAt"))
+            and _parse_linear_datetime(issue.get("createdAt"))
+        )
+        if not resolved_count:
+            continue
+        stats.append(
+            {
+                "priority": priority,
+                "label": PRIORITY_LABELS.get(priority, f"P{priority}"),
+                "count": resolved_count,
+                "avg_days": time_data["lead"]["avg"],
+                "p95_days": time_data["lead"]["p95"],
+            }
+        )
+    return stats
+
+
 def _parse_linear_datetime(value):
     if not value:
         return None
