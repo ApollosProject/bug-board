@@ -523,7 +523,7 @@ def get_future_result_with_timeout(
 def _build_leaderboard_entries(
     days: int,
     completed_bugs: list,
-    completed_new_features: list,
+    completed_feature_requests: list,
     completed_technical_changes: list,
     merged_reviews: dict,
     merged_authored_prs: dict,
@@ -569,7 +569,7 @@ def _build_leaderboard_entries(
     count_breakdown_by_slug: dict[str, dict[str, int]] = {}
     count_breakdown_by_external: dict[str, dict[str, int]] = {}
 
-    completed_work = completed_bugs + completed_new_features + completed_technical_changes
+    completed_work = completed_bugs + completed_feature_requests + completed_technical_changes
 
     for issue in completed_work:
         assignee = issue.get("assignee")
@@ -782,8 +782,8 @@ def _build_priority_stats_context(days: int, _cache_epoch: int) -> dict:
         created_priority_future = executor.submit(get_created_issues, 2, "Bug", days)
         completed_priority_future = executor.submit(get_completed_issues_summary, 2, "Bug", days)
         completed_bugs_future = executor.submit(get_completed_issues_summary, 5, "Bug", days)
-        completed_new_features_future = executor.submit(
-            get_completed_issues_summary, 5, "New Feature", days
+        completed_feature_requests_future = executor.submit(
+            get_completed_issues_summary, 5, "Feature Request", days
         )
         completed_technical_changes_future = executor.submit(
             get_completed_issues_summary, 5, "Technical Change", days
@@ -796,11 +796,11 @@ def _build_priority_stats_context(days: int, _cache_epoch: int) -> dict:
     ]
     completed_bugs_result = get_future_result_with_timeout(completed_bugs_future, [])
     completed_bugs = [issue for issue in completed_bugs_result if not issue.get("project")]
-    completed_new_features_result = get_future_result_with_timeout(
-        completed_new_features_future, []
+    completed_feature_requests_result = get_future_result_with_timeout(
+        completed_feature_requests_future, []
     )
-    completed_new_features = [
-        issue for issue in completed_new_features_result if not issue.get("project")
+    completed_feature_requests = [
+        issue for issue in completed_feature_requests_result if not issue.get("project")
     ]
     completed_technical_changes_result = get_future_result_with_timeout(
         completed_technical_changes_future, []
@@ -811,13 +811,13 @@ def _build_priority_stats_context(days: int, _cache_epoch: int) -> dict:
 
     time_data = get_time_data(completed_priority_bugs)
     fixes_per_day = (
-        len(completed_bugs + completed_new_features + completed_technical_changes) / days
+        len(completed_bugs + completed_feature_requests + completed_technical_changes) / days
         if days
         else 0
     )
 
     total_completed_issues = len(
-        completed_bugs + completed_new_features + completed_technical_changes
+        completed_bugs + completed_feature_requests + completed_technical_changes
     )
     if total_completed_issues:
         priority_percentage = int(
@@ -847,16 +847,16 @@ def _build_open_items_context(days: int, _cache_epoch: int) -> dict:
     with ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS) as executor:
         open_priority_future = executor.submit(get_open_issues, 2, "Bug")
         open_bugs_future = executor.submit(get_open_issues, 5, "Bug")
-        open_new_features_future = executor.submit(get_open_issues, 5, "New Feature")
+        open_feature_requests_future = executor.submit(get_open_issues, 5, "Feature Request")
         open_technical_changes_future = executor.submit(get_open_issues, 5, "Technical Change")
 
     open_priority_bugs = get_future_result_with_timeout(open_priority_future, [])
     open_bugs_result = get_future_result_with_timeout(open_bugs_future, [])
-    open_new_features_result = get_future_result_with_timeout(open_new_features_future, [])
+    open_feature_requests_result = get_future_result_with_timeout(open_feature_requests_future, [])
     open_technical_changes_result = get_future_result_with_timeout(
         open_technical_changes_future, []
     )
-    open_work = open_bugs_result + open_new_features_result + open_technical_changes_result
+    open_work = open_bugs_result + open_feature_requests_result + open_technical_changes_result
 
     return {
         "days": days,
@@ -877,8 +877,8 @@ def _build_open_items_context(days: int, _cache_epoch: int) -> dict:
 def _build_leaderboard_context(days: int, _cache_epoch: int) -> dict:
     with ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS) as executor:
         completed_bugs_future = executor.submit(get_completed_issues_summary, 5, "Bug", days)
-        completed_new_features_future = executor.submit(
-            get_completed_issues_summary, 5, "New Feature", days
+        completed_feature_requests_future = executor.submit(
+            get_completed_issues_summary, 5, "Feature Request", days
         )
         completed_technical_changes_future = executor.submit(
             get_completed_issues_summary, 5, "Technical Change", days
@@ -888,11 +888,11 @@ def _build_leaderboard_context(days: int, _cache_epoch: int) -> dict:
 
     completed_bugs_result = get_future_result_with_timeout(completed_bugs_future, [])
     completed_bugs = [issue for issue in completed_bugs_result if not issue.get("project")]
-    completed_new_features_result = get_future_result_with_timeout(
-        completed_new_features_future, []
+    completed_feature_requests_result = get_future_result_with_timeout(
+        completed_feature_requests_future, []
     )
-    completed_new_features = [
-        issue for issue in completed_new_features_result if not issue.get("project")
+    completed_feature_requests = [
+        issue for issue in completed_feature_requests_result if not issue.get("project")
     ]
     completed_technical_changes_result = get_future_result_with_timeout(
         completed_technical_changes_future, []
@@ -907,7 +907,7 @@ def _build_leaderboard_context(days: int, _cache_epoch: int) -> dict:
     leaderboard_entries = _build_leaderboard_entries(
         days=days,
         completed_bugs=completed_bugs,
-        completed_new_features=completed_new_features,
+        completed_feature_requests=completed_feature_requests,
         completed_technical_changes=completed_technical_changes,
         merged_reviews=merged_reviews,
         merged_authored_prs=merged_authored_prs,
@@ -923,26 +923,18 @@ def _build_leaderboard_context(days: int, _cache_epoch: int) -> dict:
 def _build_resolution_by_priority_context(days: int, _cache_epoch: int) -> dict:
     with ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS) as executor:
         completed_bugs_future = executor.submit(get_completed_issues_summary, 5, "Bug", days)
-        completed_new_features_future = executor.submit(
-            get_completed_issues_summary, 5, "New Feature", days
-        )
-        completed_technical_changes_future = executor.submit(
-            get_completed_issues_summary, 5, "Technical Change", days
+        completed_feature_requests_future = executor.submit(
+            get_completed_issues_summary, 5, "Feature Request", days
         )
 
     completed_bugs_result = get_future_result_with_timeout(completed_bugs_future, [])
-    completed_new_features_result = get_future_result_with_timeout(
-        completed_new_features_future, []
-    )
-    completed_technical_changes_result = get_future_result_with_timeout(
-        completed_technical_changes_future, []
+    completed_feature_requests_result = get_future_result_with_timeout(
+        completed_feature_requests_future, []
     )
 
     completed_non_project_issues = [
         issue
-        for issue in completed_bugs_result
-        + completed_new_features_result
-        + completed_technical_changes_result
+        for issue in completed_bugs_result + completed_feature_requests_result
         if not issue.get("project")
     ]
 
