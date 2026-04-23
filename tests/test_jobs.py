@@ -196,50 +196,24 @@ class ConfigureScheduledJobsTest(unittest.TestCase):
                 "unit": "day",
                 "at_time": "14:00",
                 "timezone": "America/New_York",
-                "func": jobs_module.post_overdue_projects,
-            },
-            recorded_jobs,
-        )
-        self.assertIn(
-            {
-                "interval": None,
-                "unit": "friday",
-                "at_time": "12:00",
-                "timezone": None,
-                "func": jobs_module.post_upcoming_projects,
-            },
-            recorded_jobs,
-        )
-        self.assertIn(
-            {
-                "interval": None,
-                "unit": "monday",
-                "at_time": "12:00",
-                "timezone": None,
-                "func": jobs_module.post_friday_deadlines,
+                "func": jobs_module.post_project_updates,
             },
             recorded_jobs,
         )
 
 
 class RunDebugJobsTest(unittest.TestCase):
-    def test_runs_leaderboard_overdue_projects_upcoming_projects_and_friday_deadlines(self):
+    def test_runs_leaderboard_stale_and_project_updates(self):
         with patch.object(jobs_module, "should_use_redis_cache", return_value=False):
             with patch.object(jobs_module, "post_priority_bugs"):
                 with patch.object(jobs_module, "post_leaderboard") as leaderboard:
                     with patch.object(jobs_module, "post_stale") as stale:
-                        with patch.object(jobs_module, "post_overdue_projects") as overdue:
-                            with patch.object(jobs_module, "post_upcoming_projects") as upcoming:
-                                with patch.object(
-                                    jobs_module, "post_friday_deadlines"
-                                ) as friday_deadlines:
-                                    jobs_module.run_debug_jobs()
+                        with patch.object(jobs_module, "post_project_updates") as project_updates:
+                            jobs_module.run_debug_jobs()
 
         leaderboard.assert_called_once_with()
         stale.assert_called_once_with()
-        overdue.assert_called_once_with()
-        upcoming.assert_called_once_with()
-        friday_deadlines.assert_called_once_with()
+        project_updates.assert_called_once_with()
 
 
 class FixedDateTime(datetime):
@@ -590,10 +564,20 @@ class PostPriorityBugsInvalidWhitelistFallbackTest(unittest.TestCase):
         warning.assert_called_once()
 
 
-class PostOverdueProjectsTest(unittest.TestCase):
-    def test_posts_only_engineering_led_active_projects_with_past_target_dates(self):
+class PostProjectUpdatesTest(unittest.TestCase):
+    def _run(self, projects, config):
         posted = []
+        with patch.object(jobs_module, "load_config", return_value=config):
+            with patch.object(jobs_module, "get_projects", return_value=projects):
+                with patch.object(jobs_module, "post_to_slack", side_effect=posted.append):
+                    with patch.object(jobs_module, "datetime", FixedDateTime):
+                        jobs_module.post_project_updates()
+        return posted
+
+    def test_groups_overdue_ending_soon_and_starting_soon_in_order(self):
+        # FixedDateTime -> 2026-03-15 (Sunday)
         projects = [
+            # Overdue
             {
                 "name": "Late Alpha",
                 "url": "https://linear.app/project/late-alpha",
@@ -601,27 +585,87 @@ class PostOverdueProjectsTest(unittest.TestCase):
                 "status": {"name": "Active"},
                 "lead": {"displayName": "Alex"},
             },
+            # Ending soon (within 3 days)
             {
-                "name": "Late Beta",
-                "url": "https://linear.app/project/late-beta",
-                "targetDate": "2026-03-11",
-                "status": {"name": "Planned"},
-                "lead": {"displayName": "Pat"},
-            },
-            {
-                "name": "Late Gamma",
-                "url": "https://linear.app/project/late-gamma",
-                "targetDate": "2026-03-13",
-                "status": {"name": "Active"},
-                "lead": None,
-            },
-            {
-                "name": "Due Today",
-                "url": "https://linear.app/project/due-today",
-                "targetDate": "2026-03-15",
+                "name": "Ending Tue",
+                "url": "https://linear.app/project/ending-tue",
+                "targetDate": "2026-03-17",
                 "status": {"name": "Active"},
                 "lead": {"displayName": "Alex"},
             },
+            # Ending soon boundary (exactly 3 days out)
+            {
+                "name": "Ending Wed",
+                "url": "https://linear.app/project/ending-wed",
+                "targetDate": "2026-03-18",
+                "status": {"name": "Active"},
+                "lead": {"displayName": "Alex"},
+            },
+            # Outside the 3-day ending window
+            {
+                "name": "Ending Far",
+                "url": "https://linear.app/project/ending-far",
+                "targetDate": "2026-03-19",
+                "status": {"name": "Active"},
+                "lead": {"displayName": "Alex"},
+            },
+            # Starting soon (within 3 days)
+            {
+                "name": "Starting Tue",
+                "url": "https://linear.app/project/starting-tue",
+                "startDate": "2026-03-17",
+                "status": {"name": "Planned"},
+                "lead": {"displayName": "Alex"},
+            },
+            # Starting soon boundary (exactly 3 days out)
+            {
+                "name": "Starting Wed",
+                "url": "https://linear.app/project/starting-wed",
+                "startDate": "2026-03-18",
+                "status": {"name": "Planned"},
+                "lead": {"displayName": "Alex"},
+            },
+            # Outside the 3-day starting window
+            {
+                "name": "Starting Far",
+                "url": "https://linear.app/project/starting-far",
+                "startDate": "2026-03-19",
+                "status": {"name": "Planned"},
+                "lead": {"displayName": "Alex"},
+            },
+            # Canceled starting project should be skipped
+            {
+                "name": "Canceled Start",
+                "url": "https://linear.app/project/canceled-start",
+                "startDate": "2026-03-17",
+                "status": {"name": "Canceled"},
+                "lead": {"displayName": "Alex"},
+            },
+            # Completed starting project should be skipped
+            {
+                "name": "Completed Start",
+                "url": "https://linear.app/project/completed-start",
+                "startDate": "2026-03-17",
+                "status": {"name": "Completed"},
+                "lead": {"displayName": "Alex"},
+            },
+            # Released starting project should be skipped
+            {
+                "name": "Released Start",
+                "url": "https://linear.app/project/released-start",
+                "startDate": "2026-03-17",
+                "status": {"name": "Released"},
+                "lead": {"displayName": "Alex"},
+            },
+            # Non-engineering lead should be skipped
+            {
+                "name": "Product Overdue",
+                "url": "https://linear.app/project/product-overdue",
+                "targetDate": "2026-03-10",
+                "status": {"name": "Active"},
+                "lead": {"displayName": "Pat"},
+            },
+            # Inactive project - overdue target should be skipped
             {
                 "name": "Completed Late",
                 "url": "https://linear.app/project/completed-late",
@@ -629,13 +673,6 @@ class PostOverdueProjectsTest(unittest.TestCase):
                 "status": {"name": "Completed"},
                 "lead": {"displayName": "Alex"},
             },
-            {
-                "name": "Released Late",
-                "url": "https://linear.app/project/released-late",
-                "targetDate": "2026-03-09",
-                "status": {"name": "Released"},
-                "lead": {"displayName": "Alex"},
-            },
         ]
         config = {
             "people": {
@@ -652,53 +689,48 @@ class PostOverdueProjectsTest(unittest.TestCase):
             }
         }
 
-        with patch.object(jobs_module, "load_config", return_value=config):
-            with patch.object(jobs_module, "get_projects", return_value=projects):
-                with patch.object(jobs_module, "post_to_slack", side_effect=posted.append):
-                    with patch.object(jobs_module, "datetime", FixedDateTime):
-                        jobs_module.post_overdue_projects()
+        posted = self._run(projects, config)
 
         self.assertEqual(len(posted), 1)
-        self.assertIn("*Overdue Projects*", posted[0])
-        self.assertIn("Late Alpha", posted[0])
-        self.assertIn("12h overdue - Lead: <@U1>", posted[0])
-        self.assertNotIn("Late Beta", posted[0])
-        self.assertNotIn("Late Gamma", posted[0])
-        self.assertNotIn("Due Today", posted[0])
-        self.assertNotIn("Completed Late", posted[0])
-        self.assertNotIn("Released Late", posted[0])
+        message = posted[0]
 
+        # All three section headers present
+        self.assertIn("*Overdue Projects*", message)
+        self.assertIn("*Projects Ending Soon*", message)
+        self.assertIn("*Projects Starting Soon*", message)
 
-class PostUpcomingProjectsTest(unittest.TestCase):
-    def test_posts_only_monday_projects_with_engineering_leads(self):
-        posted = []
+        # Sections are ordered Overdue -> Ending Soon -> Starting Soon
+        overdue_idx = message.index("*Overdue Projects*")
+        ending_idx = message.index("*Projects Ending Soon*")
+        starting_idx = message.index("*Projects Starting Soon*")
+        self.assertLess(overdue_idx, ending_idx)
+        self.assertLess(ending_idx, starting_idx)
+
+        # Correct projects present
+        self.assertIn("Late Alpha", message)
+        self.assertIn("Ending Tue", message)
+        self.assertIn("Ending Wed", message)
+        self.assertIn("Starting Tue", message)
+        self.assertIn("Starting Wed", message)
+        self.assertIn("Lead: <@U1>", message)
+
+        # Correct projects filtered out
+        self.assertNotIn("Ending Far", message)
+        self.assertNotIn("Starting Far", message)
+        self.assertNotIn("Canceled Start", message)
+        self.assertNotIn("Completed Start", message)
+        self.assertNotIn("Released Start", message)
+        self.assertNotIn("Product Overdue", message)
+        self.assertNotIn("Completed Late", message)
+
+    def test_skips_post_when_no_projects_match(self):
         projects = [
             {
-                "name": "Monday Engineering",
-                "url": "https://linear.app/project/monday-engineering",
-                "startDate": "2026-03-16",
+                "name": "Far Future",
+                "url": "https://linear.app/project/far-future",
+                "startDate": "2026-04-30",
+                "targetDate": "2026-05-30",
                 "status": {"name": "Planned"},
-                "lead": {"displayName": "Alex"},
-            },
-            {
-                "name": "Monday Product",
-                "url": "https://linear.app/project/monday-product",
-                "startDate": "2026-03-16",
-                "status": {"name": "Planned"},
-                "lead": {"displayName": "Pat"},
-            },
-            {
-                "name": "Monday No Lead",
-                "url": "https://linear.app/project/monday-no-lead",
-                "startDate": "2026-03-16",
-                "status": {"name": "Planned"},
-                "lead": None,
-            },
-            {
-                "name": "Canceled Monday",
-                "url": "https://linear.app/project/canceled-monday",
-                "startDate": "2026-03-16",
-                "status": {"name": "Canceled"},
                 "lead": {"displayName": "Alex"},
             },
         ]
@@ -709,27 +741,11 @@ class PostUpcomingProjectsTest(unittest.TestCase):
                     "slack_id": "U1",
                     "team": "engineering",
                 },
-                "pat": {
-                    "linear_username": "Pat",
-                    "slack_id": "U2",
-                    "team": "product",
-                },
             }
         }
 
-        with patch.object(jobs_module, "load_config", return_value=config):
-            with patch.object(jobs_module, "get_projects", return_value=projects):
-                with patch.object(jobs_module, "post_to_slack", side_effect=posted.append):
-                    with patch.object(jobs_module, "datetime", FixedDateTime):
-                        jobs_module.post_upcoming_projects()
-
-        self.assertEqual(len(posted), 1)
-        self.assertIn("*Projects Starting Monday*", posted[0])
-        self.assertIn("Monday Engineering", posted[0])
-        self.assertIn("Lead: <@U1>", posted[0])
-        self.assertNotIn("Monday Product", posted[0])
-        self.assertNotIn("Monday No Lead", posted[0])
-        self.assertNotIn("Canceled Monday", posted[0])
+        posted = self._run(projects, config)
+        self.assertEqual(posted, [])
 
 
 if __name__ == "__main__":

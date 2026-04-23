@@ -610,117 +610,65 @@ def post_inactive_engineers():
 
 
 @with_retries
-def post_upcoming_projects():
-    """Notify leads about projects starting on Monday."""
-    projects = get_projects()
-    people_config = load_config().get("people", {})
-    upcoming = []
-    today = datetime.now(timezone.utc).date()
-    canceled_statuses = {"canceled", "cancelled"}
-    for project in projects:
-        if not _is_engineering_lead_project(project, people_config):
-            continue
-        start = project.get("startDate")
-        if not start:
-            continue
-        status_name = (project.get("status") or {}).get("name")
-        if status_name and status_name.lower() in canceled_statuses:
-            continue
-        try:
-            start_dt = datetime.fromisoformat(start).date()
-        except ValueError:
-            continue
-        days_until = (start_dt - today).days
-        if start_dt.weekday() == 0 and 0 <= days_until <= 5:
-            lead = (project.get("lead") or {}).get("displayName")
-            if not lead:
-                continue
-            lead_md = get_slack_markdown_by_linear_username(lead)
-            upcoming.append(f"- <{project['url']}|{project['name']}> - Lead: {lead_md}")
-    if upcoming:
-        markdown = "*Projects Starting Monday*\n\n" + "\n".join(upcoming)
-        post_to_slack(markdown)
-
-
-@with_retries
-def post_overdue_projects():
-    """Notify Slack about active projects whose target date has passed."""
+def post_project_updates():
+    """Daily digest of overdue, ending-soon, and starting-soon projects."""
     projects = get_projects()
     people_config = load_config().get("people", {})
     now = datetime.now(timezone.utc)
+    today = now.date()
+
     overdue = []
+    ending_soon = []
+    starting_soon = []
 
     for project in projects:
-        if _is_inactive_project(project):
-            continue
         if not _is_engineering_lead_project(project, people_config):
             continue
 
-        target_dt = parse_iso_date(project.get("targetDate"))
-        _days_left, target_status_text = format_project_target_status(
-            target_dt,
-            now=now,
-        )
-        if not target_dt or not target_status_text or not target_status_text.endswith("overdue"):
-            continue
-
+        name = project.get("name") or "Untitled Project"
+        url = project.get("url")
         lead = (project.get("lead") or {}).get("displayName")
         lead_md = get_slack_markdown_by_linear_username(lead) if lead else "No Lead"
-        overdue.append(
-            {
-                "name": project.get("name") or "Untitled Project",
-                "target_dt": target_dt,
-                "line": (
-                    f"- <{project['url']}|{project['name']}> - "
-                    f"{target_status_text} - Lead: {lead_md}"
-                ),
-            }
+        inactive = _is_inactive_project(project)
+
+        target_dt = parse_iso_date(project.get("targetDate"))
+        days_left, target_status_text = format_project_target_status(target_dt, now=now)
+        if not inactive and target_dt and target_status_text:
+            line = f"- <{url}|{name}> - {target_status_text} - Lead: {lead_md}"
+            if target_status_text.endswith("overdue"):
+                overdue.append({"name": name, "target_dt": target_dt, "line": line})
+            elif days_left is not None and 0 <= days_left <= 3:
+                ending_soon.append({"name": name, "target_dt": target_dt, "line": line})
+
+        if inactive:
+            continue
+        start_dt = parse_iso_date(project.get("startDate"))
+        if start_dt:
+            days_until_start = (start_dt - today).days
+            if 0 <= days_until_start <= 3:
+                starting_soon.append(
+                    {
+                        "name": name,
+                        "start_dt": start_dt,
+                        "line": f"- <{url}|{name}> - Lead: {lead_md}",
+                    }
+                )
+
+    sections = []
+    if overdue:
+        ordered = sorted(overdue, key=lambda item: (item["target_dt"], item["name"].lower()))
+        sections.append("*Overdue Projects*\n\n" + "\n".join(item["line"] for item in ordered))
+    if ending_soon:
+        ordered = sorted(ending_soon, key=lambda item: (item["target_dt"], item["name"].lower()))
+        sections.append("*Projects Ending Soon*\n\n" + "\n".join(item["line"] for item in ordered))
+    if starting_soon:
+        ordered = sorted(starting_soon, key=lambda item: (item["start_dt"], item["name"].lower()))
+        sections.append(
+            "*Projects Starting Soon*\n\n" + "\n".join(item["line"] for item in ordered)
         )
 
-    if overdue:
-        ordered_lines = [
-            item["line"]
-            for item in sorted(
-                overdue,
-                key=lambda item: (item["target_dt"], item["name"].lower()),
-            )
-        ]
-        markdown = "*Overdue Projects*\n\n" + "\n".join(ordered_lines)
-        post_to_slack(markdown)
-
-
-@with_retries
-def post_friday_deadlines():
-    """Notify leads about projects ending on Friday."""
-    projects = get_projects()
-    people_config = load_config().get("people", {})
-    projects = [
-        project for project in projects if _is_engineering_lead_project(project, people_config)
-    ]
-
-    upcoming = []
-    today = datetime.now(timezone.utc).date()
-    inactive_statuses = {"Completed", "Incomplete", "Canceled"}
-
-    for project in projects:
-        target = project.get("targetDate")
-        if not target:
-            continue
-        status_name = (project.get("status") or {}).get("name")
-        if status_name in inactive_statuses:
-            continue
-        try:
-            target_dt = datetime.fromisoformat(target).date()
-        except ValueError:
-            continue
-        days_until = (target_dt - today).days
-        if target_dt.weekday() == 4 and 0 <= days_until <= 5:
-            lead = (project.get("lead") or {}).get("displayName")
-            lead_md = get_slack_markdown_by_linear_username(lead) if lead else "No Lead"
-            upcoming.append(f"- <{project['url']}|{project['name']}> - Lead: {lead_md}")
-    if upcoming:
-        markdown = "*Projects Due Friday*\n\n" + "\n".join(upcoming)
-        post_to_slack(markdown)
+    if sections:
+        post_to_slack("\n\n".join(sections))
 
 
 @with_retries
@@ -844,9 +792,7 @@ def run_debug_jobs() -> None:
     post_leaderboard()
     # post_weekly_changelog()
     post_stale()
-    post_overdue_projects()
-    post_upcoming_projects()
-    post_friday_deadlines()
+    post_project_updates()
 
 
 def configure_scheduled_jobs() -> None:
@@ -869,9 +815,7 @@ def configure_scheduled_jobs() -> None:
     schedule.every().friday.at("20:00").do(post_leaderboard)
     # schedule.every().thursday.at("19:00").do(post_weekly_changelog)
     schedule.every().day.at("10:00", "America/New_York").do(post_stale)
-    schedule.every().day.at("14:00", "America/New_York").do(post_overdue_projects)
-    schedule.every().friday.at("12:00").do(post_upcoming_projects)
-    schedule.every().monday.at("12:00").do(post_friday_deadlines)
+    schedule.every().day.at("14:00", "America/New_York").do(post_project_updates)
 
 
 def main() -> None:
