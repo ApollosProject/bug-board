@@ -101,6 +101,70 @@ class GraphQLClientRequestTests(unittest.TestCase):
         self.assertEqual(waiting["darrylyip"], [pr])
         self.assertEqual(waiting["vitlelis"], [pr])
 
+    def test_waiting_for_review_allows_unknown_mergeability(self):
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                base = datetime(2026, 3, 25, 14, 0, 0)
+                if tz is None:
+                    return base
+                return base.replace(tzinfo=tz)
+
+        pr = {
+            "number": 6050,
+            "additions": 1,
+            "mergeable": "UNKNOWN",
+            "reviewRequests": {"nodes": [{"requestedReviewer": {"login": "darrylyip"}}]},
+            "reviews": {"nodes": []},
+            "timelineItems": {
+                "nodes": [
+                    {
+                        "createdAt": "2026-03-24T13:51:12Z",
+                        "requestedReviewer": {"login": "darrylyip"},
+                    },
+                ]
+            },
+            "statusCheckRollup": {"state": "SUCCESS"},
+        }
+
+        with patch.object(github, "_get_all_prs", return_value=[pr]):
+            with patch.object(github, "datetime", FixedDateTime):
+                waiting = github.get_prs_waiting_for_review_by_reviewer()
+
+        self.assertEqual(waiting["darrylyip"], [pr])
+
+    def test_waiting_for_review_skips_known_merge_conflicts(self):
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                base = datetime(2026, 3, 25, 14, 0, 0)
+                if tz is None:
+                    return base
+                return base.replace(tzinfo=tz)
+
+        pr = {
+            "number": 6050,
+            "additions": 1,
+            "mergeable": "CONFLICTING",
+            "reviewRequests": {"nodes": [{"requestedReviewer": {"login": "darrylyip"}}]},
+            "reviews": {"nodes": []},
+            "timelineItems": {
+                "nodes": [
+                    {
+                        "createdAt": "2026-03-24T13:51:12Z",
+                        "requestedReviewer": {"login": "darrylyip"},
+                    },
+                ]
+            },
+            "statusCheckRollup": {"state": "SUCCESS"},
+        }
+
+        with patch.object(github, "_get_all_prs", return_value=[pr]):
+            with patch.object(github, "datetime", FixedDateTime):
+                waiting = github.get_prs_waiting_for_review_by_reviewer()
+
+        self.assertEqual(waiting, {})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -868,7 +868,7 @@ def configure_scheduled_jobs() -> None:
     schedule.every().day.at("12:00").do(post_priority_bugs)
     schedule.every().friday.at("20:00").do(post_leaderboard)
     # schedule.every().thursday.at("19:00").do(post_weekly_changelog)
-    schedule.every().day.at("14:00").do(post_stale)
+    schedule.every().day.at("10:00", "America/New_York").do(post_stale)
     schedule.every().day.at("14:00", "America/New_York").do(post_overdue_projects)
     schedule.every().friday.at("12:00").do(post_upcoming_projects)
     schedule.every().monday.at("12:00").do(post_friday_deadlines)
