@@ -208,9 +208,7 @@ class RunDebugJobsTest(unittest.TestCase):
             with patch.object(jobs_module, "post_priority_bugs"):
                 with patch.object(jobs_module, "post_leaderboard") as leaderboard:
                     with patch.object(jobs_module, "post_stale") as stale:
-                        with patch.object(
-                            jobs_module, "post_project_updates"
-                        ) as project_updates:
+                        with patch.object(jobs_module, "post_project_updates") as project_updates:
                             jobs_module.run_debug_jobs()
 
         leaderboard.assert_called_once_with()

@@ -657,14 +657,10 @@ def post_project_updates():
     sections = []
     if overdue:
         ordered = sorted(overdue, key=lambda item: (item["target_dt"], item["name"].lower()))
-        sections.append(
-            "*Overdue Projects*\n\n" + "\n".join(item["line"] for item in ordered)
-        )
+        sections.append("*Overdue Projects*\n\n" + "\n".join(item["line"] for item in ordered))
     if ending_soon:
         ordered = sorted(ending_soon, key=lambda item: (item["target_dt"], item["name"].lower()))
-        sections.append(
-            "*Projects Ending Soon*\n\n" + "\n".join(item["line"] for item in ordered)
-        )
+        sections.append("*Projects Ending Soon*\n\n" + "\n".join(item["line"] for item in ordered))
     if starting_soon:
         ordered = sorted(starting_soon, key=lambda item: (item["start_dt"], item["name"].lower()))
         sections.append(
