@@ -190,6 +190,12 @@ def has_failing_required_checks(pr):
     return rollup.get("state") != "SUCCESS"
 
 
+def has_known_merge_conflicts(pr):
+    """Return True only when GitHub has confirmed the PR cannot merge cleanly."""
+
+    return pr.get("mergeable") == "CONFLICTING"
+
+
 def _parse_github_timestamp(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -322,8 +328,7 @@ def get_prs_waiting_for_review_by_reviewer():
         additions = pr.get("additions")
         if additions is None or additions >= 200:
             continue
-        # only consider pull requests that are mergeable
-        if pr.get("mergeable") != "MERGEABLE":
+        if has_known_merge_conflicts(pr):
             continue
         if not pr["reviewRequests"]["nodes"]:
             continue

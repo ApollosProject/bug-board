@@ -184,8 +184,8 @@ class ConfigureScheduledJobsTest(unittest.TestCase):
             {
                 "interval": None,
                 "unit": "day",
-                "at_time": "14:00",
-                "timezone": None,
+                "at_time": "10:00",
+                "timezone": "America/New_York",
                 "func": jobs_module.post_stale,
             },
             recorded_jobs,
