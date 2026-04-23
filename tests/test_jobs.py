@@ -643,6 +643,22 @@ class PostProjectUpdatesTest(unittest.TestCase):
                 "status": {"name": "Canceled"},
                 "lead": {"displayName": "Alex"},
             },
+            # Completed starting project should be skipped
+            {
+                "name": "Completed Start",
+                "url": "https://linear.app/project/completed-start",
+                "startDate": "2026-03-17",
+                "status": {"name": "Completed"},
+                "lead": {"displayName": "Alex"},
+            },
+            # Released starting project should be skipped
+            {
+                "name": "Released Start",
+                "url": "https://linear.app/project/released-start",
+                "startDate": "2026-03-17",
+                "status": {"name": "Released"},
+                "lead": {"displayName": "Alex"},
+            },
             # Non-engineering lead should be skipped
             {
                 "name": "Product Overdue",
@@ -704,6 +720,8 @@ class PostProjectUpdatesTest(unittest.TestCase):
         self.assertNotIn("Ending Far", message)
         self.assertNotIn("Starting Far", message)
         self.assertNotIn("Canceled Start", message)
+        self.assertNotIn("Completed Start", message)
+        self.assertNotIn("Released Start", message)
         self.assertNotIn("Product Overdue", message)
         self.assertNotIn("Completed Late", message)
 

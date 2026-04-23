@@ -616,7 +616,6 @@ def post_project_updates():
     people_config = load_config().get("people", {})
     now = datetime.now(timezone.utc)
     today = now.date()
-    canceled_statuses = {"canceled", "cancelled"}
 
     overdue = []
     ending_soon = []
@@ -641,8 +640,7 @@ def post_project_updates():
             elif days_left is not None and 0 <= days_left <= 3:
                 ending_soon.append({"name": name, "target_dt": target_dt, "line": line})
 
-        status_name = ((project.get("status") or {}).get("name") or "").strip().lower()
-        if status_name in canceled_statuses:
+        if inactive:
             continue
         start_dt = parse_iso_date(project.get("startDate"))
         if start_dt:
