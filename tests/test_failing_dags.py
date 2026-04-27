@@ -824,11 +824,7 @@ class FailingDagsDashboardTest(unittest.TestCase):
 
         with patch.dict(
             jobs_module.os.environ,
-            {
-                "AIRFLOW_FLEET_HEARTBEAT_URL": (
-                    "https://uptime.betterstack.com/heartbeat/token"
-                )
-            },
+            {"AIRFLOW_FLEET_HEARTBEAT_URL": ("https://uptime.betterstack.com/heartbeat/token")},
             clear=False,
         ):
             with patch.object(jobs_module.requests, "get") as get_mock:
@@ -845,11 +841,7 @@ class FailingDagsDashboardTest(unittest.TestCase):
 
         with patch.dict(
             jobs_module.os.environ,
-            {
-                "AIRFLOW_FLEET_HEARTBEAT_URL": (
-                    "https://uptime.betterstack.com/heartbeat/token/"
-                )
-            },
+            {"AIRFLOW_FLEET_HEARTBEAT_URL": ("https://uptime.betterstack.com/heartbeat/token/")},
             clear=False,
         ):
             with patch.object(jobs_module.requests, "get") as get_mock:
