@@ -41,6 +41,7 @@ python -m unittest discover -s tests -p 'test_*.py'
 - `OPENAI_API_KEY` – API key used to generate weekly changelogs
 - `AIRFLOW_API_BASE_URL` – Base URL for Airflow REST API (for example: `https://airflow.example.com`)
 - `AIRFLOW_API_TOKEN` – Bearer token for Airflow API
+- `AIRFLOW_FLEET_HEARTBEAT_URL` – Optional Better Stack heartbeat URL for worker-reported Airflow fleet health
 - `AIRFLOW_FLEET_MONITOR_TOKEN` – Optional token required by `/airflow-fleet-health`
 - `REDIS_URL` – Optional Redis connection string for cached `/airflow-fleet-health` responses
 - `REDIS_SSL_CERT_REQS` – Optional TLS cert verification mode for `rediss://` (`none`, `optional`, `required`; default for `rediss://` is `none` unless `REDIS_URL` already sets `ssl_cert_reqs`)
@@ -69,14 +70,21 @@ python jobs.py
 
 The `Procfile` defines both commands for platforms such as Heroku.
 
-## Airflow fleet outage monitor
+## Airflow fleet outage heartbeat
 
-This app exposes `GET /airflow-fleet-health` for Better Stack to detect broad DAG failures
-without relying on Airflow DAG execution itself.
+The worker can report Airflow fleet health to Better Stack using a heartbeat, which avoids
+Better Stack polling this app as an uptime monitor. Configure a Better Stack heartbeat and set
+`AIRFLOW_FLEET_HEARTBEAT_URL` to its secret URL.
 
-The endpoint:
+On each worker refresh, the app:
 
-- Calls the Airflow REST API and inspects each active DAG's latest run state
+- Evaluates the Airflow REST API and inspects each active DAG's latest run state
+- Refreshes the Redis-backed `/airflow-fleet-health` cache when Redis is configured
+- Sends the base heartbeat URL when fleet health is healthy
+- Sends the heartbeat URL with `/fail` appended when fleet health is unhealthy or unknown
+
+The health calculation:
+
 - Computes failed/evaluated ratio across active DAGs (not time-window based)
 - Returns `503` when failure ratio is `>= 0.10` (with at least 20 DAGs evaluated), otherwise `200`
 - Includes both `top_failed_dags` and the full `failed_dags` list in the JSON payload
@@ -97,10 +105,11 @@ This checker is intentionally not highly configurable. It uses fixed settings:
 - failure threshold ratio: `0.10`
 - minimum evaluated DAGs: `20`
 
-When Redis caching is enabled, run the worker process (`python jobs.py`) so it refreshes
-the cached fleet health value on the configured interval.
+When Redis caching or the Better Stack heartbeat is enabled, run the worker process
+(`python jobs.py`) so it refreshes fleet health on the configured interval.
 
-If `AIRFLOW_FLEET_MONITOR_TOKEN` is set, Better Stack must send either of these on
+`GET /airflow-fleet-health` remains available for the dashboard/cache JSON payload. If
+`AIRFLOW_FLEET_MONITOR_TOKEN` is set, callers must send either of these on
 `GET /airflow-fleet-health`:
 
 - `Authorization: Bearer <token>` header, or

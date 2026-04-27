@@ -3,6 +3,7 @@ import os
 import re
 import time
 from datetime import datetime, timezone
+from urllib.parse import urlsplit, urlunsplit
 
 import requests
 import schedule
@@ -43,6 +44,7 @@ RETRY_SLEEP_SECONDS = 5
 MAX_DIFF_CHARS = 12000
 MAX_DIFF_FILES = 20
 FLEET_HEALTH_REFRESH_DEFAULT_SECONDS = 60
+AIRFLOW_FLEET_HEARTBEAT_TIMEOUT_SECONDS = 10
 INACTIVE_PROJECT_STATUS_NAMES = {
     "completed",
     "incomplete",
@@ -106,12 +108,39 @@ def post_to_slack(markdown: str):
 
 def refresh_airflow_fleet_health_cache_job():
     payload, status = refresh_fleet_health_cache()
+    report_airflow_fleet_health_heartbeat(payload, status)
     logging.info(
         "Refreshed airflow fleet health cache (status=%s, http_status=%s, evaluated_dags=%s)",
         payload.get("status"),
         status,
         payload.get("evaluated_dags"),
     )
+
+
+def report_airflow_fleet_health_heartbeat(payload: dict, status: int) -> None:
+    heartbeat_url = os.getenv("AIRFLOW_FLEET_HEARTBEAT_URL", "").strip()
+    if not heartbeat_url:
+        return
+
+    is_healthy = status < 400 and payload.get("status") == "healthy"
+    url = heartbeat_url if is_healthy else _append_url_path(heartbeat_url, "fail")
+
+    try:
+        response = requests.get(url, timeout=AIRFLOW_FLEET_HEARTBEAT_TIMEOUT_SECONDS)
+        if response.status_code >= 400:
+            logging.error(
+                "Airflow fleet Better Stack heartbeat returned %s: %s",
+                response.status_code,
+                response.text,
+            )
+    except requests.RequestException:
+        logging.exception("Failed to report airflow fleet Better Stack heartbeat")
+
+
+def _append_url_path(url: str, segment: str) -> str:
+    parsed = urlsplit(url)
+    path = f"{parsed.path.rstrip('/')}/{segment}"
+    return urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, parsed.fragment))
 
 
 def post_to_manager_slack(markdown: str):
