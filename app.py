@@ -8,7 +8,7 @@ from functools import lru_cache
 from typing import Any, TypedDict, TypeVar
 from urllib.parse import quote
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, abort, jsonify, render_template, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from airflow_fleet_health import AirflowFleetHealthError, evaluate_fleet_health
