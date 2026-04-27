@@ -819,6 +819,40 @@ class FailingDagsDashboardTest(unittest.TestCase):
         self.assertEqual(response.get_json(), {"status": "unknown"})
         evaluate_mock.assert_not_called()
 
+    def test_airflow_fleet_heartbeat_reports_success_for_healthy_payload(self):
+        import jobs as jobs_module
+
+        with patch.dict(
+            jobs_module.os.environ,
+            {"AIRFLOW_FLEET_HEARTBEAT_URL": ("https://uptime.betterstack.com/heartbeat/token")},
+            clear=False,
+        ):
+            with patch.object(jobs_module.requests, "get") as get_mock:
+                get_mock.return_value.status_code = 200
+                jobs_module.report_airflow_fleet_health_heartbeat({"status": "healthy"}, 200)
+
+        get_mock.assert_called_once_with(
+            "https://uptime.betterstack.com/heartbeat/token",
+            timeout=jobs_module.AIRFLOW_FLEET_HEARTBEAT_TIMEOUT_SECONDS,
+        )
+
+    def test_airflow_fleet_heartbeat_reports_failure_for_unhealthy_payload(self):
+        import jobs as jobs_module
+
+        with patch.dict(
+            jobs_module.os.environ,
+            {"AIRFLOW_FLEET_HEARTBEAT_URL": ("https://uptime.betterstack.com/heartbeat/token/")},
+            clear=False,
+        ):
+            with patch.object(jobs_module.requests, "get") as get_mock:
+                get_mock.return_value.status_code = 200
+                jobs_module.report_airflow_fleet_health_heartbeat({"status": "unhealthy"}, 503)
+
+        get_mock.assert_called_once_with(
+            "https://uptime.betterstack.com/heartbeat/token/fail",
+            timeout=jobs_module.AIRFLOW_FLEET_HEARTBEAT_TIMEOUT_SECONDS,
+        )
+
 
 class ProjectStatusClassificationTest(unittest.TestCase):
     def test_released_project_is_inactive_and_completed(self):
