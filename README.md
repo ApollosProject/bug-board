@@ -42,8 +42,7 @@ python -m unittest discover -s tests -p 'test_*.py'
 - `AIRFLOW_API_BASE_URL` – Base URL for Airflow REST API (for example: `https://airflow.example.com`)
 - `AIRFLOW_API_TOKEN` – Bearer token for Airflow API
 - `AIRFLOW_FLEET_HEARTBEAT_URL` – Optional Better Stack heartbeat URL for worker-reported Airflow fleet health
-- `AIRFLOW_FLEET_MONITOR_TOKEN` – Optional token required by `/airflow-fleet-health`
-- `REDIS_URL` – Optional Redis connection string for cached `/airflow-fleet-health` responses
+- `REDIS_URL` – Optional Redis connection string for cached Airflow fleet-health responses
 - `REDIS_SSL_CERT_REQS` – Optional TLS cert verification mode for `rediss://` (`none`, `optional`, `required`; default for `rediss://` is `none` unless `REDIS_URL` already sets `ssl_cert_reqs`)
 - `AIRFLOW_FLEET_HEALTH_REFRESH_SECONDS` – Optional worker refresh interval for cached fleet health (default: `60`)
 - `AIRFLOW_FLEET_HEALTH_MAX_STALE_SECONDS` – Optional max age accepted by the web endpoint when reading cached data (default: `180`)
@@ -79,7 +78,7 @@ Better Stack polling this app as an uptime monitor. Configure a Better Stack hea
 On each worker refresh, the app:
 
 - Evaluates the Airflow REST API and inspects each active DAG's latest run state
-- Refreshes the Redis-backed `/airflow-fleet-health` cache when Redis is configured
+- Refreshes the Redis-backed fleet-health cache when Redis is configured
 - Sends the base heartbeat URL when fleet health is healthy
 - Sends the heartbeat URL with `/fail` appended when fleet health is unhealthy or unknown
 
@@ -108,9 +107,4 @@ This checker is intentionally not highly configurable. It uses fixed settings:
 When Redis caching or the Better Stack heartbeat is enabled, run the worker process
 (`python jobs.py`) so it refreshes fleet health on the configured interval.
 
-`GET /airflow-fleet-health` remains available for the dashboard/cache JSON payload. If
-`AIRFLOW_FLEET_MONITOR_TOKEN` is set, callers must send either of these on
-`GET /airflow-fleet-health`:
-
-- `Authorization: Bearer <token>` header, or
-- `?token=<token>` query param
+The legacy `GET /airflow-fleet-health` Better Stack monitor endpoint has been removed.
