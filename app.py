@@ -319,6 +319,7 @@ def healthz():
     response.headers["Cache-Control"] = "no-store"
     return response, 200
 
+
 @app.route("/failing-dags")
 def failing_dags_dashboard():
     payload, status = _get_airflow_fleet_health_payload(
