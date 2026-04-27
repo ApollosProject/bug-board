@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   stale:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     steps:
       - name: Mark and close stale issues and PRs
         uses: actions/stale@v9

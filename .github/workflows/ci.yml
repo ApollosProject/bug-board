@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   ruff:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
@@ -35,7 +35,7 @@ jobs:
         ruff format --check .
 
   vulture:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
@@ -55,7 +55,7 @@ jobs:
         vulture . --config pyproject.toml
 
   mypy:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
@@ -75,7 +75,7 @@ jobs:
         mypy .
 
   unit-tests:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
@@ -95,7 +95,7 @@ jobs:
         python -m unittest discover -s tests -p 'test_*.py'
 
   gunicorn-smoke:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
