@@ -313,33 +313,11 @@ def _format_checked_at(value: Any) -> str | None:
     return checked_at.astimezone().strftime("%Y-%m-%d %I:%M:%S %p %Z")
 
 
-def _require_airflow_fleet_monitor_token() -> None:
-    expected_token = os.getenv("AIRFLOW_FLEET_MONITOR_TOKEN")
-    if not expected_token:
-        return
-
-    bearer_token = request.headers.get("Authorization", "").removeprefix("Bearer ")
-    request_token = request.args.get("token", default="", type=str)
-    if bearer_token != expected_token and request_token != expected_token:
-        abort(401)
-
-
 @app.route("/healthz")
 def healthz():
     response = jsonify({"status": "ok"})
     response.headers["Cache-Control"] = "no-store"
     return response, 200
-
-
-@app.route("/airflow-fleet-health")
-def airflow_fleet_health():
-    _require_airflow_fleet_monitor_token()
-
-    payload, status = _get_airflow_fleet_health_payload(allow_live_eval=False)
-
-    response = jsonify(payload)
-    response.headers["Cache-Control"] = "no-store"
-    return response, status
 
 
 @app.route("/failing-dags")
