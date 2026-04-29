@@ -92,6 +92,11 @@ people:
     slack_id: U08UMCQ511D
     linear_username: justin.isenhart
     github_username:
+  david:
+    team: unassigned
+    slack_id: U02GM64LC
+    linear_username: david
+    github_username: davidwoody
 
 platforms:
   crossroads:
