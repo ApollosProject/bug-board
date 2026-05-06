@@ -23,7 +23,7 @@ jmespath==1.1.0
 MarkupSafe==3.0.3
 multidict==6.7.1
 mypy-extensions==1.1.0
-packaging==26.1
+packaging==26.2
 pathspec==1.1.1
 platformdirs==4.9.6
 propcache==0.4.1
