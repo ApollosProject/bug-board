@@ -44,7 +44,6 @@ def _install_import_shims() -> None:
     github_module = cast(Any, types.ModuleType("github"))
     github_module.get_pr_diff = lambda *args, **kwargs: ""
     github_module.get_prs_waiting_for_review_by_reviewer = lambda *args, **kwargs: {}
-    github_module.get_prs_with_changes_requested_by_reviewer = lambda *args, **kwargs: {}
     github_module.merged_prs_by_author = lambda *args, **kwargs: {}
     github_module.merged_prs_by_reviewer = lambda *args, **kwargs: {}
     sys.modules.setdefault("github", github_module)

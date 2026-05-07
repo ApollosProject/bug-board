@@ -151,6 +151,7 @@ def get_prs(repo_id, pr_states):
                             }
                             number
                             mergeable
+                            reviewDecision
                             statusCheckRollup {
                                 state
                             }
@@ -194,6 +195,12 @@ def has_known_merge_conflicts(pr):
     """Return True only when GitHub has confirmed the PR cannot merge cleanly."""
 
     return pr.get("mergeable") == "CONFLICTING"
+
+
+def has_active_change_request(pr):
+    """Return True when GitHub says the PR is blocked by requested changes."""
+
+    return pr.get("reviewDecision") == "CHANGES_REQUESTED"
 
 
 def _parse_github_timestamp(value: str | None) -> datetime | None:
@@ -330,6 +337,8 @@ def get_prs_waiting_for_review_by_reviewer():
             continue
         if has_known_merge_conflicts(pr):
             continue
+        if has_active_change_request(pr):
+            continue
         if not pr["reviewRequests"]["nodes"]:
             continue
         if any(r.get("state") == "APPROVED" for r in pr["reviews"]["nodes"]):
@@ -354,18 +363,6 @@ def get_prs_waiting_for_review_by_reviewer():
                     stuck_prs[reviewer] = []
                 stuck_prs[reviewer].append(pr)
     return stuck_prs
-
-
-def get_prs_with_changes_requested_by_reviewer():
-    """Return open PRs with change requests, grouped by the reviewer who requested changes."""
-    all_prs = _get_all_prs(["OPEN"])
-    cr_prs = {}
-    for pr in all_prs:
-        for review in pr.get("reviews", {}).get("nodes", []):
-            if review.get("author") and review.get("state") == "CHANGES_REQUESTED":
-                reviewer = review["author"]["login"]
-                cr_prs.setdefault(reviewer, []).append(pr)
-    return cr_prs
 
 
 def get_pr_diff(owner: str, repo: str, number: int) -> str:
