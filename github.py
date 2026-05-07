@@ -365,18 +365,6 @@ def get_prs_waiting_for_review_by_reviewer():
     return stuck_prs
 
 
-def get_prs_with_changes_requested_by_reviewer():
-    """Return open PRs with change requests, grouped by the reviewer who requested changes."""
-    all_prs = _get_all_prs(["OPEN"])
-    cr_prs = {}
-    for pr in all_prs:
-        for review in pr.get("reviews", {}).get("nodes", []):
-            if review.get("author") and review.get("state") == "CHANGES_REQUESTED":
-                reviewer = review["author"]["login"]
-                cr_prs.setdefault(reviewer, []).append(pr)
-    return cr_prs
-
-
 def get_pr_diff(owner: str, repo: str, number: int) -> str:
     """Return the diff for a pull request."""
     url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}"
