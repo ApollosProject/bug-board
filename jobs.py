@@ -16,7 +16,6 @@ from fleet_health_cache import refresh_fleet_health_cache, should_use_redis_cach
 from github import (
     get_pr_diff,
     get_prs_waiting_for_review_by_reviewer,
-    get_prs_with_changes_requested_by_reviewer,
     merged_prs_by_author,
     merged_prs_by_reviewer,
 )
@@ -532,7 +531,6 @@ def post_stale():
         if person.get("linear_username")
     }
     prs = get_prs_waiting_for_review_by_reviewer()
-    cr_prs = get_prs_with_changes_requested_by_reviewer()
     stale_issues = get_stale_issues_by_assignee(
         get_open_issues(5, "Bug")
         + get_open_issues(5, "Feature Request")
@@ -547,14 +545,8 @@ def post_stale():
     for reviewer, pr_list in prs.items():
         if reviewer not in people_by_github_username:
             continue
-        keep = []
-        for pr in pr_list:
-            crers = [r for r, pls in cr_prs.items() if pr in pls]
-            if any(r != reviewer for r in crers):
-                continue
-            keep.append(pr)
-        if keep:
-            filtered[reviewer] = keep
+        if pr_list:
+            filtered[reviewer] = pr_list
     prs = filtered
     if prs:
         markdown += "*PRs - Checks Passing, Waiting for Review (+24h, <200 lines added)*\n"
