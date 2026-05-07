@@ -182,15 +182,21 @@ class GraphQLClientRequestTests(unittest.TestCase):
             "additions": 55,
             "mergeable": "MERGEABLE",
             "reviewDecision": "CHANGES_REQUESTED",
-            "reviewRequests": {"nodes": [{"requestedReviewer": {"login": "michael"}}]},
+            "reviewRequests": {"nodes": [{"requestedReviewer": {"login": "dylan-manchester"}}]},
             "reviews": {
-                "nodes": [{"author": {"login": "dylan-manchester"}, "state": "CHANGES_REQUESTED"}]
+                "nodes": [
+                    {
+                        "author": {"login": "dylan-manchester"},
+                        "state": "CHANGES_REQUESTED",
+                        "submittedAt": "2026-03-24T13:52:12Z",
+                    }
+                ]
             },
             "timelineItems": {
                 "nodes": [
                     {
                         "createdAt": "2026-03-24T13:51:12Z",
-                        "requestedReviewer": {"login": "michael"},
+                        "requestedReviewer": {"login": "dylan-manchester"},
                     },
                 ]
             },
@@ -219,7 +225,13 @@ class GraphQLClientRequestTests(unittest.TestCase):
             "reviewDecision": "REVIEW_REQUIRED",
             "reviewRequests": {"nodes": [{"requestedReviewer": {"login": "michael"}}]},
             "reviews": {
-                "nodes": [{"author": {"login": "dylan-manchester"}, "state": "CHANGES_REQUESTED"}]
+                "nodes": [
+                    {
+                        "author": {"login": "dylan-manchester"},
+                        "state": "CHANGES_REQUESTED",
+                        "submittedAt": "2026-03-24T13:52:12Z",
+                    }
+                ]
             },
             "timelineItems": {
                 "nodes": [
@@ -237,6 +249,129 @@ class GraphQLClientRequestTests(unittest.TestCase):
                 waiting = github.get_prs_waiting_for_review_by_reviewer()
 
         self.assertEqual(waiting["michael"], [pr])
+
+    def test_waiting_for_review_falls_back_to_current_review_nodes_for_missing_decision(self):
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                base = datetime(2026, 3, 25, 14, 0, 0)
+                if tz is None:
+                    return base
+                return base.replace(tzinfo=tz)
+
+        pr = {
+            "number": 6293,
+            "additions": 55,
+            "mergeable": "MERGEABLE",
+            "reviewDecision": None,
+            "reviewRequests": {"nodes": [{"requestedReviewer": {"login": "dylan-manchester"}}]},
+            "reviews": {
+                "nodes": [
+                    {
+                        "author": {"login": "dylan-manchester"},
+                        "state": "CHANGES_REQUESTED",
+                        "submittedAt": "2026-03-24T13:52:12Z",
+                    }
+                ]
+            },
+            "timelineItems": {
+                "nodes": [
+                    {
+                        "createdAt": "2026-03-24T13:51:12Z",
+                        "requestedReviewer": {"login": "dylan-manchester"},
+                    },
+                ]
+            },
+            "statusCheckRollup": {"state": "SUCCESS"},
+        }
+
+        with patch.object(github, "_get_all_prs", return_value=[pr]):
+            with patch.object(github, "datetime", FixedDateTime):
+                waiting = github.get_prs_waiting_for_review_by_reviewer()
+
+        self.assertEqual(waiting, {})
+
+    def test_waiting_for_review_ignores_historical_review_nodes_for_missing_decision(self):
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                base = datetime(2026, 3, 25, 14, 0, 0)
+                if tz is None:
+                    return base
+                return base.replace(tzinfo=tz)
+
+        pr = {
+            "number": 6293,
+            "additions": 55,
+            "mergeable": "MERGEABLE",
+            "reviewDecision": None,
+            "reviewRequests": {"nodes": [{"requestedReviewer": {"login": "dylan-manchester"}}]},
+            "reviews": {
+                "nodes": [
+                    {
+                        "author": {"login": "dylan-manchester"},
+                        "state": "CHANGES_REQUESTED",
+                        "submittedAt": "2026-03-24T12:51:12Z",
+                    }
+                ]
+            },
+            "timelineItems": {
+                "nodes": [
+                    {
+                        "createdAt": "2026-03-24T13:51:12Z",
+                        "requestedReviewer": {"login": "dylan-manchester"},
+                    },
+                ]
+            },
+            "statusCheckRollup": {"state": "SUCCESS"},
+        }
+
+        with patch.object(github, "_get_all_prs", return_value=[pr]):
+            with patch.object(github, "datetime", FixedDateTime):
+                waiting = github.get_prs_waiting_for_review_by_reviewer()
+
+        self.assertEqual(waiting["dylan-manchester"], [pr])
+
+    def test_waiting_for_review_ignores_unrelated_review_requests_for_missing_decision(self):
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                base = datetime(2026, 3, 25, 14, 0, 0)
+                if tz is None:
+                    return base
+                return base.replace(tzinfo=tz)
+
+        pr = {
+            "number": 6293,
+            "additions": 55,
+            "mergeable": "MERGEABLE",
+            "reviewDecision": None,
+            "reviewRequests": {"nodes": [{"requestedReviewer": {"login": "michael"}}]},
+            "reviews": {
+                "nodes": [
+                    {
+                        "author": {"login": "dylan-manchester"},
+                        "state": "CHANGES_REQUESTED",
+                        "submittedAt": "2026-03-24T12:51:12Z",
+                    }
+                ]
+            },
+            "timelineItems": {
+                "nodes": [
+                    {
+                        "createdAt": "2026-03-24T13:51:12Z",
+                        "requestedReviewer": {"login": "michael"},
+                    },
+                ]
+            },
+            "statusCheckRollup": {"state": "SUCCESS"},
+        }
+
+        with patch.object(github, "_get_all_prs", return_value=[pr]):
+            with patch.object(github, "datetime", FixedDateTime):
+                waiting = github.get_prs_waiting_for_review_by_reviewer()
+
+        self.assertEqual(waiting, {})
 
 
 if __name__ == "__main__":

@@ -123,6 +123,7 @@ def get_prs(repo_id, pr_states):
                                         login
                                     }
                                     state
+                                    submittedAt
                                 }
                             }
                             timelineItems(
@@ -197,12 +198,6 @@ def has_known_merge_conflicts(pr):
     return pr.get("mergeable") == "CONFLICTING"
 
 
-def has_active_change_request(pr):
-    """Return True when GitHub says the PR is blocked by requested changes."""
-
-    return pr.get("reviewDecision") == "CHANGES_REQUESTED"
-
-
 def _parse_github_timestamp(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -210,6 +205,37 @@ def _parse_github_timestamp(value: str | None) -> datetime | None:
         return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
     except ValueError:
         return None
+
+
+def has_active_change_request(pr):
+    """Return True when GitHub says the PR is blocked by requested changes."""
+
+    review_decision = pr.get("reviewDecision")
+    if review_decision:
+        return review_decision == "CHANGES_REQUESTED"
+
+    review_request_times_by_reviewer: dict[str, list[datetime]] = {}
+    for review_request in pr.get("timelineItems", {}).get("nodes", []):
+        requested_reviewer = review_request.get("requestedReviewer") or {}
+        reviewer = requested_reviewer.get("login")
+        requested_at = _parse_github_timestamp(review_request.get("createdAt"))
+        if reviewer and requested_at is not None:
+            review_request_times_by_reviewer.setdefault(reviewer, []).append(requested_at)
+
+    for review in pr.get("reviews", {}).get("nodes", []):
+        if review.get("state") != "CHANGES_REQUESTED":
+            continue
+        reviewer = (review.get("author") or {}).get("login")
+        submitted_at = _parse_github_timestamp(review.get("submittedAt"))
+        if not reviewer or submitted_at is None:
+            return True
+        latest_review_request_at = max(
+            review_request_times_by_reviewer.get(reviewer, []),
+            default=None,
+        )
+        if latest_review_request_at is None or submitted_at >= latest_review_request_at:
+            return True
+    return False
 
 
 def _get_all_prs(pr_states: List[str]) -> List[Dict[str, Any]]:
