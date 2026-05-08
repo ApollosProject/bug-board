@@ -9,7 +9,7 @@ def get_completed_project_issue_assignees(project_id: str) -> list[str]:
     """Return sorted unique assignee display names for a project's completed issues."""
     query = gql(
         """
-        query CompletedProjectIssueAssignees($project_id: String!, $after: String) {
+        query CompletedProjectIssueAssignees($project_id: ID!, $after: String) {
           issues(
             first: 50
             after: $after
