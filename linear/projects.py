@@ -5,6 +5,52 @@ from config import get_linear_team_key
 from .client import _execute
 
 
+def get_completed_project_issue_assignees(project_id: str) -> list[str]:
+    """Return sorted unique assignee display names for a project's completed issues."""
+    query = gql(
+        """
+        query CompletedProjectIssueAssignees($project_id: String!, $after: String) {
+          issues(
+            first: 50
+            after: $after
+            filter: {
+              project: { id: { eq: $project_id } }
+              state: { type: { in: ["completed"] } }
+            }
+          ) {
+            nodes {
+              assignee {
+                displayName
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+        """
+    )
+
+    assignees: set[str] = set()
+    after = None
+    while True:
+        data = _execute(query, variable_values={"project_id": project_id, "after": after})
+        issue_connection = data.get("issues", {}) or {}
+        for issue in issue_connection.get("nodes", []) or []:
+            assignee = issue.get("assignee") or {}
+            display_name = assignee.get("displayName")
+            if display_name:
+                assignees.add(display_name)
+        page_info = issue_connection.get("pageInfo", {}) or {}
+        if not page_info.get("hasNextPage"):
+            break
+        after = page_info.get("endCursor")
+        if not after:
+            break
+    return sorted(assignees)
+
+
 def _normalize_project_members(projects: list[dict]) -> list[dict]:
     for project in projects:
         nodes = project.get("members", {}).get("nodes", [])
@@ -58,7 +104,7 @@ def get_projects():
         }
         """
     )
-    projects = []
+    projects: list[dict] = []
     after = None
     while True:
         data = _execute(query, variable_values={"team_key": team_key, "after": after})

@@ -421,7 +421,7 @@ BREAKDOWN_CATEGORIES: list[BreakdownCategory] = [
     {"key": "reviews", "label": "PR reviews", "count_label": "review"},
     {"key": "prs", "label": "PRs merged", "count_label": "PR"},
     {"key": "cycle_lead", "label": "Completed project lead", "count_label": None},
-    {"key": "cycle_member", "label": "Completed project member", "count_label": None},
+    {"key": "cycle_member", "label": "Completed project contributor", "count_label": None},
 ]
 
 PRIORITY_BREAKDOWN_KEYS = {

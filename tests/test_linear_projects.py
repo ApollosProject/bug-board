@@ -18,7 +18,9 @@ class GetProjectsTest(unittest.TestCase):
                                 },
                                 "nodes": [
                                     {
+                                        "id": "project-1",
                                         "name": "Web Giving",
+                                        "status": {"type": "started"},
                                         "members": {"nodes": [{"displayName": "Nathan Lewis"}]},
                                     }
                                 ],
@@ -38,7 +40,9 @@ class GetProjectsTest(unittest.TestCase):
                                 },
                                 "nodes": [
                                     {
+                                        "id": "project-2",
                                         "name": "Giving History + Recurring Management",
+                                        "status": {"type": "completed"},
                                         "members": {"nodes": [{"displayName": "Austin Witherow"}]},
                                     }
                                 ],
@@ -73,6 +77,51 @@ class GetProjectsTest(unittest.TestCase):
             ],
         )
         self.assertEqual(projects[0]["members"], ["Austin Witherow"])
+        self.assertEqual(projects[1]["members"], ["Nathan Lewis"])
+
+
+class GetCompletedProjectIssueAssigneesTest(unittest.TestCase):
+    def test_paginates_and_returns_sorted_unique_assignees(self):
+        responses = [
+            {
+                "issues": {
+                    "pageInfo": {
+                        "hasNextPage": True,
+                        "endCursor": "issue-cursor-1",
+                    },
+                    "nodes": [
+                        {"assignee": {"displayName": "Austin Witherow"}},
+                        {"assignee": None},
+                    ],
+                }
+            },
+            {
+                "issues": {
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    "nodes": [
+                        {"assignee": {"displayName": "Later Page Contributor"}},
+                        {"assignee": {"displayName": "Austin Witherow"}},
+                    ],
+                }
+            },
+        ]
+        calls = []
+
+        def fake_execute(_query, variable_values=None):
+            calls.append(variable_values)
+            return responses[len(calls) - 1]
+
+        with patch.object(project_module, "_execute", side_effect=fake_execute):
+            assignees = project_module.get_completed_project_issue_assignees("project-2")
+
+        self.assertEqual(
+            calls,
+            [
+                {"project_id": "project-2", "after": None},
+                {"project_id": "project-2", "after": "issue-cursor-1"},
+            ],
+        )
+        self.assertEqual(assignees, ["Austin Witherow", "Later Page Contributor"])
 
 
 if __name__ == "__main__":
