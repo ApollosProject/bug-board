@@ -55,22 +55,32 @@ def _get_completed_project_issue_assignees(project_id: str) -> list[str]:
     return _completed_issue_assignee_names(issue_nodes)
 
 
-def _normalize_project_participants(projects: list[dict]) -> list[dict]:
+def _is_completed_project(project: dict) -> bool:
+    status_type = ((project.get("status") or {}).get("type") or "").strip().lower()
+    return status_type == "completed"
+
+
+def _normalize_project_participants(
+    projects: list[dict], *, include_completed_issue_assignees: bool = False
+) -> list[dict]:
     for project in projects:
         member_nodes = project.get("members", {}).get("nodes", [])
         project["members"] = [m["displayName"] for m in member_nodes if m.get("displayName")]
 
-        project_id = project.get("id")
-        if project_id:
-            project["completedIssueAssignees"] = _get_completed_project_issue_assignees(project_id)
-        else:
-            issue_nodes = project.get("issues", {}).get("nodes", [])
-            project["completedIssueAssignees"] = _completed_issue_assignee_names(issue_nodes)
+        if include_completed_issue_assignees:
+            project_id = project.get("id")
+            if project_id and _is_completed_project(project):
+                project["completedIssueAssignees"] = _get_completed_project_issue_assignees(
+                    project_id
+                )
+            else:
+                issue_nodes = project.get("issues", {}).get("nodes", [])
+                project["completedIssueAssignees"] = _completed_issue_assignee_names(issue_nodes)
         project.pop("issues", None)
     return projects
 
 
-def get_projects():
+def get_projects(*, include_completed_issue_assignees: bool = False):
     """Return all Linear projects under the Apollos team, ordered by name."""
     team_key = get_linear_team_key()
     query = gql(
@@ -116,7 +126,7 @@ def get_projects():
         }
         """
     )
-    projects = []
+    projects: list[dict] = []
     after = None
     while True:
         data = _execute(query, variable_values={"team_key": team_key, "after": after})
@@ -132,4 +142,7 @@ def get_projects():
         if not after:
             break
     sorted_projects = sorted(projects, key=lambda project: project.get("name", ""))
-    return _normalize_project_participants(sorted_projects)
+    return _normalize_project_participants(
+        sorted_projects,
+        include_completed_issue_assignees=include_completed_issue_assignees,
+    )

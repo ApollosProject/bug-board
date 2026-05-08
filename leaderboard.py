@@ -48,7 +48,7 @@ def _calculate_cycle_project_points(
     if days <= 0:
         return {}, {}
     now = now or datetime.now(timezone.utc)
-    projects = get_projects()
+    projects = get_projects(include_completed_issue_assignees=True)
     timeframe_start = now - timedelta(days=days)
     week_segments = _build_week_segments(timeframe_start, now)
     points_by_lead: dict[str, int] = {}

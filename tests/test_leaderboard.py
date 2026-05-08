@@ -3,7 +3,7 @@ import sys
 import types
 from datetime import datetime, timezone
 from unittest import TestCase
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 
 def _import_leaderboard_with_stub():
@@ -12,7 +12,7 @@ def _import_leaderboard_with_stub():
 
     linear_projects_module = types.ModuleType("linear.projects")
 
-    def _get_projects():
+    def _get_projects(*, include_completed_issue_assignees=False):
         return []
 
     linear_projects_module.get_projects = _get_projects
@@ -49,10 +49,18 @@ class CycleProjectPointsTest(TestCase):
         ]
         now = datetime(2026, 4, 7, tzinfo=timezone.utc)
 
-        with patch.object(leaderboard_module, "get_projects", return_value=projects):
+        with patch.object(
+            leaderboard_module, "get_projects", return_value=projects
+        ) as get_projects_mock:
             lead_points = leaderboard_module.calculate_cycle_project_lead_points(30, now)
             member_points = leaderboard_module.calculate_cycle_project_member_points(30, now)
 
+        get_projects_mock.assert_has_calls(
+            [
+                call(include_completed_issue_assignees=True),
+                call(include_completed_issue_assignees=True),
+            ]
+        )
         self.assertEqual(lead_points, {"nick": 120})
         self.assertEqual(member_points, {"Austin": 60})
 
