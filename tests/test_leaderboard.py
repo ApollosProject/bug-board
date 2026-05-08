@@ -3,7 +3,7 @@ import sys
 import types
 from datetime import datetime, timezone
 from unittest import TestCase
-from unittest.mock import call, patch
+from unittest.mock import patch
 
 
 def _import_leaderboard_with_stub():
@@ -12,10 +12,16 @@ def _import_leaderboard_with_stub():
 
     linear_projects_module = types.ModuleType("linear.projects")
 
-    def _get_projects(*, include_completed_issue_assignees=False):
+    def _get_projects():
+        return []
+
+    def _get_completed_project_issue_assignees(_project_id):
         return []
 
     linear_projects_module.get_projects = _get_projects
+    linear_projects_module.get_completed_project_issue_assignees = (
+        _get_completed_project_issue_assignees
+    )
 
     original_leaderboard = sys.modules.pop("leaderboard", None)
     try:
@@ -37,6 +43,7 @@ class CycleProjectPointsTest(TestCase):
         leaderboard_module = _import_leaderboard_with_stub()
         projects = [
             {
+                "id": "project-1",
                 "name": "Google Pay",
                 "status": {"name": "Released", "type": "completed"},
                 "completedAt": "2026-04-03T00:00:00.000Z",
@@ -44,23 +51,20 @@ class CycleProjectPointsTest(TestCase):
                 "targetDate": "2026-03-30",
                 "lead": {"displayName": "nick"},
                 "members": ["Austin", "Member Only"],
-                "completedIssueAssignees": ["Austin"],
             }
         ]
         now = datetime(2026, 4, 7, tzinfo=timezone.utc)
 
-        with patch.object(
-            leaderboard_module, "get_projects", return_value=projects
-        ) as get_projects_mock:
-            lead_points = leaderboard_module.calculate_cycle_project_lead_points(30, now)
-            member_points = leaderboard_module.calculate_cycle_project_member_points(30, now)
+        with patch.object(leaderboard_module, "get_projects", return_value=projects):
+            with patch.object(
+                leaderboard_module,
+                "get_completed_project_issue_assignees",
+                return_value=["Austin"],
+            ) as assignees_mock:
+                lead_points = leaderboard_module.calculate_cycle_project_lead_points(30, now)
+                member_points = leaderboard_module.calculate_cycle_project_member_points(30, now)
 
-        get_projects_mock.assert_has_calls(
-            [
-                call(include_completed_issue_assignees=True),
-                call(include_completed_issue_assignees=True),
-            ]
-        )
+        assignees_mock.assert_called_with("project-1")
         self.assertEqual(lead_points, {"nick": 120})
         self.assertEqual(member_points, {"Austin": 60})
 
@@ -68,6 +72,7 @@ class CycleProjectPointsTest(TestCase):
         leaderboard_module = _import_leaderboard_with_stub()
         projects = [
             {
+                "id": "project-1",
                 "name": "Canceled Project",
                 "status": {"name": "Canceled", "type": "canceled"},
                 "completedAt": "2026-04-03T00:00:00.000Z",
@@ -75,7 +80,6 @@ class CycleProjectPointsTest(TestCase):
                 "targetDate": "2026-03-30",
                 "lead": {"displayName": "nick"},
                 "members": ["Austin"],
-                "completedIssueAssignees": ["Austin"],
             }
         ]
         now = datetime(2026, 4, 7, tzinfo=timezone.utc)
@@ -91,6 +95,7 @@ class CycleProjectPointsTest(TestCase):
         leaderboard_module = _import_leaderboard_with_stub()
         projects = [
             {
+                "id": "project-1",
                 "name": "Member Only Project",
                 "status": {"name": "Released", "type": "completed"},
                 "completedAt": "2026-04-03T00:00:00.000Z",
@@ -98,12 +103,45 @@ class CycleProjectPointsTest(TestCase):
                 "targetDate": "2026-03-30",
                 "lead": {"displayName": "nick"},
                 "members": ["Member Only"],
-                "completedIssueAssignees": ["Contributor"],
             }
         ]
         now = datetime(2026, 4, 7, tzinfo=timezone.utc)
 
         with patch.object(leaderboard_module, "get_projects", return_value=projects):
-            member_points = leaderboard_module.calculate_cycle_project_member_points(30, now)
+            with patch.object(
+                leaderboard_module,
+                "get_completed_project_issue_assignees",
+                return_value=["Contributor"],
+            ):
+                member_points = leaderboard_module.calculate_cycle_project_member_points(30, now)
 
         self.assertEqual(member_points, {"Contributor": 15})
+
+    def test_assignees_not_fetched_for_projects_outside_window(self):
+        leaderboard_module = _import_leaderboard_with_stub()
+        projects = [
+            {
+                "id": "old-project",
+                "name": "Old Released Project",
+                "status": {"name": "Released", "type": "completed"},
+                "completedAt": "2025-01-01T00:00:00.000Z",
+                "startDate": "2024-12-01",
+                "targetDate": "2024-12-15",
+                "lead": {"displayName": "nick"},
+                "members": ["Austin"],
+            }
+        ]
+        now = datetime(2026, 4, 7, tzinfo=timezone.utc)
+
+        with patch.object(leaderboard_module, "get_projects", return_value=projects):
+            with patch.object(
+                leaderboard_module,
+                "get_completed_project_issue_assignees",
+                return_value=["Austin"],
+            ) as assignees_mock:
+                lead_points = leaderboard_module.calculate_cycle_project_lead_points(30, now)
+                member_points = leaderboard_module.calculate_cycle_project_member_points(30, now)
+
+        assignees_mock.assert_not_called()
+        self.assertEqual(lead_points, {})
+        self.assertEqual(member_points, {})

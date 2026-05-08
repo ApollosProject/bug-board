@@ -6,7 +6,7 @@ from constants import (
     CYCLE_PROJECT_LEAD_POINTS_PER_WEEK,
     CYCLE_PROJECT_MEMBER_POINTS_PER_WEEK,
 )
-from linear.projects import get_projects
+from linear.projects import get_completed_project_issue_assignees, get_projects
 
 
 def _parse_date(value: str | None) -> datetime | None:
@@ -48,7 +48,7 @@ def _calculate_cycle_project_points(
     if days <= 0:
         return {}, {}
     now = now or datetime.now(timezone.utc)
-    projects = get_projects(include_completed_issue_assignees=True)
+    projects = get_projects()
     timeframe_start = now - timedelta(days=days)
     week_segments = _build_week_segments(timeframe_start, now)
     points_by_lead: dict[str, int] = {}
@@ -71,22 +71,31 @@ def _calculate_cycle_project_points(
         window_start = max(start_at, timeframe_start)
         if window_end <= window_start:
             continue
-        contributors = {
-            contributor
-            for contributor in project.get("completedIssueAssignees", []) or []
-            if contributor and contributor != lead_name
-        }
-        for segment_start, segment_end in week_segments:
-            overlap_start = max(window_start, segment_start)
-            overlap_end = min(window_end, segment_end)
-            if overlap_end > overlap_start:
-                points_by_lead[lead_name] = (
-                    points_by_lead.get(lead_name, 0) + CYCLE_PROJECT_LEAD_POINTS_PER_WEEK
+        scoring_segments = [
+            (segment_start, segment_end)
+            for segment_start, segment_end in week_segments
+            if min(window_end, segment_end) > max(window_start, segment_start)
+        ]
+        if not scoring_segments:
+            continue
+        project_id = project.get("id")
+        contributors = (
+            {
+                contributor
+                for contributor in get_completed_project_issue_assignees(project_id)
+                if contributor and contributor != lead_name
+            }
+            if project_id
+            else set()
+        )
+        for _ in scoring_segments:
+            points_by_lead[lead_name] = (
+                points_by_lead.get(lead_name, 0) + CYCLE_PROJECT_LEAD_POINTS_PER_WEEK
+            )
+            for contributor in contributors:
+                points_by_member[contributor] = (
+                    points_by_member.get(contributor, 0) + CYCLE_PROJECT_MEMBER_POINTS_PER_WEEK
                 )
-                for contributor in contributors:
-                    points_by_member[contributor] = (
-                        points_by_member.get(contributor, 0) + CYCLE_PROJECT_MEMBER_POINTS_PER_WEEK
-                    )
     return points_by_lead, points_by_member
 
 
