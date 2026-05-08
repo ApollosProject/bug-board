@@ -20,6 +20,12 @@ class GetProjectsTest(unittest.TestCase):
                                     {
                                         "name": "Web Giving",
                                         "members": {"nodes": [{"displayName": "Nathan Lewis"}]},
+                                        "issues": {
+                                            "nodes": [
+                                                {"assignee": {"displayName": "Nathan Lewis"}},
+                                                {"assignee": None},
+                                            ]
+                                        },
                                     }
                                 ],
                             }
@@ -40,6 +46,12 @@ class GetProjectsTest(unittest.TestCase):
                                     {
                                         "name": "Giving History + Recurring Management",
                                         "members": {"nodes": [{"displayName": "Austin Witherow"}]},
+                                        "issues": {
+                                            "nodes": [
+                                                {"assignee": {"displayName": "Austin Witherow"}},
+                                                {"assignee": {"displayName": "Austin Witherow"}},
+                                            ]
+                                        },
                                     }
                                 ],
                             }
@@ -73,6 +85,7 @@ class GetProjectsTest(unittest.TestCase):
             ],
         )
         self.assertEqual(projects[0]["members"], ["Austin Witherow"])
+        self.assertEqual(projects[0]["completedIssueAssignees"], ["Austin Witherow"])
 
 
 if __name__ == "__main__":

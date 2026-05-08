@@ -71,8 +71,10 @@ def _calculate_cycle_project_points(
         window_start = max(start_at, timeframe_start)
         if window_end <= window_start:
             continue
-        members = {
-            member for member in project.get("members", []) or [] if member and member != lead_name
+        contributors = {
+            contributor
+            for contributor in project.get("completedIssueAssignees", []) or []
+            if contributor and contributor != lead_name
         }
         for segment_start, segment_end in week_segments:
             overlap_start = max(window_start, segment_start)
@@ -81,9 +83,9 @@ def _calculate_cycle_project_points(
                 points_by_lead[lead_name] = (
                     points_by_lead.get(lead_name, 0) + CYCLE_PROJECT_LEAD_POINTS_PER_WEEK
                 )
-                for member in members:
-                    points_by_member[member] = (
-                        points_by_member.get(member, 0) + CYCLE_PROJECT_MEMBER_POINTS_PER_WEEK
+                for contributor in contributors:
+                    points_by_member[contributor] = (
+                        points_by_member.get(contributor, 0) + CYCLE_PROJECT_MEMBER_POINTS_PER_WEEK
                     )
     return points_by_lead, points_by_member
 

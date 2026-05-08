@@ -5,10 +5,18 @@ from config import get_linear_team_key
 from .client import _execute
 
 
-def _normalize_project_members(projects: list[dict]) -> list[dict]:
+def _normalize_project_participants(projects: list[dict]) -> list[dict]:
     for project in projects:
-        nodes = project.get("members", {}).get("nodes", [])
-        project["members"] = [m["displayName"] for m in nodes if m.get("displayName")]
+        member_nodes = project.get("members", {}).get("nodes", [])
+        project["members"] = [m["displayName"] for m in member_nodes if m.get("displayName")]
+
+        issue_nodes = project.get("issues", {}).get("nodes", [])
+        completed_issue_assignees = {
+            issue["assignee"]["displayName"]
+            for issue in issue_nodes
+            if issue.get("assignee") and issue["assignee"].get("displayName")
+        }
+        project["completedIssueAssignees"] = sorted(completed_issue_assignees)
     return projects
 
 
@@ -51,6 +59,13 @@ def get_projects():
                       displayName
                     }
                   }
+                  issues(first: 50, filter: { state: { type: { in: ["completed"] } } }) {
+                    nodes {
+                      assignee {
+                        displayName
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -74,4 +89,4 @@ def get_projects():
         if not after:
             break
     sorted_projects = sorted(projects, key=lambda project: project.get("name", ""))
-    return _normalize_project_members(sorted_projects)
+    return _normalize_project_participants(sorted_projects)

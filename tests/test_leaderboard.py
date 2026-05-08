@@ -43,7 +43,8 @@ class CycleProjectPointsTest(TestCase):
                 "startDate": "2026-02-09",
                 "targetDate": "2026-03-30",
                 "lead": {"displayName": "nick"},
-                "members": ["Austin"],
+                "members": ["Austin", "Member Only"],
+                "completedIssueAssignees": ["Austin"],
             }
         ]
         now = datetime(2026, 4, 7, tzinfo=timezone.utc)
@@ -66,6 +67,7 @@ class CycleProjectPointsTest(TestCase):
                 "targetDate": "2026-03-30",
                 "lead": {"displayName": "nick"},
                 "members": ["Austin"],
+                "completedIssueAssignees": ["Austin"],
             }
         ]
         now = datetime(2026, 4, 7, tzinfo=timezone.utc)
@@ -76,3 +78,24 @@ class CycleProjectPointsTest(TestCase):
 
         self.assertEqual(lead_points, {})
         self.assertEqual(member_points, {})
+
+    def test_project_members_without_completed_issues_do_not_get_points(self):
+        leaderboard_module = _import_leaderboard_with_stub()
+        projects = [
+            {
+                "name": "Member Only Project",
+                "status": {"name": "Released", "type": "completed"},
+                "completedAt": "2026-04-03T00:00:00.000Z",
+                "startDate": "2026-03-24",
+                "targetDate": "2026-03-30",
+                "lead": {"displayName": "nick"},
+                "members": ["Member Only"],
+                "completedIssueAssignees": ["Contributor"],
+            }
+        ]
+        now = datetime(2026, 4, 7, tzinfo=timezone.utc)
+
+        with patch.object(leaderboard_module, "get_projects", return_value=projects):
+            member_points = leaderboard_module.calculate_cycle_project_member_points(30, now)
+
+        self.assertEqual(member_points, {"Contributor": 15})
