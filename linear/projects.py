@@ -5,18 +5,68 @@ from config import get_linear_team_key
 from .client import _execute
 
 
+def _completed_issue_assignee_names(issue_nodes: list[dict]) -> list[str]:
+    completed_issue_assignees = {
+        issue["assignee"]["displayName"]
+        for issue in issue_nodes
+        if issue.get("assignee") and issue["assignee"].get("displayName")
+    }
+    return sorted(completed_issue_assignees)
+
+
+def _get_completed_project_issue_assignees(project_id: str) -> list[str]:
+    query = gql(
+        """
+        query CompletedProjectIssueAssignees($project_id: String!, $after: String) {
+          issues(
+            first: 50
+            after: $after
+            filter: {
+              project: { id: { eq: $project_id } }
+              state: { type: { in: ["completed"] } }
+            }
+          ) {
+            nodes {
+              assignee {
+                displayName
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+        """
+    )
+
+    issue_nodes: list[dict] = []
+    after = None
+    while True:
+        data = _execute(query, variable_values={"project_id": project_id, "after": after})
+        issue_connection = data.get("issues", {}) or {}
+        issue_nodes.extend(issue_connection.get("nodes", []) or [])
+        page_info = issue_connection.get("pageInfo", {}) or {}
+        if not page_info.get("hasNextPage"):
+            break
+        after = page_info.get("endCursor")
+        if not after:
+            break
+    return _completed_issue_assignee_names(issue_nodes)
+
+
 def _normalize_project_participants(projects: list[dict]) -> list[dict]:
     for project in projects:
         member_nodes = project.get("members", {}).get("nodes", [])
         project["members"] = [m["displayName"] for m in member_nodes if m.get("displayName")]
 
-        issue_nodes = project.get("issues", {}).get("nodes", [])
-        completed_issue_assignees = {
-            issue["assignee"]["displayName"]
-            for issue in issue_nodes
-            if issue.get("assignee") and issue["assignee"].get("displayName")
-        }
-        project["completedIssueAssignees"] = sorted(completed_issue_assignees)
+        project_id = project.get("id")
+        if project_id:
+            project["completedIssueAssignees"] = _get_completed_project_issue_assignees(project_id)
+        else:
+            issue_nodes = project.get("issues", {}).get("nodes", [])
+            project["completedIssueAssignees"] = _completed_issue_assignee_names(issue_nodes)
+        project.pop("issues", None)
     return projects
 
 
@@ -57,13 +107,6 @@ def get_projects():
                   members(first: 50) {
                     nodes {
                       displayName
-                    }
-                  }
-                  issues(first: 50, filter: { state: { type: { in: ["completed"] } } }) {
-                    nodes {
-                      assignee {
-                        displayName
-                      }
                     }
                   }
                 }

@@ -18,14 +18,9 @@ class GetProjectsTest(unittest.TestCase):
                                 },
                                 "nodes": [
                                     {
+                                        "id": "project-1",
                                         "name": "Web Giving",
                                         "members": {"nodes": [{"displayName": "Nathan Lewis"}]},
-                                        "issues": {
-                                            "nodes": [
-                                                {"assignee": {"displayName": "Nathan Lewis"}},
-                                                {"assignee": None},
-                                            ]
-                                        },
                                     }
                                 ],
                             }
@@ -44,19 +39,49 @@ class GetProjectsTest(unittest.TestCase):
                                 },
                                 "nodes": [
                                     {
+                                        "id": "project-2",
                                         "name": "Giving History + Recurring Management",
                                         "members": {"nodes": [{"displayName": "Austin Witherow"}]},
-                                        "issues": {
-                                            "nodes": [
-                                                {"assignee": {"displayName": "Austin Witherow"}},
-                                                {"assignee": {"displayName": "Austin Witherow"}},
-                                            ]
-                                        },
                                     }
                                 ],
                             }
                         }
                     ]
+                }
+            },
+            {
+                "issues": {
+                    "pageInfo": {
+                        "hasNextPage": True,
+                        "endCursor": "issue-cursor-1",
+                    },
+                    "nodes": [
+                        {"assignee": {"displayName": "Austin Witherow"}},
+                        {"assignee": None},
+                    ],
+                }
+            },
+            {
+                "issues": {
+                    "pageInfo": {
+                        "hasNextPage": False,
+                        "endCursor": None,
+                    },
+                    "nodes": [
+                        {"assignee": {"displayName": "Later Page Contributor"}},
+                        {"assignee": {"displayName": "Austin Witherow"}},
+                    ],
+                }
+            },
+            {
+                "issues": {
+                    "pageInfo": {
+                        "hasNextPage": False,
+                        "endCursor": None,
+                    },
+                    "nodes": [
+                        {"assignee": {"displayName": "Nathan Lewis"}},
+                    ],
                 }
             },
         ]
@@ -75,6 +100,9 @@ class GetProjectsTest(unittest.TestCase):
             [
                 {"team_key": "APO", "after": None},
                 {"team_key": "APO", "after": "cursor-1"},
+                {"project_id": "project-2", "after": None},
+                {"project_id": "project-2", "after": "issue-cursor-1"},
+                {"project_id": "project-1", "after": None},
             ],
         )
         self.assertEqual(
@@ -85,7 +113,11 @@ class GetProjectsTest(unittest.TestCase):
             ],
         )
         self.assertEqual(projects[0]["members"], ["Austin Witherow"])
-        self.assertEqual(projects[0]["completedIssueAssignees"], ["Austin Witherow"])
+        self.assertEqual(
+            projects[0]["completedIssueAssignees"],
+            ["Austin Witherow", "Later Page Contributor"],
+        )
+        self.assertEqual(projects[1]["completedIssueAssignees"], ["Nathan Lewis"])
 
 
 if __name__ == "__main__":
