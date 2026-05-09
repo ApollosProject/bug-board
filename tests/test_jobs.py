@@ -173,8 +173,8 @@ class ConfigureScheduledJobsTest(unittest.TestCase):
             {
                 "interval": None,
                 "unit": "friday",
-                "at_time": "20:00",
-                "timezone": None,
+                "at_time": "16:00",
+                "timezone": "America/New_York",
                 "func": jobs_module.post_leaderboard,
             },
             recorded_jobs,
@@ -204,11 +204,14 @@ class ConfigureScheduledJobsTest(unittest.TestCase):
 class RunDebugJobsTest(unittest.TestCase):
     def test_runs_leaderboard_stale_and_project_updates(self):
         with patch.object(jobs_module, "should_use_redis_cache", return_value=False):
-            with patch.object(jobs_module, "post_priority_bugs"):
-                with patch.object(jobs_module, "post_leaderboard") as leaderboard:
-                    with patch.object(jobs_module, "post_stale") as stale:
-                        with patch.object(jobs_module, "post_project_updates") as project_updates:
-                            jobs_module.run_debug_jobs()
+            with patch.object(jobs_module, "post_inactive_engineers"):
+                with patch.object(jobs_module, "post_priority_bugs"):
+                    with patch.object(jobs_module, "post_leaderboard") as leaderboard:
+                        with patch.object(jobs_module, "post_stale") as stale:
+                            with patch.object(
+                                jobs_module, "post_project_updates"
+                            ) as project_updates:
+                                jobs_module.run_debug_jobs()
 
         leaderboard.assert_called_once_with()
         stale.assert_called_once_with()

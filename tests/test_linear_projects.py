@@ -106,8 +106,10 @@ class GetCompletedProjectIssueAssigneesTest(unittest.TestCase):
             },
         ]
         calls = []
+        queries = []
 
         def fake_execute(_query, variable_values=None):
+            queries.append(str(_query))
             calls.append(variable_values)
             return responses[len(calls) - 1]
 
@@ -121,6 +123,7 @@ class GetCompletedProjectIssueAssigneesTest(unittest.TestCase):
                 {"project_id": "project-2", "after": "issue-cursor-1"},
             ],
         )
+        self.assertIn("$project_id: ID!", queries[0])
         self.assertEqual(assignees, ["Austin Witherow", "Later Page Contributor"])
 
 
