@@ -4,10 +4,12 @@ import json
 import logging
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+import requests
 from packaging.version import InvalidVersion, Version
 
 DEFAULT_BIGQUERY_ANALYTICS_PROJECT_ID = "apollos-project"
@@ -21,6 +23,10 @@ DEFAULT_SEGMENT_TABLES = (
 )
 DEFAULT_APP_VERSIONS_LOOKBACK_DAYS = 30
 DEFAULT_APP_VERSIONS_LIMIT = 1000
+APP_STORE_LOOKUP_URL = "https://itunes.apple.com/lookup"
+APP_STORE_LOOKUP_LIMIT = 24
+APP_STORE_LOOKUP_TIMEOUT_SECONDS = 5
+APP_STORE_LOOKUP_WORKERS = 8
 
 TIMESTAMP_COLUMN_CANDIDATES = (
     "timestamp",
@@ -102,10 +108,12 @@ def fetch_app_versions(config: AppVersionsConfig) -> tuple[list[dict[str, Any]],
     query, query_config = _build_app_versions_query(config, schema_by_table)
     results = client.query(query, job_config=query_config).result()
     rows = [_row_to_dict(row) for row in results]
+    latest_rows = _select_latest_observed_versions(rows)
+    latest_rows = _enrich_app_store_versions(latest_rows)
     discovered_tables = tuple(
         f"{dataset}.{table_name}" for dataset, table_name in schema_by_table.keys()
     )
-    return _annotate_version_status(rows), discovered_tables
+    return _annotate_version_status(latest_rows)[: config.limit], discovered_tables
 
 
 def _build_bigquery_client(project_id: str):
@@ -257,6 +265,7 @@ def _build_app_versions_query(
             COALESCE(
               NULLIF(apollos_platform, ''),
               IF(source_dataset = 'apollos_roku', 'roku', NULL),
+              IF(source_dataset = 'apollos_tv', 'tv', NULL),
               'unknown'
             ) AS apollos_platform,
             COALESCE(
@@ -280,53 +289,102 @@ def _build_app_versions_query(
           FROM version_events
           WHERE apollos_version IS NOT NULL AND apollos_version != ''
         ),
-        latest_by_app AS (
+        filtered_events AS (
+          SELECT *
+          FROM normalized_events
+          WHERE
+            source_dataset = 'apollos_roku'
+            OR (
+              source_dataset = 'apollos_tv'
+              AND apollos_platform IN ('amazon', 'androidtv', 'tvos', 'tv')
+            )
+            OR (
+              source_dataset = 'apollos'
+              AND apollos_platform NOT IN ('amazon', 'androidtv', 'tvos', 'tv', 'roku')
+            )
+            OR source_dataset NOT IN ('apollos', 'apollos_tv', 'apollos_roku')
+        ),
+        app_identity_events AS (
           SELECT
-            church,
-            apollos_platform,
-            application_name,
-            bundle_id,
+            *,
+            IF(
+              LOWER(bundle_id) IN ('unknown', 'roku'),
+              CONCAT(church, '|', apollos_platform, '|', LOWER(bundle_id)),
+              CONCAT(apollos_platform, '|', LOWER(bundle_id))
+            ) AS app_identity_key
+          FROM filtered_events
+        ),
+        display_churches AS (
+          SELECT
+            app_identity_key,
             ARRAY_AGG(
-              STRUCT(
-                apollos_version,
-                app_version,
-                app_update_id,
-                source_dataset,
-                source_table,
-                version_source,
-                seen_at
-              )
-              ORDER BY seen_at DESC
+              church
+              ORDER BY IF(church = 'Unknown church', 1, 0), church
               LIMIT 1
-            )[OFFSET(0)] AS latest,
+            )[OFFSET(0)] AS church
+          FROM app_identity_events
+          GROUP BY app_identity_key
+        ),
+        version_observations AS (
+          SELECT
+            events.app_identity_key,
+            display_churches.church,
+            events.apollos_platform,
+            events.application_name,
+            events.bundle_id,
+            events.apollos_version,
+            events.app_version,
+            events.app_update_id,
+            events.source_dataset,
+            events.source_table,
+            events.version_source,
+            MAX(events.seen_at) AS latest_seen_at,
+            COUNT(*) AS version_event_count
+          FROM app_identity_events events
+          JOIN display_churches
+            USING (app_identity_key)
+          GROUP BY
+            events.app_identity_key,
+            display_churches.church,
+            events.apollos_platform,
+            events.application_name,
+            events.bundle_id,
+            events.apollos_version,
+            events.app_version,
+            events.app_update_id,
+            events.source_dataset,
+            events.source_table,
+            events.version_source
+        ),
+        app_totals AS (
+          SELECT
+            app_identity_key,
             COUNT(*) AS event_count,
             COUNT(DISTINCT COALESCE(user_id, anonymous_id)) AS user_count
-          FROM normalized_events
-          GROUP BY church, apollos_platform, application_name, bundle_id
+          FROM app_identity_events
+          GROUP BY app_identity_key
         )
         SELECT
-          church,
-          apollos_platform,
-          application_name,
-          bundle_id,
-          latest.apollos_version AS apollos_version,
-          latest.app_version AS app_version,
-          latest.app_update_id AS app_update_id,
-          latest.source_dataset AS source_dataset,
-          latest.source_table AS source_table,
-          latest.version_source AS version_source,
-          latest.seen_at AS latest_seen_at,
-          event_count,
-          user_count
-        FROM latest_by_app
-        ORDER BY latest_seen_at DESC
-        LIMIT @limit
+          observation.church,
+          observation.apollos_platform,
+          observation.application_name,
+          observation.bundle_id,
+          observation.apollos_version,
+          observation.app_version,
+          observation.app_update_id,
+          observation.source_dataset,
+          observation.source_table,
+          observation.version_source,
+          observation.latest_seen_at,
+          totals.event_count,
+          totals.user_count
+        FROM version_observations observation
+        JOIN app_totals totals
+          USING (app_identity_key)
+        ORDER BY observation.latest_seen_at DESC
     """
     query_config = _query_job_config(
-        [
-            _scalar_query_parameter("lookback_days", "INT64", config.lookback_days),
-            _scalar_query_parameter("limit", "INT64", config.limit),
-        ]
+        [_scalar_query_parameter("lookback_days", "INT64", config.lookback_days)]
     )
     return query, query_config
 
@@ -364,9 +422,25 @@ def _annotate_version_status(rows: list[dict[str, Any]]) -> list[dict[str, Any]]
         version = _string_value(row.get("apollos_version"))
         latest_version = latest_by_platform.get(platform) or version
         updated["latest_apollos_version"] = latest_version
-        is_outdated = False
+        observed_app_version = _string_value(row.get("app_version"))
+        latest_app_version = _string_value(row.get("latest_app_version")) or observed_app_version
+        latest_app_version_source = (
+            _string_value(row.get("latest_app_version_source")) or "observed"
+        )
+        updated["latest_app_version"] = latest_app_version
+        updated["latest_app_version_source"] = latest_app_version_source
+        updated["latest_app_version_source_label"] = format_app_version_source_label(
+            latest_app_version_source
+        )
+        is_runtime_outdated = False
         if platform != "unknown" and version_source == "runtime" and version and latest_version:
-            is_outdated = compare_versions(version, latest_version) < 0
+            is_runtime_outdated = compare_versions(version, latest_version) < 0
+        is_app_version_outdated = False
+        if observed_app_version and latest_app_version:
+            is_app_version_outdated = compare_versions(observed_app_version, latest_app_version) < 0
+        is_outdated = is_runtime_outdated or is_app_version_outdated
+        updated["is_runtime_outdated"] = is_runtime_outdated
+        updated["is_app_version_outdated"] = is_app_version_outdated
         updated["is_outdated"] = is_outdated
         updated["version_source_label"] = format_version_source_label(version_source)
         updated["version_status_label"] = (
@@ -388,6 +462,150 @@ def _annotate_version_status(rows: list[dict[str, Any]]) -> list[dict[str, Any]]
         )
     )
     return annotated
+
+
+def _enrich_app_store_versions(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    bundle_ids = list(
+        dict.fromkeys(
+            bundle_id
+            for row in rows
+            if (bundle_id := _string_value(row.get("bundle_id")))
+            and _should_lookup_app_store_version(row)
+        )
+    )
+    lookup_bundle_ids = bundle_ids[:APP_STORE_LOOKUP_LIMIT]
+    if len(bundle_ids) > APP_STORE_LOOKUP_LIMIT:
+        logging.warning(
+            "Skipping App Store lookup for %s iOS bundle IDs over the %s-bundle limit.",
+            len(bundle_ids) - APP_STORE_LOOKUP_LIMIT,
+            APP_STORE_LOOKUP_LIMIT,
+        )
+    app_store_versions: dict[str, dict[str, Any]] = {}
+    if lookup_bundle_ids:
+        try:
+            app_store_versions = _fetch_app_store_versions(lookup_bundle_ids)
+        except requests.RequestException as exc:
+            logging.warning("App Store version lookup failed: %s", exc)
+        except ValueError as exc:
+            logging.warning("App Store version lookup returned invalid JSON: %s", exc)
+
+    enriched = []
+    for row in rows:
+        updated = dict(row)
+        bundle_id = _string_value(row.get("bundle_id"))
+        store_version = (
+            app_store_versions.get(bundle_id or "")
+            if _should_lookup_app_store_version(row)
+            else None
+        )
+        if store_version and (version := _string_value(store_version.get("version"))):
+            updated["latest_app_version"] = version
+            updated["latest_app_version_source"] = "app_store"
+            updated["latest_app_version_seen_at"] = store_version.get("currentVersionReleaseDate")
+            updated["latest_app_name"] = store_version.get("trackName")
+        else:
+            updated["latest_app_version"] = _string_value(row.get("app_version"))
+            updated["latest_app_version_source"] = "observed"
+        enriched.append(updated)
+    return enriched
+
+
+def _fetch_app_store_versions(bundle_ids: list[str]) -> dict[str, dict[str, Any]]:
+    app_store_versions: dict[str, dict[str, Any]] = {}
+    max_workers = min(APP_STORE_LOOKUP_WORKERS, len(bundle_ids))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_by_bundle_id = {
+            executor.submit(_fetch_app_store_version, bundle_id): bundle_id
+            for bundle_id in bundle_ids
+        }
+        for future in as_completed(future_by_bundle_id):
+            bundle_id = future_by_bundle_id[future]
+            try:
+                result = future.result()
+            except (requests.RequestException, ValueError) as exc:
+                logging.warning("App Store version lookup failed for %s: %s", bundle_id, exc)
+                continue
+            if result:
+                app_store_versions[result["bundleId"]] = result
+    return app_store_versions
+
+
+def _fetch_app_store_version(bundle_id: str) -> dict[str, Any] | None:
+    response = requests.get(
+        APP_STORE_LOOKUP_URL,
+        params={
+            "bundleId": bundle_id,
+            "country": "us",
+        },
+        timeout=APP_STORE_LOOKUP_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    for result in payload.get("results", []):
+        if not isinstance(result, dict):
+            continue
+        fetched_bundle_id = _string_value(result.get("bundleId"))
+        version = _string_value(result.get("version"))
+        if fetched_bundle_id and version:
+            return {**result, "bundleId": fetched_bundle_id}
+    return None
+
+
+def _should_lookup_app_store_version(row: dict[str, Any]) -> bool:
+    platform = (_string_value(row.get("apollos_platform")) or "").lower()
+    bundle_id = _string_value(row.get("bundle_id")) or ""
+    normalized = bundle_id.lower()
+    if platform != "ios":
+        return False
+    return "." in normalized and normalized not in {"unknown", "roku"}
+
+
+def _select_latest_observed_versions(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    latest_by_app: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for row in rows:
+        key = _app_identity_key(row)
+        current = latest_by_app.get(key)
+        if current is None or _is_newer_observed_version(row, current):
+            latest_by_app[key] = row
+    return list(latest_by_app.values())
+
+
+def _app_identity_key(row: dict[str, Any]) -> tuple[str, str, str]:
+    church = _string_value(row.get("church")) or "Unknown church"
+    platform = _string_value(row.get("apollos_platform")) or "unknown"
+    bundle_id = (_string_value(row.get("bundle_id")) or "unknown").lower()
+    if bundle_id in {"unknown", "roku"}:
+        return church, platform, bundle_id
+    return "", platform, bundle_id
+
+
+def _is_newer_observed_version(candidate: dict[str, Any], current: dict[str, Any]) -> bool:
+    candidate_version = _string_value(candidate.get("apollos_version"))
+    current_version = _string_value(current.get("apollos_version"))
+    if candidate_version and current_version:
+        version_compare = compare_versions(candidate_version, current_version)
+        if version_compare != 0:
+            return version_compare > 0
+    elif candidate_version != current_version:
+        return bool(candidate_version)
+
+    candidate_app_version = _string_value(candidate.get("app_version"))
+    current_app_version = _string_value(current.get("app_version"))
+    if candidate_app_version and current_app_version:
+        app_version_compare = compare_versions(candidate_app_version, current_app_version)
+        if app_version_compare != 0:
+            return app_version_compare > 0
+    elif candidate_app_version != current_app_version:
+        return bool(candidate_app_version)
+
+    candidate_church = _string_value(candidate.get("church")) or "Unknown church"
+    current_church = _string_value(current.get("church")) or "Unknown church"
+    if candidate_church != current_church:
+        return current_church == "Unknown church"
+
+    return _timestamp_sort_key(candidate.get("latest_seen_at")) > _timestamp_sort_key(
+        current.get("latest_seen_at")
+    )
 
 
 def build_platform_tabs(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -432,6 +650,7 @@ def format_platform_label(platform: str) -> str:
         "androidtv": "AndroidTV",
         "ios": "iOS",
         "roku": "Roku",
+        "tv": "TV",
         "tvos": "tvOS",
         "unknown": "Unknown",
     }
@@ -442,6 +661,14 @@ def format_version_source_label(version_source: str) -> str:
     labels = {
         "analytics_library": "Analytics library",
         "runtime": "Runtime",
+    }
+    return labels.get(version_source, version_source.replace("_", " ").title())
+
+
+def format_app_version_source_label(version_source: str) -> str:
+    labels = {
+        "app_store": "App Store",
+        "observed": "Observed",
     }
     return labels.get(version_source, version_source.replace("_", " ").title())
 
@@ -478,6 +705,14 @@ def format_timestamp(value: Any) -> str | None:
     if isinstance(value, str):
         return value
     return str(value)
+
+
+def _timestamp_sort_key(value: Any) -> tuple[int, Any]:
+    if isinstance(value, datetime):
+        return (2, value.timestamp())
+    if value is None:
+        return (0, "")
+    return (1, str(value))
 
 
 def _get_app_versions_config() -> AppVersionsConfig:

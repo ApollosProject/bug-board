@@ -51,8 +51,8 @@ python -m unittest discover -s tests -p 'test_*.py'
 - `BIGQUERY_ANALYTICS_DATASETS` – Optional comma-separated BigQuery datasets containing Segment export tables (default: `apollos,apollos_tv,apollos_roku`)
 - `BIGQUERY_ANALYTICS_TABLES` – Optional comma-separated Segment tables to inspect for app runtime versions (default: `identifies,screens,app_became_active,app_became_backgrounded,app_became_inactive`)
 - `BIGQUERY_SERVICE_ACCOUNT_JSON_BASE64` – Base64-encoded Google service account JSON for BigQuery access
-- `APP_VERSIONS_LOOKBACK_DAYS` – Optional lookback window for `/app-versions` (default: `30`)
-- `APP_VERSIONS_LIMIT` – Optional maximum app rows rendered by `/app-versions` (default: `1000`)
+- `APP_VERSIONS_LOOKBACK_DAYS` – Optional lookback window for `/apps` (default: `30`)
+- `APP_VERSIONS_LIMIT` – Optional maximum app rows rendered by `/apps` (default: `1000`)
 
 These can be placed in a `.env` file or exported in your shell.
 
@@ -115,22 +115,30 @@ When Redis caching or the Better Stack heartbeat is enabled, run the worker proc
 
 The legacy `GET /airflow-fleet-health` Better Stack monitor endpoint has been removed.
 
-## App versions dashboard
+## Apps dashboard
 
-`GET /app-versions` reads the Segment BigQuery export and shows the latest observed Apollos
+`GET /apps` reads the Segment BigQuery export and shows the highest observed Apollos
 version signal per church/app/platform. It uses the analytics metadata sent by the mobile and TV
 apps, including the exported `apollos_version`, `app_version`, `app_update_id`, `bundle_id`,
-`application_name`, `church`, and `apollos_platform` fields. Roku Segment exports currently do
-not expose `apollos_version`, so Roku rows use the exported `context_library_version` and are
-labelled as analytics library versions.
+`application_name`, `church`, and `apollos_platform` fields. Public App Store versions are also
+looked up by bundle ID when available so iOS rows can distinguish the observed installed app
+version from the current production App Store version. Roku Segment exports currently do not expose
+`apollos_version`, so Roku rows use the exported `context_library_version` and are labelled as
+analytics library versions.
 
 The page first inspects `INFORMATION_SCHEMA.COLUMNS` for the configured Segment tables and only
 queries tables that expose a supported version signal, so Segment lifecycle-only app-store
 `version` fields are not mistaken for Apollos runtime versions. Runtime rows are marked outdated
-when their latest observed runtime is behind the latest runtime observed for the same platform in
-the lookback window.
+when their highest observed runtime is behind the highest runtime observed for the same platform in
+the lookback window, or when the observed app version is behind an available App Store version. If
+older clients are still active after a release, the dashboard keeps the highest observed runtime for
+the app instead of letting the most recent older-client event hide it. Mobile rows prefer the
+`apollos` Segment dataset, TV rows prefer `apollos_tv`, and Roku rows prefer `apollos_roku` so the
+same app event is not counted twice when Segment exports overlap.
 
 To make the dashboard query live data locally, in production, or in review apps, set
 `BIGQUERY_SERVICE_ACCOUNT_JSON_BASE64`. The value should be a base64-encoded Google service
 account JSON with BigQuery read access to `apollos-project`. Application Default Credentials are
 not used by this dashboard.
+
+The legacy `/app-versions` URL renders the same dashboard for compatibility with existing links.
