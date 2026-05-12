@@ -4,14 +4,6 @@
 
 {% block extra_head %}
 <style>
-  .version-header {
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    align-items: flex-start;
-    flex-wrap: wrap;
-  }
-
   .version-status {
     display: inline-flex;
     padding: 0.22rem 0.65rem;
@@ -22,18 +14,6 @@
     letter-spacing: 0.04em;
   }
 
-  .version-status--ready {
-    background: rgba(46, 125, 50, 0.15);
-    color: #1b5e20;
-  }
-
-  .version-status--setup-required {
-    background: #f3d8a8;
-    color: #613700;
-    border: 1px solid #d2a054;
-  }
-
-  .version-status--unavailable,
   .version-status--outdated {
     background: rgba(183, 28, 28, 0.12);
     color: #8e0000;
@@ -67,6 +47,34 @@
     margin-bottom: 1rem;
     border-bottom: 1px solid var(--pico-muted-border-color);
     padding-bottom: 0.7rem;
+  }
+
+  .platform-latest {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+
+  .platform-latest-title {
+    color: var(--pico-muted-color);
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+
+  .platform-latest-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: 999px;
+    font-size: 0.85rem;
+  }
+
+  .platform-latest-chip code {
+    font-size: 0.85em;
   }
 
   .version-tab {
@@ -136,7 +144,6 @@
       compared with public App Store versions when available.
     </p>
   </div>
-  <span class="version-status version-status--{{ status }}">{{ status_label }}</span>
 </section>
 
 {% if status == "unavailable" %}
@@ -146,6 +153,18 @@
   </article>
 {% elif rows %}
   <article>
+    {% if platform_latest_versions %}
+      <div class="platform-latest" aria-label="Latest observed versions by platform">
+        <span class="platform-latest-title">Latest observed</span>
+        {% for platform_version in platform_latest_versions %}
+          <span class="platform-latest-chip">
+            {{ platform_version.label }}
+            <code>{{ platform_version.version }}</code>
+          </span>
+        {% endfor %}
+      </div>
+    {% endif %}
+
     <div class="version-tabs" role="tablist" aria-label="Platforms">
       {% for tab in platform_tabs %}
         <button
@@ -181,9 +200,7 @@
                 <th>Church</th>
                 <th>App</th>
                 <th>Latest App</th>
-                <th>Platform</th>
                 <th>Observed Version</th>
-                <th>Latest Observed</th>
                 <th>Status</th>
                 <th>Seen</th>
                 <th>Users</th>
@@ -207,9 +224,7 @@
                       {{ row.latest_app_version_source_label or "Observed" }}
                     </span>
                   </td>
-                  <td>{{ row.apollos_platform }}</td>
                   <td><code>{{ row.apollos_version }}</code></td>
-                  <td><code>{{ row.latest_apollos_version }}</code></td>
                   <td>
                     <span class="version-status version-status--{{ row.version_status_class or ('outdated' if row.is_outdated else 'current') }}">
                       {{ row.version_status_label or ("Outdated" if row.is_outdated else "Current") }}
