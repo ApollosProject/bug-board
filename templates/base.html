@@ -22,8 +22,22 @@
           <li><a href="{{ url_for('index') }}">Bug Board</a></li>
         </ul>
         <ul>
-          <li><a href="{{ url_for('team') }}">Engineering Teams</a></li>
-          <li><a href="{{ url_for('apps_dashboard') }}">Apps</a></li>
+          <li>
+            <details class="dropdown site-menu">
+              <summary role="button" class="outline" aria-label="Open local pages menu">
+                <span class="hamburger-icon" aria-hidden="true">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </span>
+              </summary>
+              <ul>
+                <li><a href="{{ url_for('apps_dashboard') }}">Apps</a></li>
+                <li><a href="{{ url_for('team') }}">Teams</a></li>
+                <li><a href="{{ url_for('failing_dags_dashboard') }}">Failing DAGs</a></li>
+              </ul>
+            </details>
+          </li>
         </ul>
         {% block header_nav %}{% endblock %}
       </nav>
@@ -34,12 +48,6 @@
         <div>
           <h6>SRE</h6>
           <ul>
-            <li>
-              <a href="{{ url_for('failing_dags_dashboard') }}">Failing DAGs</a>
-            </li>
-            <li>
-              <a href="{{ url_for('apps_dashboard') }}">Apps</a>
-            </li>
             <li>
               <a href="https://differential-ka.sentry.io/issues" target="_blank" rel="noopener noreferrer">Sentry Issues</a>
             </li>

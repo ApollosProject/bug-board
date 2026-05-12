@@ -8,3 +8,40 @@ footer ol {
 footer li {
   list-style: none;
 }
+
+.site-menu {
+  position: relative;
+}
+
+.site-menu summary[role="button"] {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 2.25rem;
+  padding: 0.45rem 0.55rem;
+  width: 2.25rem;
+}
+
+.site-menu summary[role="button"]::after {
+  display: none;
+}
+
+.site-menu > ul {
+  left: auto;
+  right: 0;
+}
+
+.hamburger-icon {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  width: 1rem;
+}
+
+.hamburger-icon span {
+  background: currentColor;
+  border-radius: 999px;
+  display: block;
+  height: 0.12rem;
+  width: 100%;
+}
