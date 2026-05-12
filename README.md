@@ -120,11 +120,11 @@ The legacy `GET /airflow-fleet-health` Better Stack monitor endpoint has been re
 `GET /apps` reads the Segment BigQuery export and shows the highest observed Apollos
 version signal per church/app/platform. It uses the analytics metadata sent by the mobile and TV
 apps, including the exported `apollos_version`, `app_version`, `app_update_id`, `bundle_id`,
-`application_name`, `church`, and `apollos_platform` fields. Public App Store versions are also
-looked up by bundle ID when available so iOS rows can distinguish the observed installed app
-version from the current production App Store version. Roku Segment exports currently do not expose
-`apollos_version`, so Roku rows use the exported `context_library_version` and are labelled as
-analytics library versions.
+`application_name`, `church`, `apollos_platform`, `source_revision`, and `source_version` fields.
+Public App Store versions are also looked up by bundle ID when available so iOS rows can distinguish
+the observed installed app version from the current production App Store version. Roku Segment
+exports currently do not expose `apollos_version`, so Roku rows use the exported
+`context_library_version` and are labelled as analytics library versions.
 
 The page first inspects `INFORMATION_SCHEMA.COLUMNS` for the configured Segment tables and only
 queries tables that expose a supported version signal, so Segment lifecycle-only app-store
@@ -135,6 +135,9 @@ older clients are still active after a release, the dashboard keeps the highest 
 the app instead of letting the most recent older-client event hide it. Mobile rows prefer the
 `apollos` Segment dataset, TV rows prefer `apollos_tv`, and Roku rows prefer `apollos_roku` so the
 same app event is not counted twice when Segment exports overlap.
+TV rows show `TBD` until source metadata appears in Segment exports. Once those fields are present,
+TV freshness uses the highest observed `source_version` for each TV platform instead of the static
+Expo runtime version.
 
 To make the dashboard query live data locally, in production, or in review apps, set
 `BIGQUERY_SERVICE_ACCOUNT_JSON_BASE64`. The value should be a base64-encoded Google service

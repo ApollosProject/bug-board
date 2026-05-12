@@ -44,11 +44,14 @@ FIELD_CANDIDATES = {
     "app_update_id": ("app_update_id", "appUpdateId"),
     "bundle_id": ("bundle_id", "bundleId"),
     "application_name": ("application_name", "applicationName"),
+    "source_revision": ("source_revision", "sourceRevision"),
+    "source_version": ("source_version", "sourceVersion"),
     "user_id": ("user_id", "userId"),
     "anonymous_id": ("anonymous_id", "anonymousId"),
 }
 
 ROKU_ANALYTICS_VERSION_CANDIDATES = ("context_library_version",)
+TV_PLATFORMS = {"amazon", "androidtv", "roku", "tv", "tvos"}
 
 
 @dataclass(frozen=True)
@@ -281,6 +284,8 @@ def _build_app_versions_query(
             apollos_version,
             app_version,
             app_update_id,
+            source_revision,
+            source_version,
             source_dataset,
             source_table,
             version_source,
@@ -335,6 +340,8 @@ def _build_app_versions_query(
             events.apollos_version,
             events.app_version,
             events.app_update_id,
+            events.source_revision,
+            events.source_version,
             events.source_dataset,
             events.source_table,
             events.version_source,
@@ -352,6 +359,8 @@ def _build_app_versions_query(
             events.apollos_version,
             events.app_version,
             events.app_update_id,
+            events.source_revision,
+            events.source_version,
             events.source_dataset,
             events.source_table,
             events.version_source
@@ -372,6 +381,8 @@ def _build_app_versions_query(
           observation.apollos_version,
           observation.app_version,
           observation.app_update_id,
+          observation.source_revision,
+          observation.source_version,
           observation.source_dataset,
           observation.source_table,
           observation.version_source,
@@ -402,17 +413,25 @@ def _string_select_expression(
 
 def _annotate_version_status(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     latest_by_platform: dict[str, str] = {}
+    latest_source_version_by_platform: dict[str, str] = {}
     for row in rows:
         platform = _string_value(row.get("apollos_platform")) or "unknown"
         version_source = _string_value(row.get("version_source")) or "runtime"
-        if platform == "unknown" or version_source != "runtime":
-            continue
-        version = _string_value(row.get("apollos_version"))
-        if not version:
-            continue
-        current_latest = latest_by_platform.get(platform)
-        if current_latest is None or compare_versions(version, current_latest) > 0:
-            latest_by_platform[platform] = version
+        if platform != "unknown" and version_source == "runtime":
+            version = _string_value(row.get("apollos_version"))
+            if version:
+                current_latest = latest_by_platform.get(platform)
+                if current_latest is None or compare_versions(version, current_latest) > 0:
+                    latest_by_platform[platform] = version
+
+        source_version = _string_value(row.get("source_version"))
+        if platform in TV_PLATFORMS and source_version:
+            current_latest_source = latest_source_version_by_platform.get(platform)
+            if (
+                current_latest_source is None
+                or compare_versions(source_version, current_latest_source) > 0
+            ):
+                latest_source_version_by_platform[platform] = source_version
 
     annotated = []
     for row in rows:
@@ -438,19 +457,35 @@ def _annotate_version_status(rows: list[dict[str, Any]]) -> list[dict[str, Any]]
         is_app_version_outdated = False
         if observed_app_version and latest_app_version:
             is_app_version_outdated = compare_versions(observed_app_version, latest_app_version) < 0
-        is_outdated = is_runtime_outdated or is_app_version_outdated
+        source_version = _string_value(row.get("source_version"))
+        source_revision = _string_value(row.get("source_revision"))
+        latest_source_version = latest_source_version_by_platform.get(platform) or source_version
+        is_source_outdated = False
+        is_source_status_tbd = False
+        if platform in TV_PLATFORMS:
+            is_source_status_tbd = not source_version and not source_revision
+            if source_version and latest_source_version:
+                is_source_outdated = compare_versions(source_version, latest_source_version) < 0
+        is_outdated = is_runtime_outdated or is_app_version_outdated or is_source_outdated
         updated["is_runtime_outdated"] = is_runtime_outdated
         updated["is_app_version_outdated"] = is_app_version_outdated
+        updated["is_source_outdated"] = is_source_outdated
+        updated["is_source_status_tbd"] = is_source_status_tbd
         updated["is_outdated"] = is_outdated
+        updated["latest_source_version"] = latest_source_version
+        updated["source_display"] = format_source_display(source_version, source_revision)
         updated["version_source_label"] = format_version_source_label(version_source)
-        updated["version_status_label"] = (
-            "Observed" if version_source != "runtime" else "Outdated" if is_outdated else "Current"
-        )
-        updated["version_status_class"] = (
-            "observed"
-            if version_source != "runtime"
-            else ("outdated" if is_outdated else "current")
-        )
+        if is_source_status_tbd:
+            version_status_label = "TBD"
+            version_status_class = "observed"
+        elif version_source != "runtime":
+            version_status_label = "Observed"
+            version_status_class = "observed"
+        else:
+            version_status_label = "Outdated" if is_outdated else "Current"
+            version_status_class = "outdated" if is_outdated else "current"
+        updated["version_status_label"] = version_status_label
+        updated["version_status_class"] = version_status_class
         updated["latest_seen_display"] = format_timestamp(row.get("latest_seen_at"))
         annotated.append(updated)
     annotated.sort(
@@ -598,6 +633,15 @@ def _is_newer_observed_version(candidate: dict[str, Any], current: dict[str, Any
     elif candidate_app_version != current_app_version:
         return bool(candidate_app_version)
 
+    candidate_source_version = _string_value(candidate.get("source_version"))
+    current_source_version = _string_value(current.get("source_version"))
+    if candidate_source_version and current_source_version:
+        source_version_compare = compare_versions(candidate_source_version, current_source_version)
+        if source_version_compare != 0:
+            return source_version_compare > 0
+    elif candidate_source_version != current_source_version:
+        return bool(candidate_source_version)
+
     candidate_church = _string_value(candidate.get("church")) or "Unknown church"
     current_church = _string_value(current.get("church")) or "Unknown church"
     if candidate_church != current_church:
@@ -662,6 +706,16 @@ def format_app_version_source_label(version_source: str) -> str:
         "observed": "Observed",
     }
     return labels.get(version_source, version_source.replace("_", " ").title())
+
+
+def format_source_display(source_version: str | None, source_revision: str | None) -> str:
+    if source_version and source_revision:
+        return f"{source_version} ({source_revision[:7]})"
+    if source_version:
+        return source_version
+    if source_revision:
+        return source_revision[:7]
+    return "TBD"
 
 
 def compare_versions(left: str, right: str) -> int:
