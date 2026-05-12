@@ -471,16 +471,33 @@ class AppVersionsContextTest(unittest.TestCase):
 
         self.assertEqual(
             [tab["key"] for tab in tabs],
-            ["all", "android", "androidtv", "ios", "unknown"],
+            ["android", "androidtv", "ios", "unknown"],
         )
-        self.assertEqual(tabs[0]["row_count"], 5)
-        self.assertEqual(tabs[0]["outdated_count"], 1)
         ios_tab = next(tab for tab in tabs if tab["key"] == "ios")
         self.assertEqual(ios_tab["label"], "iOS")
         self.assertEqual(ios_tab["row_count"], 2)
         self.assertEqual(ios_tab["outdated_count"], 1)
         androidtv_tab = next(tab for tab in tabs if tab["key"] == "androidtv")
         self.assertEqual(androidtv_tab["label"], "AndroidTV")
+
+    def test_builds_platform_latest_versions(self):
+        rows = [
+            {"apollos_platform": "ios", "latest_apollos_version": "101"},
+            {"apollos_platform": "ios", "latest_apollos_version": "97"},
+            {"apollos_platform": "android", "latest_apollos_version": "98"},
+            {"apollos_platform": "unknown", "apollos_version": "8.2.13"},
+        ]
+
+        latest_versions = app_versions.build_platform_latest_versions(rows)
+
+        self.assertEqual(
+            latest_versions,
+            [
+                {"key": "android", "label": "Android", "version": "98"},
+                {"key": "ios", "label": "iOS", "version": "101"},
+                {"key": "unknown", "label": "Unknown", "version": "8.2.13"},
+            ],
+        )
 
     def test_builds_query_from_discovered_segment_columns(self):
         config = app_versions.AppVersionsConfig(
@@ -641,6 +658,7 @@ class AppVersionsRouteTest(unittest.TestCase):
             "status_label": "Ready",
             "rows": rows,
             "platform_tabs": app_versions.build_platform_tabs(rows),
+            "platform_latest_versions": app_versions.build_platform_latest_versions(rows),
             "lookback_days": 30,
             "configured_datasets": ("apollos", "apollos_tv"),
             "configured_tables": ("apollos.identifies", "apollos_tv.identifies"),
@@ -653,14 +671,18 @@ class AppVersionsRouteTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("<title>Apps</title>", body)
         self.assertIn('role="tablist"', body)
+        self.assertNotIn('data-version-tab="all"', body)
         self.assertIn('data-version-tab="ios"', body)
         self.assertIn('data-version-tab="android"', body)
         self.assertIn('id="version-panel-ios"', body)
+        self.assertIn("Latest observed", body)
         self.assertIn("One Church", body)
         self.assertIn("Latest App", body)
         self.assertIn("1.0.1", body)
         self.assertIn("App Store", body)
         self.assertIn("Two Church", body)
+        self.assertNotIn("<th>Platform</th>", body)
+        self.assertNotIn("<th>Latest Observed</th>", body)
 
 
 if __name__ == "__main__":
