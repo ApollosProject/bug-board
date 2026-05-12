@@ -161,6 +161,7 @@
                 <th>App</th>
                 <th>Latest App</th>
                 <th>Observed Version</th>
+                <th>Source</th>
                 <th>Status</th>
                 <th>Seen</th>
                 <th>Users</th>
@@ -185,6 +186,7 @@
                     </span>
                   </td>
                   <td><code>{{ row.apollos_version }}</code></td>
+                  <td><code>{{ row.source_display or "TBD" }}</code></td>
                   <td>
                     <span class="version-status version-status--{{ row.version_status_class or ('outdated' if row.is_outdated else 'current') }}">
                       {{ row.version_status_label or ("Outdated" if row.is_outdated else "Current") }}
