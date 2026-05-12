@@ -366,9 +366,14 @@ def failing_dags_dashboard():
     )
 
 
+@app.route("/apps")
+def apps_dashboard():
+    return render_template("app_versions.html", **get_app_versions_context())
+
+
 @app.route("/app-versions")
 def app_versions_dashboard():
-    return render_template("app_versions.html", **get_app_versions_context())
+    return apps_dashboard()
 
 
 def record_breakdown(
