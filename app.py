@@ -12,6 +12,7 @@ from flask import Flask, abort, jsonify, render_template, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from airflow_fleet_health import AirflowFleetHealthError, evaluate_fleet_health
+from app_versions import get_app_versions_context
 from config import load_config
 from constants import ENGINEERING_TEAM_SLUG, PRIORITY_TO_SCORE
 from fleet_health_cache import (
@@ -363,6 +364,11 @@ def failing_dags_dashboard():
         threshold_ratio=payload.get("threshold_ratio"),
         total_active_dags=payload.get("active_dags_total"),
     )
+
+
+@app.route("/app-versions")
+def app_versions_dashboard():
+    return render_template("app_versions.html", **get_app_versions_context())
 
 
 def record_breakdown(
