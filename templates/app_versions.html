@@ -49,34 +49,6 @@
     padding-bottom: 0.7rem;
   }
 
-  .platform-latest {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    flex-wrap: wrap;
-    margin-bottom: 1rem;
-  }
-
-  .platform-latest-title {
-    color: var(--pico-muted-color);
-    font-size: 0.9rem;
-    font-weight: 700;
-  }
-
-  .platform-latest-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.35rem 0.6rem;
-    border: 1px solid var(--pico-muted-border-color);
-    border-radius: 999px;
-    font-size: 0.85rem;
-  }
-
-  .platform-latest-chip code {
-    font-size: 0.85em;
-  }
-
   .version-tab {
     display: inline-flex;
     align-items: center;
@@ -153,18 +125,6 @@
   </article>
 {% elif rows %}
   <article>
-    {% if platform_latest_versions %}
-      <div class="platform-latest" aria-label="Latest observed versions by platform">
-        <span class="platform-latest-title">Latest observed</span>
-        {% for platform_version in platform_latest_versions %}
-          <span class="platform-latest-chip">
-            {{ platform_version.label }}
-            <code>{{ platform_version.version }}</code>
-          </span>
-        {% endfor %}
-      </div>
-    {% endif %}
-
     <div class="version-tabs" role="tablist" aria-label="Platforms">
       {% for tab in platform_tabs %}
         <button

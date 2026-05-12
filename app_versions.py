@@ -96,7 +96,6 @@ def get_app_versions_context() -> dict[str, Any]:
         "status_label": "Ready",
         "rows": rows,
         "platform_tabs": build_platform_tabs(rows),
-        "platform_latest_versions": build_platform_latest_versions(rows),
         "lookback_days": config.lookback_days,
         "configured_tables": discovered_tables,
         "configured_datasets": config.datasets,
@@ -633,35 +632,6 @@ def build_platform_tabs(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
         )
     return tabs
-
-
-def build_platform_latest_versions(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
-    versions_by_platform: dict[str, str] = {}
-    for row in rows:
-        platform = _string_value(row.get("apollos_platform")) or "unknown"
-        version = _string_value(row.get("latest_apollos_version")) or _string_value(
-            row.get("apollos_version")
-        )
-        if not version:
-            continue
-        current = versions_by_platform.get(platform)
-        if current is None or compare_versions(version, current) > 0:
-            versions_by_platform[platform] = version
-
-    return [
-        {
-            "key": platform,
-            "label": format_platform_label(platform),
-            "version": version,
-        }
-        for platform, version in sorted(
-            versions_by_platform.items(),
-            key=lambda item: (
-                1 if item[0] == "unknown" else 0,
-                item[0],
-            ),
-        )
-    ]
 
 
 def format_platform_label(platform: str) -> str:
