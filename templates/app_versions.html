@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+
+{% block title %}App Versions{% endblock %}
+
+{% block extra_head %}
+<style>
+  .version-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .version-status {
+    display: inline-flex;
+    padding: 0.22rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .version-status--ready {
+    background: rgba(46, 125, 50, 0.15);
+    color: #1b5e20;
+  }
+
+  .version-status--setup-required {
+    background: #f3d8a8;
+    color: #613700;
+    border: 1px solid #d2a054;
+  }
+
+  .version-status--unavailable,
+  .version-status--outdated {
+    background: rgba(183, 28, 28, 0.12);
+    color: #8e0000;
+  }
+
+  .version-status--current {
+    background: rgba(46, 125, 50, 0.15);
+    color: #1b5e20;
+  }
+
+  .version-status--observed {
+    background: rgba(84, 110, 122, 0.15);
+    color: #37474f;
+  }
+
+  .version-table th,
+  .version-table td {
+    white-space: nowrap;
+    vertical-align: top;
+  }
+
+  .version-table td:first-child,
+  .version-table td:nth-child(2) {
+    white-space: normal;
+  }
+
+  .version-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--pico-muted-border-color);
+    padding-bottom: 0.7rem;
+  }
+
+  .version-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    width: auto;
+    margin: 0;
+    padding: 0.4rem 0.75rem;
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--pico-color);
+    font-size: 0.9rem;
+    line-height: 1.2;
+  }
+
+  .version-tab[aria-selected="true"] {
+    border-color: var(--pico-primary);
+    background: rgba(1, 114, 173, 0.12);
+    color: var(--pico-primary);
+    font-weight: 700;
+  }
+
+  .version-tab-count {
+    color: var(--pico-muted-color);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .version-tab-alert {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.35rem;
+    height: 1.35rem;
+    padding: 0 0.35rem;
+    border-radius: 999px;
+    background: rgba(183, 28, 28, 0.12);
+    color: #8e0000;
+    font-size: 0.75rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .version-tab-panel[hidden] {
+    display: none;
+  }
+
+  .version-muted {
+    color: var(--pico-muted-color);
+    font-size: 0.9rem;
+  }
+
+  .version-empty p:last-child,
+  .version-setup p:last-child {
+    margin-bottom: 0;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="version-header">
+  <div>
+    <h1>App Versions</h1>
+    <p>
+      Latest app version signals observed in Segment analytics over the last
+      {{ lookback_days }} days.
+    </p>
+  </div>
+  <span class="version-status version-status--{{ status }}">{{ status_label }}</span>
+</section>
+
+{% if status == "unavailable" %}
+  <article class="version-empty">
+    <h2>App version data is unavailable</h2>
+    <p>{{ error_message }}</p>
+    <p class="version-muted">
+      Datasets checked: {{ configured_datasets|join(", ") }}. Tables configured:
+      {{ configured_tables|join(", ") }}.
+    </p>
+  </article>
+{% elif rows %}
+  <article>
+    <div class="version-tabs" role="tablist" aria-label="Platforms">
+      {% for tab in platform_tabs %}
+        <button
+          class="version-tab"
+          id="version-tab-{{ tab.key }}"
+          type="button"
+          role="tab"
+          aria-selected="{{ 'true' if loop.first else 'false' }}"
+          aria-controls="version-panel-{{ tab.key }}"
+          data-version-tab="{{ tab.key }}"
+        >
+          {{ tab.label }}
+          <span class="version-tab-count">{{ tab.row_count }}</span>
+          {% if tab.outdated_count %}
+            <span class="version-tab-alert">{{ tab.outdated_count }}</span>
+          {% endif %}
+        </button>
+      {% endfor %}
+    </div>
+
+    {% for tab in platform_tabs %}
+      <section
+        class="version-tab-panel"
+        id="version-panel-{{ tab.key }}"
+        role="tabpanel"
+        aria-labelledby="version-tab-{{ tab.key }}"
+        {% if not loop.first %}hidden{% endif %}
+      >
+        <div class="overflow-auto">
+          <table class="version-table">
+            <thead>
+              <tr>
+                <th>Church</th>
+                <th>App</th>
+                <th>Platform</th>
+                <th>Version</th>
+                <th>Latest Version</th>
+                <th>Status</th>
+                <th>Seen</th>
+                <th>Users</th>
+                <th>Events</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in tab.rows %}
+                <tr>
+                  <td>
+                    <strong>{{ row.church }}</strong><br />
+                    <span class="version-muted">{{ row.bundle_id }}</span>
+                  </td>
+                  <td>
+                    {{ row.application_name }}<br />
+                    <span class="version-muted">App {{ row.app_version or "unknown" }}</span>
+                  </td>
+                  <td>{{ row.apollos_platform }}</td>
+                  <td>
+                    <code>{{ row.apollos_version }}</code><br />
+                    <span class="version-muted">{{ row.version_source_label or "Runtime" }}</span>
+                  </td>
+                  <td><code>{{ row.latest_apollos_version }}</code></td>
+                  <td>
+                    <span class="version-status version-status--{{ row.version_status_class or ('outdated' if row.is_outdated else 'current') }}">
+                      {{ row.version_status_label or ("Outdated" if row.is_outdated else "Current") }}
+                    </span>
+                  </td>
+                  <td>{{ row.latest_seen_display or "unknown" }}</td>
+                  <td>{{ row.user_count }}</td>
+                  <td>{{ row.event_count }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    {% endfor %}
+    <p class="version-muted">
+      Tables checked: {{ configured_tables|join(", ") }}. Runtime rows are marked outdated
+      when their latest observed runtime is behind the latest runtime observed for the same
+      platform. Roku currently reports its analytics library version, not an Apollos runtime.
+    </p>
+  </article>
+{% else %}
+  <article class="version-empty">
+    <h2>No app versions found</h2>
+    <p>
+      No configured Segment table reported <code>apollos_version</code> during the selected
+      lookback window.
+    </p>
+    <p class="version-muted">
+      Datasets checked: {{ configured_datasets|join(", ") }}. Tables checked:
+      {{ configured_tables|join(", ") }}.
+    </p>
+  </article>
+{% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  for (const tab of document.querySelectorAll('[data-version-tab]')) {
+    tab.addEventListener('click', () => {
+      const selectedKey = tab.dataset.versionTab;
+      for (const candidate of document.querySelectorAll('[data-version-tab]')) {
+        candidate.setAttribute('aria-selected', String(candidate === tab));
+      }
+      for (const panel of document.querySelectorAll('.version-tab-panel')) {
+        panel.hidden = panel.id !== `version-panel-${selectedKey}`;
+      }
+    });
+  }
+</script>
+{% endblock %}

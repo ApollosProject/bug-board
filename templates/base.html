@@ -23,6 +23,7 @@
         </ul>
         <ul>
           <li><a href="{{ url_for('team') }}">Engineering Teams</a></li>
+          <li><a href="{{ url_for('app_versions_dashboard') }}">App Versions</a></li>
         </ul>
         {% block header_nav %}{% endblock %}
       </nav>
@@ -35,6 +36,9 @@
           <ul>
             <li>
               <a href="{{ url_for('failing_dags_dashboard') }}">Failing DAGs</a>
+            </li>
+            <li>
+              <a href="{{ url_for('app_versions_dashboard') }}">App Versions</a>
             </li>
             <li>
               <a href="https://differential-ka.sentry.io/issues" target="_blank" rel="noopener noreferrer">Sentry Issues</a>

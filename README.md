@@ -47,6 +47,12 @@ python -m unittest discover -s tests -p 'test_*.py'
 - `AIRFLOW_FLEET_HEALTH_REFRESH_SECONDS` – Optional worker refresh interval for cached fleet health (default: `60`)
 - `AIRFLOW_FLEET_HEALTH_MAX_STALE_SECONDS` – Optional max age accepted by the web endpoint when reading cached data (default: `180`)
 - `AIRFLOW_FLEET_HEALTH_REDIS_TTL_SECONDS` – Optional Redis TTL for cached fleet health record (default: `900`)
+- `BIGQUERY_ANALYTICS_PROJECT_ID` – Optional Google Cloud project that contains the Segment BigQuery export (default: `apollos-project`)
+- `BIGQUERY_ANALYTICS_DATASETS` – Optional comma-separated BigQuery datasets containing Segment export tables (default: `apollos,apollos_tv,apollos_roku`)
+- `BIGQUERY_ANALYTICS_TABLES` – Optional comma-separated Segment tables to inspect for app runtime versions (default: `identifies,screens,app_became_active,app_became_backgrounded,app_became_inactive`)
+- `BIGQUERY_SERVICE_ACCOUNT_JSON_BASE64` – Base64-encoded Google service account JSON for BigQuery access
+- `APP_VERSIONS_LOOKBACK_DAYS` – Optional lookback window for `/app-versions` (default: `30`)
+- `APP_VERSIONS_LIMIT` – Optional maximum app rows rendered by `/app-versions` (default: `1000`)
 
 These can be placed in a `.env` file or exported in your shell.
 
@@ -108,3 +114,23 @@ When Redis caching or the Better Stack heartbeat is enabled, run the worker proc
 (`python jobs.py`) so it refreshes fleet health on the configured interval.
 
 The legacy `GET /airflow-fleet-health` Better Stack monitor endpoint has been removed.
+
+## App versions dashboard
+
+`GET /app-versions` reads the Segment BigQuery export and shows the latest observed Apollos
+version signal per church/app/platform. It uses the analytics metadata sent by the mobile and TV
+apps, including the exported `apollos_version`, `app_version`, `app_update_id`, `bundle_id`,
+`application_name`, `church`, and `apollos_platform` fields. Roku Segment exports currently do
+not expose `apollos_version`, so Roku rows use the exported `context_library_version` and are
+labelled as analytics library versions.
+
+The page first inspects `INFORMATION_SCHEMA.COLUMNS` for the configured Segment tables and only
+queries tables that expose a supported version signal, so Segment lifecycle-only app-store
+`version` fields are not mistaken for Apollos runtime versions. Runtime rows are marked outdated
+when their latest observed runtime is behind the latest runtime observed for the same platform in
+the lookback window.
+
+To make the dashboard query live data locally, in production, or in review apps, set
+`BIGQUERY_SERVICE_ACCOUNT_JSON_BASE64`. The value should be a base64-encoded Google service
+account JSON with BigQuery read access to `apollos-project`. Application Default Credentials are
+not used by this dashboard.
