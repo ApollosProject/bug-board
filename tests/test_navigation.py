@@ -27,6 +27,18 @@ class NavigationTest(unittest.TestCase):
         self.assertNotIn('href="/team"', footer)
         self.assertNotIn('href="/failing-dags"', footer)
 
+    def test_header_menu_overrides_pico_left_aligned_dropdown(self):
+        with open("static/styles.css") as styles_file:
+            styles = styles_file.read()
+
+        self.assertIn("details.dropdown.site-menu > summary + ul", styles)
+        site_menu_rule = styles.split("details.dropdown.site-menu > summary + ul", 1)[1]
+        site_menu_rule = site_menu_rule.split("}", 1)[0]
+
+        self.assertIn("left: auto;", site_menu_rule)
+        self.assertIn("right: 0;", site_menu_rule)
+        self.assertIn("max-width: calc(100vw - 2rem);", site_menu_rule)
+
     def test_team_labels_use_short_name(self):
         context = {
             "developers": [],

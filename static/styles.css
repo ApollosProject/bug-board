@@ -26,8 +26,9 @@ footer li {
   display: none;
 }
 
-.site-menu > ul {
+details.dropdown.site-menu > summary + ul {
   left: auto;
+  max-width: calc(100vw - 2rem);
   right: 0;
 }
 
