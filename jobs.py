@@ -2,7 +2,7 @@ import logging
 import os
 import re
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from urllib.parse import urlsplit, urlunsplit
 
 import requests
@@ -67,6 +67,10 @@ def _read_positive_int_env(name: str, default: int) -> int:
 def _is_inactive_project(project: dict) -> bool:
     status_name = ((project.get("status") or {}).get("name") or "").strip().lower()
     return bool(project.get("completedAt")) or status_name in INACTIVE_PROJECT_STATUS_NAMES
+
+
+def _format_short_weekday(project_date: date) -> str:
+    return project_date.strftime("%a")
 
 
 def _normalize_linear_display_name(name: str) -> str:
@@ -655,7 +659,12 @@ def post_project_updates():
         target_dt = parse_iso_date(project.get("targetDate"))
         days_left, target_status_text = format_project_target_status(target_dt, now=now)
         if not inactive and target_dt and target_status_text:
-            line = f"- <{url}|{name}> - {target_status_text} - Lead: {lead_md}"
+            target_label = (
+                target_status_text
+                if target_status_text.endswith("overdue")
+                else _format_short_weekday(target_dt)
+            )
+            line = f"- <{url}|{name}> - {target_label} - Lead: {lead_md}"
             if target_status_text.endswith("overdue"):
                 overdue.append({"name": name, "target_dt": target_dt, "line": line})
             elif days_left is not None and 0 <= days_left <= 3:
@@ -671,7 +680,10 @@ def post_project_updates():
                     {
                         "name": name,
                         "start_dt": start_dt,
-                        "line": f"- <{url}|{name}> - Lead: {lead_md}",
+                        "line": (
+                            f"- <{url}|{name}> - {_format_short_weekday(start_dt)} "
+                            f"- Lead: {lead_md}"
+                        ),
                     }
                 )
 

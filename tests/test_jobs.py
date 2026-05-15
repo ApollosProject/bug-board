@@ -715,6 +715,20 @@ class PostProjectUpdatesTest(unittest.TestCase):
         self.assertIn("Starting Tue", message)
         self.assertIn("Starting Wed", message)
         self.assertIn("Lead: <@U1>", message)
+        self.assertIn(
+            "- <https://linear.app/project/ending-tue|Ending Tue> - Tue - Lead: <@U1>", message
+        )
+        self.assertIn(
+            "- <https://linear.app/project/ending-wed|Ending Wed> - Wed - Lead: <@U1>", message
+        )
+        self.assertIn(
+            "- <https://linear.app/project/starting-tue|Starting Tue> - Tue - Lead: <@U1>", message
+        )
+        self.assertIn(
+            "- <https://linear.app/project/starting-wed|Starting Wed> - Wed - Lead: <@U1>", message
+        )
+        self.assertNotIn("d left", message)
+        self.assertNotIn("h left", message)
 
         # Correct projects filtered out
         self.assertNotIn("Ending Far", message)
