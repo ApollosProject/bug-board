@@ -247,12 +247,6 @@ def get_active_change_request_reviewers(pr):
     return active_reviewers
 
 
-def has_active_change_request(pr):
-    """Return True when GitHub says the PR is blocked by requested changes."""
-
-    return bool(get_active_change_request_reviewers(pr))
-
-
 def _get_all_prs(pr_states: List[str]) -> List[Dict[str, Any]]:
     """Fetch PRs for all tracked repositories concurrently."""
     repo_ids = get_repo_ids()
