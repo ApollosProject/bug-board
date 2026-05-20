@@ -44,6 +44,7 @@ MAX_DIFF_CHARS = 12000
 MAX_DIFF_FILES = 20
 FLEET_HEALTH_REFRESH_DEFAULT_SECONDS = 60
 AIRFLOW_FLEET_HEARTBEAT_TIMEOUT_SECONDS = 10
+AIRFLOW_FLEET_UNKNOWN_HEARTBEAT_FAILURE_THRESHOLD = 3
 INACTIVE_PROJECT_STATUS_NAMES = {
     "completed",
     "incomplete",
@@ -51,6 +52,7 @@ INACTIVE_PROJECT_STATUS_NAMES = {
     "cancelled",
     "released",
 }
+_airflow_fleet_unknown_heartbeat_failures = 0
 
 
 def _read_positive_int_env(name: str, default: int) -> int:
@@ -125,8 +127,26 @@ def report_airflow_fleet_health_heartbeat(payload: dict, status: int) -> None:
     if not heartbeat_url:
         return
 
+    global _airflow_fleet_unknown_heartbeat_failures
+
     is_healthy = status < 400 and payload.get("status") == "healthy"
-    url = heartbeat_url if is_healthy else _append_url_path(heartbeat_url, "fail")
+    should_report_failure = not is_healthy
+    if payload.get("status") == "unknown":
+        _airflow_fleet_unknown_heartbeat_failures += 1
+        should_report_failure = (
+            _airflow_fleet_unknown_heartbeat_failures
+            >= AIRFLOW_FLEET_UNKNOWN_HEARTBEAT_FAILURE_THRESHOLD
+        )
+        if not should_report_failure:
+            logging.warning(
+                "Suppressing transient airflow fleet unknown heartbeat failure (%s/%s)",
+                _airflow_fleet_unknown_heartbeat_failures,
+                AIRFLOW_FLEET_UNKNOWN_HEARTBEAT_FAILURE_THRESHOLD,
+            )
+    else:
+        _airflow_fleet_unknown_heartbeat_failures = 0
+
+    url = heartbeat_url if not should_report_failure else _append_url_path(heartbeat_url, "fail")
 
     try:
         response = requests.get(url, timeout=AIRFLOW_FLEET_HEARTBEAT_TIMEOUT_SECONDS)

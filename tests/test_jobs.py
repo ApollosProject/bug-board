@@ -13,6 +13,7 @@ def _install_import_shims() -> None:
 
     requests_module = cast(Any, types.ModuleType("requests"))
     requests_module.post = lambda *args, **kwargs: None
+    requests_module.get = lambda *args, **kwargs: None
     sys.modules.setdefault("requests", requests_module)
 
     schedule_module = cast(Any, types.ModuleType("schedule"))
@@ -216,6 +217,77 @@ class RunDebugJobsTest(unittest.TestCase):
         leaderboard.assert_called_once_with()
         stale.assert_called_once_with()
         project_updates.assert_called_once_with()
+
+
+class AirflowFleetHeartbeatTest(unittest.TestCase):
+    def setUp(self):
+        jobs_module._airflow_fleet_unknown_heartbeat_failures = 0
+
+    def test_reports_success_for_healthy_payload(self):
+        with patch.dict(
+            jobs_module.os.environ,
+            {"AIRFLOW_FLEET_HEARTBEAT_URL": "https://uptime.betterstack.com/heartbeat/token"},
+            clear=False,
+        ):
+            with patch.object(jobs_module.requests, "get") as get_mock:
+                get_mock.return_value.status_code = 200
+                jobs_module.report_airflow_fleet_health_heartbeat({"status": "healthy"}, 200)
+
+        get_mock.assert_called_once_with(
+            "https://uptime.betterstack.com/heartbeat/token",
+            timeout=jobs_module.AIRFLOW_FLEET_HEARTBEAT_TIMEOUT_SECONDS,
+        )
+
+    def test_reports_failure_immediately_for_degraded_payload(self):
+        with patch.dict(
+            jobs_module.os.environ,
+            {"AIRFLOW_FLEET_HEARTBEAT_URL": "https://uptime.betterstack.com/heartbeat/token/"},
+            clear=False,
+        ):
+            with patch.object(jobs_module.requests, "get") as get_mock:
+                get_mock.return_value.status_code = 200
+                jobs_module.report_airflow_fleet_health_heartbeat({"status": "degraded"}, 503)
+
+        get_mock.assert_called_once_with(
+            "https://uptime.betterstack.com/heartbeat/token/fail",
+            timeout=jobs_module.AIRFLOW_FLEET_HEARTBEAT_TIMEOUT_SECONDS,
+        )
+
+    def test_suppresses_transient_unknown_payloads_until_threshold(self):
+        with patch.dict(
+            jobs_module.os.environ,
+            {"AIRFLOW_FLEET_HEARTBEAT_URL": "https://uptime.betterstack.com/heartbeat/token"},
+            clear=False,
+        ):
+            with patch.object(jobs_module.requests, "get") as get_mock:
+                get_mock.return_value.status_code = 200
+
+                jobs_module.report_airflow_fleet_health_heartbeat({"status": "unknown"}, 503)
+                jobs_module.report_airflow_fleet_health_heartbeat({"status": "unknown"}, 503)
+                jobs_module.report_airflow_fleet_health_heartbeat({"status": "unknown"}, 503)
+
+        self.assertEqual(
+            [call.args[0] for call in get_mock.call_args_list],
+            [
+                "https://uptime.betterstack.com/heartbeat/token",
+                "https://uptime.betterstack.com/heartbeat/token",
+                "https://uptime.betterstack.com/heartbeat/token/fail",
+            ],
+        )
+
+    def test_healthy_payload_resets_unknown_failure_count(self):
+        jobs_module._airflow_fleet_unknown_heartbeat_failures = 2
+
+        with patch.dict(
+            jobs_module.os.environ,
+            {"AIRFLOW_FLEET_HEARTBEAT_URL": "https://uptime.betterstack.com/heartbeat/token"},
+            clear=False,
+        ):
+            with patch.object(jobs_module.requests, "get") as get_mock:
+                get_mock.return_value.status_code = 200
+                jobs_module.report_airflow_fleet_health_heartbeat({"status": "healthy"}, 200)
+
+        self.assertEqual(jobs_module._airflow_fleet_unknown_heartbeat_failures, 0)
 
 
 class FixedDateTime(datetime):

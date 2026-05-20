@@ -86,7 +86,8 @@ On each worker refresh, the app:
 - Evaluates the Airflow REST API and inspects each active DAG's latest run state
 - Refreshes the Redis-backed fleet-health cache when Redis is configured
 - Sends the base heartbeat URL when fleet health is healthy
-- Sends the heartbeat URL with `/fail` appended when fleet health is unhealthy or unknown
+- Sends the heartbeat URL with `/fail` appended when fleet health is degraded
+- Suppresses one-off `unknown` evaluations and only sends `/fail` after 3 consecutive unknowns
 
 The health calculation:
 
