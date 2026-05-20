@@ -378,27 +378,28 @@ def get_prs_waiting_for_review_by_reviewer():
         if has_failing_required_checks(pr):
             # waiting on author to fix checks
             continue
-        for review in pr["timelineItems"]["nodes"]:
-            requested_at = _parse_github_timestamp(review.get("createdAt"))
-            if (
-                review["requestedReviewer"]
-                and requested_at is not None
-                and requested_at < threshold
-            ):
-                reviewer = review["requestedReviewer"]["login"]
-                open_review_requests = [
-                    req["requestedReviewer"]["login"] for req in pr["reviewRequests"]["nodes"]
-                ]
-                if (
-                    active_change_request_reviewers
-                    and reviewer not in active_change_request_reviewers
-                ):
-                    continue
-                if not active_change_request_reviewers and reviewer not in open_review_requests:
-                    continue
-                if reviewer not in stuck_prs:
-                    stuck_prs[reviewer] = []
-                stuck_prs[reviewer].append(pr)
+        latest_review_request_times_by_reviewer: dict[str, datetime] = {}
+        for review_request in pr["timelineItems"]["nodes"]:
+            requested_reviewer = review_request.get("requestedReviewer") or {}
+            reviewer = requested_reviewer.get("login")
+            requested_at = _parse_github_timestamp(review_request.get("createdAt"))
+            if not reviewer or requested_at is None:
+                continue
+            latest_request_at = latest_review_request_times_by_reviewer.get(reviewer)
+            if latest_request_at is None or requested_at > latest_request_at:
+                latest_review_request_times_by_reviewer[reviewer] = requested_at
+
+        open_review_requests = {
+            req["requestedReviewer"]["login"] for req in pr["reviewRequests"]["nodes"]
+        }
+        reviewers = active_change_request_reviewers or open_review_requests
+        for reviewer in reviewers:
+            requested_at = latest_review_request_times_by_reviewer.get(reviewer)
+            if requested_at is None or requested_at >= threshold:
+                continue
+            if reviewer not in stuck_prs:
+                stuck_prs[reviewer] = []
+            stuck_prs[reviewer].append(pr)
     return stuck_prs
 
 

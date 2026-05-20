@@ -311,7 +311,7 @@ class GraphQLClientRequestTests(unittest.TestCase):
                         "requestedReviewer": {"login": "dylan-manchester"},
                     },
                     {
-                        "createdAt": "2026-03-24T14:12:12Z",
+                        "createdAt": "2026-03-24T13:12:12Z",
                         "requestedReviewer": {"login": "dylan-manchester"},
                     },
                 ]
@@ -324,6 +324,43 @@ class GraphQLClientRequestTests(unittest.TestCase):
                 waiting = github.get_prs_waiting_for_review_by_reviewer()
 
         self.assertEqual(waiting["dylan-manchester"], [pr])
+
+    def test_waiting_for_review_uses_latest_review_request_time(self):
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                base = datetime(2026, 3, 25, 14, 0, 0)
+                if tz is None:
+                    return base
+                return base.replace(tzinfo=tz)
+
+        pr = {
+            "number": 6293,
+            "additions": 55,
+            "mergeable": "MERGEABLE",
+            "reviewDecision": "REVIEW_REQUIRED",
+            "reviewRequests": {"nodes": [{"requestedReviewer": {"login": "dylan-manchester"}}]},
+            "reviews": {"nodes": []},
+            "timelineItems": {
+                "nodes": [
+                    {
+                        "createdAt": "2026-03-23T13:51:12Z",
+                        "requestedReviewer": {"login": "dylan-manchester"},
+                    },
+                    {
+                        "createdAt": "2026-03-25T13:00:00Z",
+                        "requestedReviewer": {"login": "dylan-manchester"},
+                    },
+                ]
+            },
+            "statusCheckRollup": {"state": "SUCCESS"},
+        }
+
+        with patch.object(github, "_get_all_prs", return_value=[pr]):
+            with patch.object(github, "datetime", FixedDateTime):
+                waiting = github.get_prs_waiting_for_review_by_reviewer()
+
+        self.assertEqual(waiting, {})
 
     def test_waiting_for_review_falls_back_to_current_review_nodes_for_missing_decision(self):
         class FixedDateTime(datetime):
