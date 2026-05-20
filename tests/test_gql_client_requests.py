@@ -310,10 +310,6 @@ class GraphQLClientRequestTests(unittest.TestCase):
                         "createdAt": "2026-03-24T13:51:12Z",
                         "requestedReviewer": {"login": "dylan-manchester"},
                     },
-                    {
-                        "createdAt": "2026-03-24T13:12:12Z",
-                        "requestedReviewer": {"login": "dylan-manchester"},
-                    },
                 ]
             },
             "statusCheckRollup": {"state": "SUCCESS"},
