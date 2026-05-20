@@ -43,7 +43,7 @@ tenacity==9.1.4
 typing_extensions==4.15.0
 urllib3==2.7.0
 Werkzeug==3.1.8
-yarl==1.23.0
+yarl==1.24.2
 openai==2.34.0
 mypy==2.1.0
 types-PyYAML==6.0.12.20260510
