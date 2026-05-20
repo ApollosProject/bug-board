@@ -178,7 +178,6 @@ class GraphQLClientRequestTests(unittest.TestCase):
                 return base.replace(tzinfo=tz)
 
         pr = {
-            "number": 6293,
             "additions": 55,
             "mergeable": "MERGEABLE",
             "reviewDecision": "CHANGES_REQUESTED",
@@ -186,6 +185,7 @@ class GraphQLClientRequestTests(unittest.TestCase):
                 "nodes": [
                     {"requestedReviewer": {"login": "dylan-manchester"}},
                     {"requestedReviewer": {"login": "michael"}},
+                    {"requestedReviewer": {}},
                 ]
             },
             "reviews": {
@@ -234,7 +234,6 @@ class GraphQLClientRequestTests(unittest.TestCase):
                 return base.replace(tzinfo=tz)
 
         pr = {
-            "number": 6293,
             "additions": 55,
             "mergeable": "MERGEABLE",
             "reviewDecision": "REVIEW_REQUIRED",
@@ -290,7 +289,6 @@ class GraphQLClientRequestTests(unittest.TestCase):
                 return base.replace(tzinfo=tz)
 
         pr = {
-            "number": 6293,
             "additions": 55,
             "mergeable": "MERGEABLE",
             "reviewDecision": "CHANGES_REQUESTED",
@@ -331,7 +329,6 @@ class GraphQLClientRequestTests(unittest.TestCase):
                 return base.replace(tzinfo=tz)
 
         pr = {
-            "number": 6293,
             "additions": 55,
             "mergeable": "MERGEABLE",
             "reviewDecision": "REVIEW_REQUIRED",
@@ -368,7 +365,6 @@ class GraphQLClientRequestTests(unittest.TestCase):
                 return base.replace(tzinfo=tz)
 
         pr = {
-            "number": 6293,
             "additions": 55,
             "mergeable": "MERGEABLE",
             "reviewDecision": None,
@@ -409,7 +405,6 @@ class GraphQLClientRequestTests(unittest.TestCase):
                 return base.replace(tzinfo=tz)
 
         pr = {
-            "number": 6293,
             "additions": 55,
             "mergeable": "MERGEABLE",
             "reviewDecision": None,
@@ -450,7 +445,6 @@ class GraphQLClientRequestTests(unittest.TestCase):
                 return base.replace(tzinfo=tz)
 
         pr = {
-            "number": 6293,
             "additions": 55,
             "mergeable": "MERGEABLE",
             "reviewDecision": None,

@@ -374,7 +374,9 @@ def get_prs_waiting_for_review_by_reviewer():
             continue
         active_change_request_reviewers = get_active_change_request_reviewers(pr)
         open_review_requests = {
-            req["requestedReviewer"]["login"] for req in pr["reviewRequests"]["nodes"]
+            reviewer
+            for req in pr["reviewRequests"]["nodes"]
+            if (reviewer := (req.get("requestedReviewer") or {}).get("login"))
         }
         if not open_review_requests:
             continue
