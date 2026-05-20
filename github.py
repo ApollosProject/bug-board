@@ -207,12 +207,12 @@ def _parse_github_timestamp(value: str | None) -> datetime | None:
         return None
 
 
-def has_active_change_request(pr):
-    """Return True when GitHub says the PR is blocked by requested changes."""
+def get_active_change_request_reviewers(pr):
+    """Return reviewers with currently active requested-changes reviews."""
 
     review_decision = pr.get("reviewDecision")
-    if review_decision:
-        return review_decision == "CHANGES_REQUESTED"
+    if review_decision and review_decision != "CHANGES_REQUESTED":
+        return set()
 
     review_request_times_by_reviewer: dict[str, list[datetime]] = {}
     for review_request in pr.get("timelineItems", {}).get("nodes", []):
@@ -222,20 +222,35 @@ def has_active_change_request(pr):
         if reviewer and requested_at is not None:
             review_request_times_by_reviewer.setdefault(reviewer, []).append(requested_at)
 
+    has_change_request_review = False
+    active_reviewers = set()
     for review in pr.get("reviews", {}).get("nodes", []):
         if review.get("state") != "CHANGES_REQUESTED":
             continue
+        has_change_request_review = True
         reviewer = (review.get("author") or {}).get("login")
         submitted_at = _parse_github_timestamp(review.get("submittedAt"))
         if not reviewer or submitted_at is None:
-            return True
+            continue
         latest_review_request_at = max(
             review_request_times_by_reviewer.get(reviewer, []),
             default=None,
         )
         if latest_review_request_at is None or submitted_at >= latest_review_request_at:
-            return True
-    return False
+            active_reviewers.add(reviewer)
+    if review_decision == "CHANGES_REQUESTED" and not has_change_request_review:
+        return {
+            (req.get("requestedReviewer") or {}).get("login")
+            for req in pr.get("reviewRequests", {}).get("nodes", [])
+            if (req.get("requestedReviewer") or {}).get("login")
+        }
+    return active_reviewers
+
+
+def has_active_change_request(pr):
+    """Return True when GitHub says the PR is blocked by requested changes."""
+
+    return bool(get_active_change_request_reviewers(pr))
 
 
 def _get_all_prs(pr_states: List[str]) -> List[Dict[str, Any]]:
@@ -350,9 +365,9 @@ def merged_prs_by_reviewer(days: int = 30) -> Dict[str, List[Dict[str, Any]]]:
 def get_prs_waiting_for_review_by_reviewer():
     """Return PRs waiting on review, grouped by reviewer.
 
-    Includes pull requests with an open review request that was made more
-    than 24 hours ago, even if the PR has previously been reviewed. Only
-    includes PRs with fewer than 200 lines added.
+    Includes pull requests with an open review request or active requested-changes
+    reviewer that has been waiting more than 24 hours, even if the PR has
+    previously been reviewed. Only includes PRs with fewer than 200 lines added.
     """
     all_prs = _get_all_prs(["OPEN"])
     stuck_prs = {}
@@ -363,11 +378,8 @@ def get_prs_waiting_for_review_by_reviewer():
             continue
         if has_known_merge_conflicts(pr):
             continue
-        if has_active_change_request(pr):
-            continue
-        if not pr["reviewRequests"]["nodes"]:
-            continue
-        if any(r.get("state") == "APPROVED" for r in pr["reviews"]["nodes"]):
+        active_change_request_reviewers = get_active_change_request_reviewers(pr)
+        if not pr["reviewRequests"]["nodes"] and not active_change_request_reviewers:
             continue
         if has_failing_required_checks(pr):
             # waiting on author to fix checks
@@ -383,7 +395,12 @@ def get_prs_waiting_for_review_by_reviewer():
                 open_review_requests = [
                     req["requestedReviewer"]["login"] for req in pr["reviewRequests"]["nodes"]
                 ]
-                if reviewer not in open_review_requests:
+                if (
+                    active_change_request_reviewers
+                    and reviewer not in active_change_request_reviewers
+                ):
+                    continue
+                if not active_change_request_reviewers and reviewer not in open_review_requests:
                     continue
                 if reviewer not in stuck_prs:
                     stuck_prs[reviewer] = []

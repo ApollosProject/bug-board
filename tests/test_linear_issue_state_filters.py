@@ -49,6 +49,22 @@ _install_import_shims()
 from linear import issues as issues_module  # noqa: E402
 
 
+def _query_text(query) -> str:
+    request = getattr(query, "request", None)
+    if request is not None:
+        return request
+    document = getattr(query, "document", None)
+    if document is not None:
+        from graphql import print_ast
+
+        return print_ast(document)
+    return query
+
+
+def _compact_query_text(query) -> str:
+    return "".join(_query_text(query).split())
+
+
 class FixedDateTime(datetime):
     @classmethod
     def utcnow(cls):
@@ -83,10 +99,13 @@ class LinearIssueStateFiltersTest(unittest.TestCase):
                     with patch.object(issues_module, "datetime", FixedDateTime):
                         issues = issues_module.get_open_issues(2, "Bug")
 
-        query_text = execute_calls[0][0]
-        self.assertIn('state: { type: { nin: ["completed", "canceled"] } }', query_text)
+        query_text = _compact_query_text(execute_calls[0][0])
+        self.assertIn(
+            'state:{type:{in:["triage","backlog","unstarted","started"]}}',
+            query_text,
+        )
         self.assertNotIn(
-            'state: { name: { nin: ["Done", "Canceled", "Duplicate"] } }',
+            'state:{name:{nin:["Done","Canceled","Duplicate"]}}',
             query_text,
         )
         self.assertIn("slaMediumRiskAt", query_text)
@@ -119,9 +138,9 @@ class LinearIssueStateFiltersTest(unittest.TestCase):
             with patch.object(issues_module, "get_linear_team_key", return_value="APO"):
                 issues_module.get_completed_issues_summary(2, "Bug", 30)
 
-        query_text = execute_calls[0][0]
-        self.assertIn('state: { type: { in: ["completed"] } }', query_text)
-        self.assertNotIn('state: { name: { in: ["Done"] } }', query_text)
+        query_text = _compact_query_text(execute_calls[0][0])
+        self.assertIn('state:{type:{in:["completed"]}}', query_text)
+        self.assertNotIn('state:{name:{in:["Done"]}}', query_text)
         self.assertEqual(execute_calls[0][1]["days"], "-P30D")
 
     def test_get_open_issues_for_person_uses_state_type_for_open_filter(self):
@@ -151,10 +170,13 @@ class LinearIssueStateFiltersTest(unittest.TestCase):
                     with patch.object(issues_module, "datetime", FixedDateTime):
                         issues = issues_module.get_open_issues_for_person("michael.neeley")
 
-        query_text = execute_calls[0][0]
-        self.assertIn('state: { type: { nin: ["completed", "canceled"] } }', query_text)
+        query_text = _compact_query_text(execute_calls[0][0])
+        self.assertIn(
+            'state:{type:{in:["triage","backlog","unstarted","started"]}}',
+            query_text,
+        )
         self.assertNotIn(
-            'state: { name: { nin: ["Done", "Canceled", "Duplicate"] } }',
+            'state:{name:{nin:["Done","Canceled","Duplicate"]}}',
             query_text,
         )
         self.assertEqual(issues[0]["platform"], "Mobile")
@@ -210,9 +232,9 @@ class LinearIssueStateFiltersTest(unittest.TestCase):
                             )
 
         self.assertEqual(len(execute_calls), 2)
-        query_text = execute_calls[0][0]
-        self.assertIn('state: { type: { in: ["completed"] } }', query_text)
-        self.assertNotIn('state: { name: { in: ["Done"] } }', query_text)
+        query_text = _compact_query_text(execute_calls[0][0])
+        self.assertIn('state:{type:{in:["completed"]}}', query_text)
+        self.assertNotIn('state:{name:{in:["Done"]}}', query_text)
         self.assertEqual(execute_calls[0][1]["cursor"], None)
         self.assertEqual(execute_calls[1][1]["cursor"], "cursor-1")
         self.assertEqual(issues[0]["platform"], "iOS")
