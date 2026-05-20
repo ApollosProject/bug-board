@@ -69,6 +69,10 @@ def _install_import_shims() -> None:
     aiohttp_module.AIOHTTPTransport = DummyAIOHTTPTransport
     sys.modules.setdefault("gql.transport.aiohttp", aiohttp_module)
 
+    openai_module = cast(Any, types.ModuleType("openai_client"))
+    openai_module.get_chat_function_call = lambda *args, **kwargs: {}
+    sys.modules.setdefault("openai_client", openai_module)
+
 
 _install_import_shims()
 
