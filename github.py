@@ -373,15 +373,13 @@ def get_prs_waiting_for_review_by_reviewer():
         if has_known_merge_conflicts(pr):
             continue
         active_change_request_reviewers = get_active_change_request_reviewers(pr)
-        if not pr["reviewRequests"]["nodes"] and not active_change_request_reviewers:
-            continue
-        if has_failing_required_checks(pr):
-            # waiting on author to fix checks
-            continue
         open_review_requests = {
             req["requestedReviewer"]["login"] for req in pr["reviewRequests"]["nodes"]
         }
         if not open_review_requests:
+            continue
+        if has_failing_required_checks(pr):
+            # waiting on author to fix checks
             continue
         latest_review_request_times_by_reviewer: dict[str, datetime] = {}
         for review_request in pr["timelineItems"]["nodes"]:
