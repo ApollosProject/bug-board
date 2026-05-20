@@ -378,6 +378,11 @@ def get_prs_waiting_for_review_by_reviewer():
         if has_failing_required_checks(pr):
             # waiting on author to fix checks
             continue
+        open_review_requests = {
+            req["requestedReviewer"]["login"] for req in pr["reviewRequests"]["nodes"]
+        }
+        if not open_review_requests:
+            continue
         latest_review_request_times_by_reviewer: dict[str, datetime] = {}
         for review_request in pr["timelineItems"]["nodes"]:
             requested_reviewer = review_request.get("requestedReviewer") or {}
@@ -389,10 +394,10 @@ def get_prs_waiting_for_review_by_reviewer():
             if latest_request_at is None or requested_at > latest_request_at:
                 latest_review_request_times_by_reviewer[reviewer] = requested_at
 
-        open_review_requests = {
-            req["requestedReviewer"]["login"] for req in pr["reviewRequests"]["nodes"]
-        }
-        reviewers = active_change_request_reviewers or open_review_requests
+        if active_change_request_reviewers:
+            reviewers = active_change_request_reviewers & open_review_requests
+        else:
+            reviewers = open_review_requests
         for reviewer in reviewers:
             requested_at = latest_review_request_times_by_reviewer.get(reviewer)
             if requested_at is None or requested_at >= threshold:

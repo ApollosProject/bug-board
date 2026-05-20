@@ -280,7 +280,7 @@ class GraphQLClientRequestTests(unittest.TestCase):
         self.assertEqual(waiting["michael"], [pr])
         self.assertEqual(waiting["dylan-manchester"], [pr])
 
-    def test_waiting_for_review_allows_rerequested_reviewer_after_changes_requested(self):
+    def test_waiting_for_review_skips_change_request_without_open_review_request(self):
         class FixedDateTime(datetime):
             @classmethod
             def now(cls, tz=None):
@@ -294,7 +294,7 @@ class GraphQLClientRequestTests(unittest.TestCase):
             "additions": 55,
             "mergeable": "MERGEABLE",
             "reviewDecision": "CHANGES_REQUESTED",
-            "reviewRequests": {"nodes": [{"requestedReviewer": {"login": "dylan-manchester"}}]},
+            "reviewRequests": {"nodes": []},
             "reviews": {
                 "nodes": [
                     {
@@ -323,7 +323,7 @@ class GraphQLClientRequestTests(unittest.TestCase):
             with patch.object(github, "datetime", FixedDateTime):
                 waiting = github.get_prs_waiting_for_review_by_reviewer()
 
-        self.assertEqual(waiting["dylan-manchester"], [pr])
+        self.assertEqual(waiting, {})
 
     def test_waiting_for_review_uses_latest_review_request_time(self):
         class FixedDateTime(datetime):
