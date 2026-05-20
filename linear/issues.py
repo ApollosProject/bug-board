@@ -20,7 +20,7 @@ def get_open_issues(priority, label):
               team: { key: { eq: $team_key } }
               labels: { name: { eq: $label } }
               priority: { lte: $priority, gte: 1 }
-              state: { type: { nin: ["completed", "canceled"] } }
+              state: { type: { in: ["triage", "backlog", "unstarted", "started"] } }
               project: { null: true }
             }
             orderBy: createdAt
@@ -488,7 +488,7 @@ def get_open_issues_for_person(login: str):
             filter: {
               team: { key: { eq: $team_key } }
               assignee: { displayName: { eq: $login } }
-              state: { type: { nin: ["completed", "canceled"] } }
+              state: { type: { in: ["triage", "backlog", "unstarted", "started"] } }
             }
             orderBy: updatedAt
           ) {
