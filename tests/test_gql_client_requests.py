@@ -168,6 +168,47 @@ class GraphQLClientRequestTests(unittest.TestCase):
 
         self.assertEqual(waiting, {})
 
+    def test_waiting_for_review_skips_approved_prs_with_open_requests(self):
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                base = datetime(2026, 3, 25, 14, 0, 0)
+                if tz is None:
+                    return base
+                return base.replace(tzinfo=tz)
+
+        pr = {
+            "number": 1479,
+            "additions": 3,
+            "mergeable": "MERGEABLE",
+            "reviewDecision": "APPROVED",
+            "reviewRequests": {"nodes": [{"requestedReviewer": {"login": "redreceipt"}}]},
+            "reviews": {
+                "nodes": [
+                    {
+                        "author": {"login": "solideo-gloria"},
+                        "state": "APPROVED",
+                        "submittedAt": "2026-03-24T13:52:12Z",
+                    }
+                ]
+            },
+            "timelineItems": {
+                "nodes": [
+                    {
+                        "createdAt": "2026-03-24T13:51:12Z",
+                        "requestedReviewer": {"login": "redreceipt"},
+                    },
+                ]
+            },
+            "statusCheckRollup": {"state": "SUCCESS"},
+        }
+
+        with patch.object(github, "_get_all_prs", return_value=[pr]):
+            with patch.object(github, "datetime", FixedDateTime):
+                waiting = github.get_prs_waiting_for_review_by_reviewer()
+
+        self.assertEqual(waiting, {})
+
     def test_waiting_for_review_only_notifies_active_change_request_reviewer(self):
         class FixedDateTime(datetime):
             @classmethod
