@@ -262,6 +262,15 @@ def _person_matches_any_unassigned_platform(person: dict, bugs: list[dict]) -> b
     return any(_normalize_platform_name(bug.get("platform")) in allowed_platforms for bug in bugs)
 
 
+def _is_duplicate_issue(issue: dict) -> bool:
+    state_name = ((issue.get("state") or {}).get("name") or "").strip().lower()
+    if state_name == "duplicate":
+        return True
+
+    labels = (issue.get("labels") or {}).get("nodes", [])
+    return any(((label or {}).get("name") or "").strip().lower() == "duplicate" for label in labels)
+
+
 def _get_pr_diffs(issue):
     """Return a list of diffs for PRs linked in the issue attachments."""
 
@@ -318,6 +327,7 @@ def _get_pr_diffs(issue):
 def post_priority_bugs():
     config = load_config()
     open_priority_bugs = get_open_issues(2, "Bug")
+    open_priority_bugs = [bug for bug in open_priority_bugs if not _is_duplicate_issue(bug)]
     unassigned = [bug for bug in open_priority_bugs if bug["assignee"] is None]
     now = datetime.now(timezone.utc)
 

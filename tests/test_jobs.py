@@ -227,6 +227,47 @@ class FixedDateTime(datetime):
 
 
 class PostPriorityBugsTest(unittest.TestCase):
+    def test_excludes_issues_marked_duplicate(self):
+        posted = []
+        bugs = [
+            {
+                "id": "duplicate-bug",
+                "title": "Duplicate bug",
+                "assignee": None,
+                "url": "https://linear.app/issue/duplicate-bug",
+                "platform": "Admin",
+                "daysOpen": 26,
+                "priority": 2,
+                "state": {"name": "Duplicate"},
+                "slaMediumRiskAt": "2026-03-14T08:00:00.000Z",
+                "slaHighRiskAt": "2026-03-15T09:00:00.000Z",
+                "slaBreachesAt": "2026-03-15T11:00:00.000Z",
+            },
+            {
+                "id": "active-bug",
+                "title": "Active bug",
+                "assignee": None,
+                "url": "https://linear.app/issue/active-bug",
+                "platform": "Web",
+                "daysOpen": 2,
+                "priority": 2,
+                "state": {"name": "Todo"},
+                "slaMediumRiskAt": "2026-03-14T08:00:00.000Z",
+                "slaHighRiskAt": "2026-03-16T10:00:00.000Z",
+                "slaBreachesAt": "2026-03-17T12:00:00.000Z",
+            },
+        ]
+
+        with patch.object(jobs_module, "load_config", return_value={"people": {}, "platforms": {}}):
+            with patch.object(jobs_module, "get_open_issues", return_value=bugs):
+                with patch.object(jobs_module, "post_to_slack", side_effect=posted.append):
+                    with patch.object(jobs_module, "datetime", FixedDateTime):
+                        jobs_module.post_priority_bugs()
+
+        self.assertEqual(len(posted), 1)
+        self.assertIn("Active bug", posted[0])
+        self.assertNotIn("Duplicate bug", posted[0])
+
     def test_uses_linear_sla_windows_for_at_risk_and_overdue(self):
         posted = []
         bugs = [
