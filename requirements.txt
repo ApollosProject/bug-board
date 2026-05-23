@@ -31,7 +31,7 @@ propcache==0.5.2
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 PyYAML==6.0.3
-requests==2.33.1
+requests==2.34.2
 redis==7.4.0
 requests-toolbelt==1.0.0
 pytz==2026.2
