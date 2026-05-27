@@ -62,6 +62,7 @@ def _install_import_shims() -> None:
     linear_issues_module.get_completed_issues = lambda *args, **kwargs: []
     linear_issues_module.get_completed_issues_for_person = lambda *args, **kwargs: []
     linear_issues_module.get_open_issues = lambda *args, **kwargs: []
+    linear_issues_module.get_open_stale_issues = lambda *args, **kwargs: []
     linear_issues_module.get_open_issues_in_projects = lambda *args, **kwargs: []
     linear_issues_module.get_stale_issues_by_assignee = lambda *args, **kwargs: {}
     sys.modules.setdefault("linear.issues", linear_issues_module)
@@ -217,6 +218,61 @@ class RunDebugJobsTest(unittest.TestCase):
         leaderboard.assert_called_once_with()
         stale.assert_called_once_with()
         project_updates.assert_called_once_with()
+
+
+class PostStaleTest(unittest.TestCase):
+    def test_uses_open_stale_issues_without_label_or_priority_queries(self):
+        open_issues = [{"id": "APO-7555"}]
+
+        def fake_get_stale_issues(issues, days):
+            self.assertIs(issues, open_issues)
+            self.assertEqual(days, 7)
+            return {
+                "dylan": [
+                    {
+                        "title": "Regression in Apple Pay campus/fund confirmation flow",
+                        "url": "https://linear.app/differential/issue/APO-7555",
+                        "daysStale": 74,
+                        "priority": 0,
+                        "platform": None,
+                    }
+                ]
+            }
+
+        with patch.object(
+            jobs_module,
+            "get_team_members",
+            return_value={"dylan": {"linear_username": "dylan", "slack_id": "U03LD9MJLNP"}},
+        ):
+            with patch.object(
+                jobs_module, "get_prs_waiting_for_review_by_reviewer", return_value={}
+            ):
+                with patch.object(
+                    jobs_module,
+                    "get_open_issues",
+                    side_effect=AssertionError("post_stale should use get_open_stale_issues"),
+                ):
+                    with patch.object(
+                        jobs_module, "get_open_stale_issues", return_value=open_issues
+                    ):
+                        with patch.object(
+                            jobs_module,
+                            "get_stale_issues_by_assignee",
+                            side_effect=fake_get_stale_issues,
+                        ):
+                            with patch.dict(
+                                jobs_module.os.environ,
+                                {"APP_URL": "https://bug-board.example"},
+                                clear=False,
+                            ):
+                                with patch.object(jobs_module, "post_to_slack") as post:
+                                    jobs_module.post_stale()
+
+        post.assert_called_once()
+        message = post.call_args.args[0]
+        self.assertIn("*Stale Open Issues*", message)
+        self.assertIn("APO-7555", message)
+        self.assertIn("(74d)", message)
 
 
 class AirflowFleetHeartbeatTest(unittest.TestCase):

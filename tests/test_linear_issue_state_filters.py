@@ -115,6 +115,44 @@ class LinearIssueStateFiltersTest(unittest.TestCase):
         self.assertEqual(issues[0]["daysOpen"], 1)
         self.assertEqual(issues[0]["slaText"], "5h overdue")
 
+    def test_get_open_stale_issues_has_no_label_or_priority_constraint(self):
+        execute_calls = []
+        response = {
+            "issues": {
+                "nodes": [
+                    {
+                        "title": "Unprioritized stale issue",
+                        "createdAt": "2026-03-01T00:00:00.000Z",
+                        "updatedAt": "2026-03-01T12:00:00.000Z",
+                        "labels": {"nodes": []},
+                        "priority": 0,
+                    }
+                ],
+                "pageInfo": {"hasNextPage": False, "endCursor": None},
+            }
+        }
+
+        def fake_execute(query, variable_values=None):
+            execute_calls.append((query, variable_values))
+            return response
+
+        with patch.object(issues_module, "_execute", side_effect=fake_execute):
+            with patch.object(issues_module, "get_linear_team_key", return_value="APO"):
+                with patch.object(issues_module, "get_platforms", return_value={"mobile"}):
+                    issues = issues_module.get_open_stale_issues()
+
+        query_text = _compact_query_text(execute_calls[0][0])
+        self.assertIn(
+            'state:{type:{in:["triage","backlog","unstarted","started"]}}',
+            query_text,
+        )
+        self.assertIn("project:{null:true}", query_text)
+        self.assertNotIn("labels:{name:{eq:$label}}", query_text)
+        self.assertNotIn("priority:{", query_text)
+        self.assertEqual(execute_calls[0][1], {"team_key": "APO", "cursor": None})
+        self.assertEqual(issues[0]["priority"], 0)
+        self.assertIsNone(issues[0]["platform"])
+
     def test_get_completed_issues_summary_uses_completed_state_type(self):
         execute_calls = []
         response = {

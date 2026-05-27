@@ -28,6 +28,7 @@ from linear.issues import (
     get_completed_issues,
     get_completed_issues_for_person,
     get_open_issues,
+    get_open_stale_issues,
     get_stale_issues_by_assignee,
 )
 from linear.projects import get_projects
@@ -556,9 +557,7 @@ def post_stale():
     }
     prs = get_prs_waiting_for_review_by_reviewer()
     stale_issues = get_stale_issues_by_assignee(
-        get_open_issues(5, "Bug")
-        + get_open_issues(5, "Feature Request")
-        + get_open_issues(5, "Technical Change"),
+        get_open_stale_issues(),
         7,
     )
     if not prs and not stale_issues:
