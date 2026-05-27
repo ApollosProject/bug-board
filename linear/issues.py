@@ -70,6 +70,67 @@ def get_open_issues(priority, label):
     return issues
 
 
+def get_open_stale_issues():
+    """Return open, non-project issues eligible for stale Slack reminders."""
+    team_key = get_linear_team_key()
+    query = gql(
+        """
+        query OpenStaleIssues($team_key: String!, $cursor: String) {
+          issues(
+            first: 50
+            after: $cursor
+            filter: {
+              team: { key: { eq: $team_key } }
+              state: { type: { in: ["triage", "backlog", "unstarted", "started"] } }
+              project: { null: true }
+            }
+            orderBy: updatedAt
+          ) {
+            nodes {
+              id
+              title
+              assignee {
+                displayName
+                name
+              }
+              url
+              labels {
+                nodes {
+                  name
+                }
+              }
+              createdAt
+              updatedAt
+              priority
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+        """,
+    )
+
+    cursor = None
+    issues = []
+    while True:
+        data = _execute(query, variable_values={"team_key": team_key, "cursor": cursor})
+        issues += data["issues"]["nodes"]
+        if not data["issues"]["pageInfo"]["hasNextPage"]:
+            break
+        cursor = data["issues"]["pageInfo"]["endCursor"]
+
+    for issue in issues:
+        platforms = [
+            tag["name"]
+            for tag in issue.get("labels", {}).get("nodes", [])
+            if tag["name"].lower().replace(" ", "-") in get_platforms()
+        ]
+        issue["platform"] = platforms[0] if platforms else None
+    return issues
+
+
 def get_completed_issues(priority, label, days=30):
     team_key = get_linear_team_key()
     query = gql(
