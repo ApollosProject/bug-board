@@ -171,7 +171,7 @@ class ConfigureScheduledJobsTest(unittest.TestCase):
             },
             recorded_jobs,
         )
-        self.assertIn(
+        self.assertNotIn(
             {
                 "interval": None,
                 "unit": "friday",
