@@ -59,6 +59,75 @@ class GraphQLClientRequestTests(unittest.TestCase):
         self.assertIs(request, query)
         self.assertEqual(kwargs, {})
 
+    def test_repo_id_lookup_raises_instead_of_caching_partial_tracking_set(self):
+        def fake_execute(query, variable_values=None):
+            if variable_values["name"] == "apollos-cluster":
+                raise RuntimeError("missing access")
+            return {"repository": {"id": variable_values["name"]}}
+
+        github.get_repo_ids_by_name.cache_clear()
+        try:
+            with patch.object(github, "token", "token"):
+                with patch.object(github, "_execute", side_effect=fake_execute):
+                    with patch.object(github.logging, "exception"):
+                        with self.assertRaisesRegex(
+                            github.GitHubDataError,
+                            "apollosproject/apollos-cluster",
+                        ):
+                            github.get_repo_ids_by_name()
+
+                    with patch.object(
+                        github,
+                        "_execute",
+                        return_value={"repository": {"id": "ok"}},
+                    ):
+                        repos = github.get_repo_ids_by_name()
+
+            self.assertEqual(set(repos), set(github.TRACKED_REPOSITORIES))
+        finally:
+            github.get_repo_ids_by_name.cache_clear()
+
+    def test_repo_id_lookup_raises_when_github_omits_tracked_repository(self):
+        github.get_repo_ids_by_name.cache_clear()
+        try:
+            with patch.object(github, "token", "token"):
+                with patch.object(github, "_execute", return_value={"repository": None}):
+                    with self.assertRaisesRegex(
+                        github.GitHubDataError,
+                        "repository was not returned",
+                    ):
+                        github.get_repo_ids_by_name()
+        finally:
+            github.get_repo_ids_by_name.cache_clear()
+
+    def test_get_prs_raises_when_repo_fetch_fails(self):
+        with patch.object(github, "token", "token"):
+            with patch.object(github, "_execute", side_effect=RuntimeError("rate limited")):
+                with self.assertRaisesRegex(
+                    github.GitHubDataError,
+                    "apollosproject/apollos-cluster",
+                ):
+                    github.get_prs("repo-id", ["OPEN"], "apollosproject/apollos-cluster")
+
+    def test_get_all_prs_raises_when_any_repo_fetch_fails(self):
+        def fake_get_prs(repo_id, pr_states, repo_name=None):
+            if repo_name == "apollosproject/apollos-cluster":
+                raise RuntimeError("rate limited")
+            return [{"number": 1, "repo": repo_name}]
+
+        repo_ids = {
+            "apollosproject/apollos-platforms": "platforms-id",
+            "apollosproject/apollos-cluster": "cluster-id",
+        }
+        with patch.object(github, "get_repo_ids_by_name", return_value=repo_ids):
+            with patch.object(github, "get_prs", side_effect=fake_get_prs):
+                with patch.object(github.logging, "exception"):
+                    with self.assertRaisesRegex(
+                        github.GitHubDataError,
+                        "apollosproject/apollos-cluster",
+                    ):
+                        github._get_all_prs(["OPEN"])
+
     def test_waiting_for_review_uses_utc_timestamps(self):
         class FixedDateTime(datetime):
             @classmethod
