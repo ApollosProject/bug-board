@@ -1,3 +1,4 @@
+import logging
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -17,6 +18,20 @@ load_dotenv()
 
 token = os.getenv("GITHUB_TOKEN")
 headers = {"Authorization": f"bearer {token}"}
+
+TRACKED_REPOSITORIES = (
+    "apollosproject/apollos-platforms",
+    "apollosproject/apollos-cluster",
+    "apollosproject/apollos-admin",
+    "apollosproject/admin-transcriptions",
+    "apollosproject/apollos-shovel",
+    "apollosproject/apollos-embeds",
+    "differential/crossroads-anywhere",
+)
+
+
+class GitHubDataError(RuntimeError):
+    """Raised when GitHub data would otherwise be silently incomplete."""
 
 
 _thread_local = threading.local()
@@ -51,21 +66,21 @@ rest_headers = {
 }
 
 
+def _format_failure(name: str, exc: Exception) -> str:
+    message = str(exc)
+    if message:
+        return f"{name}: {message}"
+    return f"{name}: {type(exc).__name__}"
+
+
 @lru_cache(maxsize=1)
-def get_repo_ids():
+def get_repo_ids_by_name():
     if not token:
-        return []
+        return {}
     # List of repositories to track in the format "owner/name".
-    repos = [
-        "apollosproject/apollos-platforms",
-        "apollosproject/apollos-cluster",
-        "apollosproject/apollos-admin",
-        "apollosproject/admin-transcriptions",
-        "apollosproject/apollos-shovel",
-        "apollosproject/apollos-embeds",
-        "differential/crossroads-anywhere",
-    ]
-    ids = []
+    repos = TRACKED_REPOSITORIES
+    ids_by_name = {}
+    failures = []
     # GraphQL query for fetching a repository ID by owner and name.
     repo_id_query = gql(
         """
@@ -85,15 +100,27 @@ def get_repo_ids():
         params = {"owner": owner, "name": name}
         try:
             data = _execute(repo_id_query, variable_values=params)
-        except Exception:
+        except Exception as exc:
+            logging.exception("Failed to look up GitHub repository ID for %s", full_name)
+            failures.append(_format_failure(full_name, exc))
             continue
-        ids.append(data["repository"]["id"])
-    return ids
+        repository = data.get("repository") if data else None
+        repo_id = repository.get("id") if repository else None
+        if not repo_id:
+            failures.append(f"{full_name}: repository was not returned by GitHub")
+            continue
+        ids_by_name[full_name] = repo_id
+    if failures:
+        raise GitHubDataError(
+            "Failed to look up all tracked GitHub repositories: " + "; ".join(failures)
+        )
+    return ids_by_name
 
 
-def get_prs(repo_id, pr_states):
+def get_prs(repo_id, pr_states, repo_name=None):
     if not token:
         return []
+    repo_context = repo_name or repo_id
     query = gql(
         """
         query PRs ($repo_id: ID!, $pr_states: [PullRequestState!], $cursor: String) {
@@ -173,9 +200,16 @@ def get_prs(repo_id, pr_states):
         params = {"repo_id": repo_id, "pr_states": pr_states, "cursor": cursor}
         try:
             data = _execute(query, variable_values=params)
-        except Exception:
-            return []
-        payload = data["node"]["pullRequests"]
+        except Exception as exc:
+            raise GitHubDataError(
+                f"Failed to fetch GitHub pull requests for {repo_context}"
+            ) from exc
+        node = data.get("node") if data else None
+        payload = node.get("pullRequests") if node else None
+        if payload is None:
+            raise GitHubDataError(
+                f"GitHub pull request response was missing data for {repo_context}"
+            )
         all_prs.extend(payload["nodes"])
         page_info = payload["pageInfo"]
         if not page_info["hasNextPage"]:
@@ -255,17 +289,24 @@ def get_active_change_request_reviewers(pr):
 
 def _get_all_prs(pr_states: List[str]) -> List[Dict[str, Any]]:
     """Fetch PRs for all tracked repositories concurrently."""
-    repo_ids = get_repo_ids()
-    if not repo_ids:
+    repo_ids_by_name = get_repo_ids_by_name()
+    if not repo_ids_by_name:
         return []
-    with ThreadPoolExecutor(max_workers=len(repo_ids)) as executor:
-        futures = [executor.submit(get_prs, repo_id, pr_states) for repo_id in repo_ids]
+    with ThreadPoolExecutor(max_workers=len(repo_ids_by_name)) as executor:
+        futures = {
+            executor.submit(get_prs, repo_id, pr_states, repo_name): repo_name
+            for repo_name, repo_id in repo_ids_by_name.items()
+        }
         all_prs: List[Dict[str, Any]] = []
-        for future in futures:
+        failures = []
+        for future, repo_name in futures.items():
             try:
                 all_prs.extend(future.result())
-            except Exception:
-                continue
+            except Exception as exc:
+                logging.exception("Failed to fetch GitHub PRs for %s", repo_name)
+                failures.append(_format_failure(repo_name, exc))
+        if failures:
+            raise GitHubDataError("Failed to fetch complete GitHub PR data: " + "; ".join(failures))
     return all_prs
 
 
