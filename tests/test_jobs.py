@@ -715,6 +715,14 @@ class PostProjectUpdatesTest(unittest.TestCase):
                 "status": {"name": "Active"},
                 "lead": {"displayName": "Alex"},
             },
+            # Ending today should use a relative label.
+            {
+                "name": "Ending Today",
+                "url": "https://linear.app/project/ending-today",
+                "targetDate": "2026-03-15",
+                "status": {"name": "Active"},
+                "lead": {"displayName": "Alex"},
+            },
             # Ending soon (within 3 days)
             {
                 "name": "Ending Tue",
@@ -737,6 +745,14 @@ class PostProjectUpdatesTest(unittest.TestCase):
                 "url": "https://linear.app/project/ending-far",
                 "targetDate": "2026-03-19",
                 "status": {"name": "Active"},
+                "lead": {"displayName": "Alex"},
+            },
+            # Starting today should not be in starting soon.
+            {
+                "name": "Starting Today",
+                "url": "https://linear.app/project/starting-today",
+                "startDate": "2026-03-15",
+                "status": {"name": "Planned"},
                 "lead": {"displayName": "Alex"},
             },
             # Starting soon (within 3 days)
@@ -838,11 +854,16 @@ class PostProjectUpdatesTest(unittest.TestCase):
 
         # Correct projects present
         self.assertIn("Late Alpha", message)
+        self.assertIn("Ending Today", message)
         self.assertIn("Ending Tue", message)
         self.assertIn("Ending Wed", message)
         self.assertIn("Starting Tue", message)
         self.assertIn("Starting Wed", message)
         self.assertIn("Lead: <@U1>", message)
+        self.assertIn(
+            "- <https://linear.app/project/ending-today|Ending Today> - Today - Lead: <@U1>",
+            message,
+        )
         self.assertIn(
             "- <https://linear.app/project/ending-tue|Ending Tue> - Tue - Lead: <@U1>", message
         )
@@ -860,6 +881,7 @@ class PostProjectUpdatesTest(unittest.TestCase):
 
         # Correct projects filtered out
         self.assertNotIn("Ending Far", message)
+        self.assertNotIn("Starting Today", message)
         self.assertNotIn("Starting Far", message)
         self.assertNotIn("Canceled Start", message)
         self.assertNotIn("Completed Start", message)
