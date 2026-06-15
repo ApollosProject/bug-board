@@ -681,6 +681,8 @@ def post_project_updates():
             target_label = (
                 target_status_text
                 if target_status_text.endswith("overdue")
+                else "Today"
+                if days_left == 0
                 else _format_short_weekday(target_dt)
             )
             line = f"- <{url}|{name}> - {target_label} - Lead: {lead_md}"
@@ -694,7 +696,7 @@ def post_project_updates():
         start_dt = parse_iso_date(project.get("startDate"))
         if start_dt:
             days_until_start = (start_dt - today).days
-            if 0 <= days_until_start <= 3:
+            if 1 <= days_until_start <= 3:
                 starting_soon.append(
                     {
                         "name": name,
