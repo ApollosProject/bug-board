@@ -227,7 +227,7 @@ class PostStaleTest(unittest.TestCase):
 
         def fake_get_stale_issues(issues, days):
             self.assertIs(issues, open_issues)
-            self.assertEqual(days, 7)
+            self.assertEqual(days, 21)
             return {
                 "dylan": [
                     {
@@ -280,7 +280,7 @@ class PostStaleTest(unittest.TestCase):
 
         def fake_get_stale_issues(issues, days):
             self.assertIs(issues, open_issues)
-            self.assertEqual(days, 7)
+            self.assertEqual(days, 21)
             return {
                 "dylan": [
                     {
