@@ -2,7 +2,7 @@ import logging
 import os
 import re
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlsplit, urlunsplit
 
 import requests
@@ -53,6 +53,7 @@ INACTIVE_PROJECT_STATUS_NAMES = {
     "cancelled",
     "released",
 }
+PROJECT_UPDATE_DUE_WEEKDAY = 4
 _airflow_fleet_unknown_heartbeat_failures = 0
 
 
@@ -74,6 +75,10 @@ def _is_inactive_project(project: dict) -> bool:
 
 def _format_short_weekday(project_date: date) -> str:
     return project_date.strftime("%a")
+
+
+def _format_short_month_day(project_date: date) -> str:
+    return f"{project_date.strftime('%b')} {project_date.day}"
 
 
 def _normalize_linear_display_name(name: str) -> str:
@@ -98,6 +103,46 @@ def _is_engineering_lead_project(project: dict, people_config: dict) -> bool:
     normalized = _normalize_linear_display_name(lead)
     slug = name_to_slug.get(normalized) or name_to_slug.get(normalized.split()[0])
     return slug in engineering_slugs
+
+
+def _latest_completed_project_update_due_date(today: date) -> date:
+    days_since_friday = (today.weekday() - PROJECT_UPDATE_DUE_WEEKDAY) % 7
+    if days_since_friday == 0:
+        days_since_friday = 7
+    return today - timedelta(days=days_since_friday)
+
+
+def _requires_weekly_project_update(project: dict) -> bool:
+    if _is_inactive_project(project):
+        return False
+    if parse_iso_date(project.get("targetDate")) is None:
+        return False
+    status_type = ((project.get("status") or {}).get("type") or "").strip().lower()
+    return status_type == "started"
+
+
+def _get_project_last_update_dt(project: dict) -> datetime | None:
+    last_update = project.get("lastUpdate") or {}
+    return parse_linear_dt(last_update.get("createdAt"))
+
+
+def _format_overdue_project_update_detail(
+    project: dict, update_due_date: date
+) -> tuple[date, str] | None:
+    last_update_dt = _get_project_last_update_dt(project)
+    if last_update_dt and last_update_dt.date() >= update_due_date:
+        return None
+
+    last_update_date = last_update_dt.date() if last_update_dt else date.min
+    last_update_text = (
+        f"last update {_format_short_month_day(last_update_date)}"
+        if last_update_dt
+        else "no updates yet"
+    )
+    return (
+        last_update_date,
+        f"Due {_format_short_month_day(update_due_date)}; {last_update_text}",
+    )
 
 
 def post_to_slack(markdown: str):
@@ -660,8 +705,10 @@ def post_project_updates():
     people_config = load_config().get("people", {})
     now = datetime.now(timezone.utc)
     today = now.date()
+    update_due_date = _latest_completed_project_update_due_date(today)
 
     overdue = []
+    overdue_updates = []
     ending_soon = []
     starting_soon = []
 
@@ -674,6 +721,18 @@ def post_project_updates():
         lead = (project.get("lead") or {}).get("displayName")
         lead_md = get_slack_markdown_by_linear_username(lead) if lead else "No Lead"
         inactive = _is_inactive_project(project)
+
+        if _requires_weekly_project_update(project):
+            update_detail = _format_overdue_project_update_detail(project, update_due_date)
+            if update_detail:
+                last_update_date, update_status_text = update_detail
+                overdue_updates.append(
+                    {
+                        "name": name,
+                        "last_update_date": last_update_date,
+                        "line": f"- <{url}|{name}> - {update_status_text} - Lead: {lead_md}",
+                    }
+                )
 
         target_dt = parse_iso_date(project.get("targetDate"))
         days_left, target_status_text = format_project_target_status(target_dt, now=now)
@@ -712,6 +771,14 @@ def post_project_updates():
     if overdue:
         ordered = sorted(overdue, key=lambda item: (item["target_dt"], item["name"].lower()))
         sections.append("*Overdue Projects*\n\n" + "\n".join(item["line"] for item in ordered))
+    if overdue_updates:
+        ordered = sorted(
+            overdue_updates,
+            key=lambda item: (item["last_update_date"], item["name"].lower()),
+        )
+        sections.append(
+            "*Projects With Overdue Updates*\n\n" + "\n".join(item["line"] for item in ordered)
+        )
     if ending_soon:
         ordered = sorted(ending_soon, key=lambda item: (item["target_dt"], item["name"].lower()))
         sections.append("*Projects Ending Soon*\n\n" + "\n".join(item["line"] for item in ordered))

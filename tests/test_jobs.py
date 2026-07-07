@@ -354,6 +354,14 @@ class FixedDateTime(datetime):
         return datetime(2026, 3, 15, 12, 0, 0, tzinfo=tz)
 
 
+class FixedFridayDateTime(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        if tz is None:
+            return datetime(2026, 3, 13, 12, 0, 0)
+        return datetime(2026, 3, 13, 12, 0, 0, tzinfo=tz)
+
+
 class PostPriorityBugsTest(unittest.TestCase):
     def test_uses_linear_sla_windows_for_at_risk_and_overdue(self):
         posted = []
@@ -695,12 +703,12 @@ class PostPriorityBugsInvalidWhitelistFallbackTest(unittest.TestCase):
 
 
 class PostProjectUpdatesTest(unittest.TestCase):
-    def _run(self, projects, config):
+    def _run(self, projects, config, datetime_cls=FixedDateTime):
         posted = []
         with patch.object(jobs_module, "load_config", return_value=config):
             with patch.object(jobs_module, "get_projects", return_value=projects):
                 with patch.object(jobs_module, "post_to_slack", side_effect=posted.append):
-                    with patch.object(jobs_module, "datetime", FixedDateTime):
+                    with patch.object(jobs_module, "datetime", datetime_cls):
                         jobs_module.post_project_updates()
         return posted
 
@@ -911,6 +919,113 @@ class PostProjectUpdatesTest(unittest.TestCase):
         }
 
         posted = self._run(projects, config)
+        self.assertEqual(posted, [])
+
+    def test_lists_started_projects_with_overdue_friday_updates(self):
+        projects = [
+            {
+                "name": "Old Update",
+                "url": "https://linear.app/project/old-update",
+                "targetDate": "2026-03-31",
+                "status": {"name": "In Development", "type": "started"},
+                "lead": {"displayName": "Alex"},
+                "lastUpdate": {"createdAt": "2026-03-12T16:00:00.000Z"},
+            },
+            {
+                "name": "No Update",
+                "url": "https://linear.app/project/no-update",
+                "targetDate": "2026-03-31",
+                "status": {"name": "In Development", "type": "started"},
+                "lead": {"displayName": "Alex"},
+                "lastUpdate": None,
+            },
+            {
+                "name": "Updated Friday",
+                "url": "https://linear.app/project/updated-friday",
+                "targetDate": "2026-03-31",
+                "status": {"name": "In Development", "type": "started"},
+                "lead": {"displayName": "Alex"},
+                "lastUpdate": {"createdAt": "2026-03-13T09:00:00.000Z"},
+            },
+            {
+                "name": "Missing End Date",
+                "url": "https://linear.app/project/missing-end-date",
+                "status": {"name": "In Development", "type": "started"},
+                "lead": {"displayName": "Alex"},
+                "lastUpdate": None,
+            },
+            {
+                "name": "Backlog Missing Update",
+                "url": "https://linear.app/project/backlog",
+                "status": {"name": "Define", "type": "backlog"},
+                "lead": {"displayName": "Alex"},
+                "lastUpdate": None,
+            },
+            {
+                "name": "Product Lead Missing Update",
+                "url": "https://linear.app/project/product-lead",
+                "status": {"name": "In Development", "type": "started"},
+                "lead": {"displayName": "Pat"},
+                "lastUpdate": None,
+            },
+        ]
+        config = {
+            "people": {
+                "alex": {
+                    "linear_username": "Alex",
+                    "slack_id": "U1",
+                    "team": "engineering",
+                },
+                "pat": {
+                    "linear_username": "Pat",
+                    "slack_id": "U2",
+                    "team": "product",
+                },
+            }
+        }
+
+        posted = self._run(projects, config)
+
+        self.assertEqual(len(posted), 1)
+        message = posted[0]
+        self.assertIn("*Projects With Overdue Updates*", message)
+        self.assertIn(
+            "- <https://linear.app/project/no-update|No Update> - Due Mar 13; "
+            "no updates yet - Lead: <@U1>",
+            message,
+        )
+        self.assertIn(
+            "- <https://linear.app/project/old-update|Old Update> - Due Mar 13; "
+            "last update Mar 12 - Lead: <@U1>",
+            message,
+        )
+        self.assertNotIn("Missing End Date", message)
+        self.assertNotIn("Updated Friday", message)
+        self.assertNotIn("Backlog Missing Update", message)
+        self.assertNotIn("Product Lead Missing Update", message)
+
+    def test_does_not_require_current_friday_update_until_saturday(self):
+        projects = [
+            {
+                "name": "Already Updated For Previous Friday",
+                "url": "https://linear.app/project/previous-friday",
+                "targetDate": "2026-03-31",
+                "status": {"name": "In Development", "type": "started"},
+                "lead": {"displayName": "Alex"},
+                "lastUpdate": {"createdAt": "2026-03-06T16:00:00.000Z"},
+            }
+        ]
+        config = {
+            "people": {
+                "alex": {
+                    "linear_username": "Alex",
+                    "slack_id": "U1",
+                    "team": "engineering",
+                },
+            }
+        }
+
+        posted = self._run(projects, config, datetime_cls=FixedFridayDateTime)
         self.assertEqual(posted, [])
 
 

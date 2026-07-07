@@ -83,6 +83,9 @@ def get_projects():
                   completedAt
                   startDate
                   targetDate
+                  lastUpdate {
+                    createdAt
+                  }
                   lead {
                     displayName
                   }
