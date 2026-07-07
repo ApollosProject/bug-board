@@ -14,6 +14,7 @@ from config import load_config
 from constants import ENGINEERING_TEAM_SLUG, PRIORITY_TO_SCORE
 from fleet_health_cache import refresh_fleet_health_cache, should_use_redis_cache
 from github import (
+    GitHubDataError,
     get_pr_diff,
     get_prs_waiting_for_review_by_reviewer,
     merged_prs_by_author,
@@ -600,7 +601,11 @@ def post_stale():
         for person in engineering_team_members.values()
         if person.get("linear_username")
     }
-    prs = get_prs_waiting_for_review_by_reviewer()
+    try:
+        prs = get_prs_waiting_for_review_by_reviewer()
+    except GitHubDataError as exc:
+        logging.warning("Skipping GitHub PR review reminders: %s", exc)
+        prs = {}
     stale_issues = get_stale_issues_by_assignee(
         get_open_stale_issues(),
         7,

@@ -121,12 +121,17 @@ class GraphQLClientRequestTests(unittest.TestCase):
         }
         with patch.object(github, "get_repo_ids_by_name", return_value=repo_ids):
             with patch.object(github, "get_prs", side_effect=fake_get_prs):
-                with patch.object(github.logging, "exception"):
+                with patch.object(github.logging, "warning") as warning:
                     with self.assertRaisesRegex(
                         github.GitHubDataError,
                         "apollosproject/apollos-cluster",
                     ):
                         github._get_all_prs(["OPEN"])
+        warning.assert_called_once_with(
+            "Failed to fetch GitHub PRs for %s: %s",
+            "apollosproject/apollos-cluster",
+            "rate limited",
+        )
 
     def test_waiting_for_review_uses_utc_timestamps(self):
         class FixedDateTime(datetime):
