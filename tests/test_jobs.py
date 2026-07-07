@@ -43,6 +43,7 @@ def _install_import_shims() -> None:
     sys.modules.setdefault("fleet_health_cache", fleet_health_module)
 
     github_module = cast(Any, types.ModuleType("github"))
+    github_module.GitHubDataError = type("GitHubDataError", (RuntimeError,), {})
     github_module.get_pr_diff = lambda *args, **kwargs: ""
     github_module.get_prs_waiting_for_review_by_reviewer = lambda *args, **kwargs: {}
     github_module.merged_prs_by_author = lambda *args, **kwargs: {}
@@ -273,6 +274,58 @@ class PostStaleTest(unittest.TestCase):
         self.assertIn("*Stale Open Issues*", message)
         self.assertIn("APO-7555", message)
         self.assertIn("(74d)", message)
+
+    def test_continues_with_linear_stale_issues_when_github_pr_fetch_fails(self):
+        open_issues = [{"id": "APO-7555"}]
+
+        def fake_get_stale_issues(issues, days):
+            self.assertIs(issues, open_issues)
+            self.assertEqual(days, 7)
+            return {
+                "dylan": [
+                    {
+                        "title": "Regression in Apple Pay campus/fund confirmation flow",
+                        "url": "https://linear.app/differential/issue/APO-7555",
+                        "daysStale": 74,
+                        "priority": 0,
+                        "platform": None,
+                    }
+                ]
+            }
+
+        with patch.object(
+            jobs_module,
+            "get_team_members",
+            return_value={"dylan": {"linear_username": "dylan", "slack_id": "U03LD9MJLNP"}},
+        ):
+            with patch.object(
+                jobs_module,
+                "get_prs_waiting_for_review_by_reviewer",
+                side_effect=jobs_module.GitHubDataError("GitHub timed out"),
+            ):
+                with patch.object(jobs_module, "get_open_stale_issues", return_value=open_issues):
+                    with patch.object(
+                        jobs_module,
+                        "get_stale_issues_by_assignee",
+                        side_effect=fake_get_stale_issues,
+                    ):
+                        with patch.dict(
+                            jobs_module.os.environ,
+                            {"APP_URL": "https://bug-board.example"},
+                            clear=False,
+                        ):
+                            with patch.object(jobs_module.logging, "warning") as warning:
+                                with patch.object(jobs_module, "post_to_slack") as post:
+                                    jobs_module.post_stale()
+
+        warning.assert_called_once()
+        self.assertEqual(warning.call_args.args[0], "Skipping GitHub PR review reminders: %s")
+        self.assertEqual(str(warning.call_args.args[1]), "GitHub timed out")
+        post.assert_called_once()
+        message = post.call_args.args[0]
+        self.assertIn("*Stale Open Issues*", message)
+        self.assertIn("APO-7555", message)
+        self.assertNotIn("*PRs - Checks Passing", message)
 
 
 class AirflowFleetHeartbeatTest(unittest.TestCase):

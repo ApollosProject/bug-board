@@ -73,6 +73,13 @@ def _format_failure(name: str, exc: Exception) -> str:
     return f"{name}: {type(exc).__name__}"
 
 
+def _format_exception(exc: Exception) -> str:
+    message = str(exc)
+    if message:
+        return message
+    return type(exc).__name__
+
+
 @lru_cache(maxsize=1)
 def get_repo_ids_by_name():
     if not token:
@@ -303,7 +310,9 @@ def _get_all_prs(pr_states: List[str]) -> List[Dict[str, Any]]:
             try:
                 all_prs.extend(future.result())
             except Exception as exc:
-                logging.exception("Failed to fetch GitHub PRs for %s", repo_name)
+                logging.warning(
+                    "Failed to fetch GitHub PRs for %s: %s", repo_name, _format_exception(exc)
+                )
                 failures.append(_format_failure(repo_name, exc))
         if failures:
             raise GitHubDataError("Failed to fetch complete GitHub PR data: " + "; ".join(failures))
