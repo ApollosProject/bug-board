@@ -47,6 +47,7 @@ MAX_DIFF_FILES = 20
 FLEET_HEALTH_REFRESH_DEFAULT_SECONDS = 60
 AIRFLOW_FLEET_HEARTBEAT_TIMEOUT_SECONDS = 10
 AIRFLOW_FLEET_UNKNOWN_HEARTBEAT_FAILURE_THRESHOLD = 3
+STALE_LINEAR_ISSUE_DAYS = 21
 INACTIVE_PROJECT_STATUS_NAMES = {
     "completed",
     "incomplete",
@@ -608,7 +609,7 @@ def post_stale():
         prs = {}
     stale_issues = get_stale_issues_by_assignee(
         get_open_stale_issues(),
-        7,
+        STALE_LINEAR_ISSUE_DAYS,
     )
     if not prs and not stale_issues:
         return
