@@ -53,8 +53,10 @@ class GetProjectsTest(unittest.TestCase):
             },
         ]
         calls = []
+        queries = []
 
         def fake_execute(_query, variable_values=None):
+            queries.append(str(_query))
             calls.append(variable_values)
             return responses[len(calls) - 1]
 
@@ -78,6 +80,7 @@ class GetProjectsTest(unittest.TestCase):
         )
         self.assertEqual(projects[0]["members"], ["Austin Witherow"])
         self.assertEqual(projects[1]["members"], ["Nathan Lewis"])
+        self.assertIn("lastUpdate", queries[0])
 
 
 class GetCompletedProjectIssueAssigneesTest(unittest.TestCase):
