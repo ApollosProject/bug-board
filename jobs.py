@@ -458,7 +458,7 @@ def post_priority_bugs():
                 notified_lines.append(f"<@{slack_id}>")
 
             notified_text = "\n".join(notified_lines)
-            unassigned_section += f"\n\nattn:\n\n{notified_text}"
+            unassigned_section += f"\n\nAvailable for Support\n\n{notified_text}"
         sections.append(unassigned_section)
     if at_risk:
         sections.append(

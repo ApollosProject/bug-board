@@ -598,7 +598,7 @@ class PostPriorityBugsTest(unittest.TestCase):
                             jobs_module.post_priority_bugs()
 
         self.assertEqual(len(posted), 1)
-        self.assertIn("attn:\n\n<@U2>\n<@U3>\n<@U4>", posted[0])
+        self.assertIn("Available for Support\n\n<@U2>\n<@U3>\n<@U4>", posted[0])
         self.assertNotIn("<@U1>", posted[0])
         self.assertNotIn("Lead)", posted[0])
 
@@ -660,7 +660,7 @@ class PostPriorityBugsTest(unittest.TestCase):
                             jobs_module.post_priority_bugs()
 
         self.assertEqual(len(posted), 1)
-        self.assertIn("attn:\n\n<@U2>\n<@U4>", posted[0])
+        self.assertIn("Available for Support\n\n<@U2>\n<@U4>", posted[0])
         self.assertNotIn("<@U1>", posted[0])
         self.assertNotIn("<@U3>", posted[0])
 
@@ -750,7 +750,7 @@ class PostPriorityBugsInvalidWhitelistFallbackTest(unittest.TestCase):
                                 jobs_module.post_priority_bugs()
 
         self.assertEqual(len(posted), 1)
-        self.assertIn("attn:\n\n<@U1>\n<@U2>", posted[0])
+        self.assertIn("Available for Support\n\n<@U1>\n<@U2>", posted[0])
         self.assertNotIn("<@U3>", posted[0])
         warning.assert_called_once()
 
