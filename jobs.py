@@ -589,6 +589,14 @@ def post_leaderboard():
     post_to_slack(markdown)
 
 
+def _get_prs_waiting_for_review_with_retry():
+    try:
+        return get_prs_waiting_for_review_by_reviewer()
+    except GitHubDataError as exc:
+        logging.warning("Retrying GitHub PR review reminders after failure: %s", exc)
+        return get_prs_waiting_for_review_by_reviewer()
+
+
 @with_retries
 def post_stale():
     engineering_team_members = get_team_members(ENGINEERING_TEAM_SLUG)
@@ -602,15 +610,24 @@ def post_stale():
         for person in engineering_team_members.values()
         if person.get("linear_username")
     }
+    github_prs_unavailable = False
     try:
-        prs = get_prs_waiting_for_review_by_reviewer()
+        prs = _get_prs_waiting_for_review_with_retry()
     except GitHubDataError as exc:
-        logging.warning("Skipping GitHub PR review reminders: %s", exc)
+        logging.warning("Skipping GitHub PR review reminders after retry: %s", exc)
         prs = {}
+        github_prs_unavailable = True
     stale_issues = get_stale_issues_by_assignee(
         get_open_stale_issues(),
         STALE_LINEAR_ISSUE_DAYS,
     )
+    if github_prs_unavailable:
+        post_to_manager_slack(
+            "*Stale PR Check Unavailable*\n\n"
+            "GitHub did not return complete PR data after retrying, "
+            "so review reminders were skipped.\n\n"
+            f"<{os.getenv('APP_URL')}|View Bug Board>"
+        )
     if not prs and not stale_issues:
         return
 

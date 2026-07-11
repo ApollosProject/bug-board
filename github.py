@@ -28,6 +28,7 @@ TRACKED_REPOSITORIES = (
     "apollosproject/apollos-embeds",
     "differential/crossroads-anywhere",
 )
+GITHUB_GRAPHQL_EXECUTE_TIMEOUT_SECONDS = 30
 
 
 class GitHubDataError(RuntimeError):
@@ -44,7 +45,11 @@ def _get_client():
             url="https://api.github.com/graphql",
             headers=headers,
         )
-        client = Client(transport=transport, fetch_schema_from_transport=False)
+        client = Client(
+            transport=transport,
+            fetch_schema_from_transport=False,
+            execute_timeout=GITHUB_GRAPHQL_EXECUTE_TIMEOUT_SECONDS,
+        )
         _thread_local.client = client
     return client
 
