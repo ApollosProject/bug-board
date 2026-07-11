@@ -621,16 +621,17 @@ def post_stale():
         get_open_stale_issues(),
         STALE_LINEAR_ISSUE_DAYS,
     )
-    if not prs and not stale_issues and not github_prs_unavailable:
-        return
-
-    markdown = ""
     if github_prs_unavailable:
-        markdown += (
+        post_to_manager_slack(
             "*Stale PR Check Unavailable*\n\n"
             "GitHub did not return complete PR data after retrying, "
             "so review reminders were skipped.\n\n"
+            f"<{os.getenv('APP_URL')}|View Bug Board>"
         )
+    if not prs and not stale_issues:
+        return
+
+    markdown = ""
     filtered = {}
     for reviewer, pr_list in prs.items():
         if reviewer not in people_by_github_username:
@@ -678,7 +679,7 @@ def post_stale():
         if assignee in engineering_linear_usernames and issues
     }
 
-    if not prs and not filtered_stale_issues and not github_prs_unavailable:
+    if not prs and not filtered_stale_issues:
         return
 
     if any(filtered_stale_issues.values()):

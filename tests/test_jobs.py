@@ -333,8 +333,11 @@ class PostStaleTest(unittest.TestCase):
                             clear=False,
                         ):
                             with patch.object(jobs_module.logging, "warning") as warning:
-                                with patch.object(jobs_module, "post_to_slack") as post:
-                                    jobs_module.post_stale()
+                                with patch.object(
+                                    jobs_module, "post_to_manager_slack"
+                                ) as manager_post:
+                                    with patch.object(jobs_module, "post_to_slack") as post:
+                                        jobs_module.post_stale()
 
         self.assertEqual(warning.call_count, 2)
         self.assertEqual(
@@ -342,14 +345,18 @@ class PostStaleTest(unittest.TestCase):
             "Skipping GitHub PR review reminders after retry: %s",
         )
         self.assertEqual(str(warning.call_args_list[-1].args[1]), "GitHub timed out")
+        manager_post.assert_called_once()
+        manager_message = manager_post.call_args.args[0]
+        self.assertIn("*Stale PR Check Unavailable*", manager_message)
+        self.assertIn("https://bug-board.example", manager_message)
         post.assert_called_once()
         message = post.call_args.args[0]
-        self.assertIn("*Stale PR Check Unavailable*", message)
+        self.assertNotIn("*Stale PR Check Unavailable*", message)
         self.assertIn("*Stale Open Issues*", message)
         self.assertIn("APO-7555", message)
         self.assertNotIn("*PRs - Checks Passing", message)
 
-    def test_posts_degraded_notice_when_github_fails_and_no_stale_issues_exist(self):
+    def test_posts_degraded_notice_to_manager_when_no_stale_issues_exist(self):
         with patch.object(
             jobs_module,
             "get_team_members",
@@ -367,14 +374,17 @@ class PostStaleTest(unittest.TestCase):
                             {"APP_URL": "https://bug-board.example"},
                             clear=False,
                         ):
-                            with patch.object(jobs_module, "post_to_slack") as post:
-                                jobs_module.post_stale()
+                            with patch.object(jobs_module, "post_to_manager_slack") as manager_post:
+                                with patch.object(jobs_module, "post_to_slack") as post:
+                                    jobs_module.post_stale()
 
         self.assertEqual(fetch.call_count, 2)
-        post.assert_called_once()
-        message = post.call_args.args[0]
+        post.assert_not_called()
+        manager_post.assert_called_once()
+        message = manager_post.call_args.args[0]
         self.assertIn("*Stale PR Check Unavailable*", message)
         self.assertIn("GitHub did not return complete PR data after retrying", message)
+        self.assertIn("https://bug-board.example", message)
         self.assertNotIn("*PRs - Checks Passing", message)
         self.assertNotIn("*Stale Open Issues*", message)
 
