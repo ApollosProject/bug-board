@@ -18,6 +18,26 @@ class _RecordingClient:
 
 
 class GraphQLClientRequestTests(unittest.TestCase):
+    def test_github_client_allows_slow_repository_queries(self):
+        previous_client = getattr(github._thread_local, "client", None)
+        if hasattr(github._thread_local, "client"):
+            del github._thread_local.client
+        try:
+            with patch.object(github, "AIOHTTPTransport") as transport:
+                with patch.object(github, "Client") as client:
+                    github._get_client()
+
+            client.assert_called_once_with(
+                transport=transport.return_value,
+                fetch_schema_from_transport=False,
+                execute_timeout=github.GITHUB_GRAPHQL_EXECUTE_TIMEOUT_SECONDS,
+            )
+        finally:
+            if previous_client is not None:
+                github._thread_local.client = previous_client
+            elif hasattr(github._thread_local, "client"):
+                del github._thread_local.client
+
     def test_github_execute_embeds_variables_in_graphql_request(self):
         client = _RecordingClient()
         query = gql("query RepoId($owner: String!) { __typename }")
