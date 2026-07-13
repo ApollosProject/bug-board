@@ -386,7 +386,7 @@ class FailingDagsDashboardTest(unittest.TestCase):
         self.assertIn('href="/grid/static/pico.min.css"', body)
         self.assertIn('href="/grid/static/styles.css"', body)
         self.assertIn('href="/grid/"', body)
-        self.assertIn('href="/grid/team"', body)
+        self.assertIn('href="/grid/projects"', body)
         self.assertIn('href="/grid/failing-dags"', body)
 
     def test_build_astro_dag_url_strips_airflow_api_version_suffix(self):
@@ -831,8 +831,11 @@ class TeamContextProjectFilteringTest(unittest.TestCase):
                     with patch.object(app_module, "get_open_issues", return_value=[]):
                         context = app_module._build_team_context(1)
 
-        self.assertEqual(context["developers"], [])
-        self.assertEqual(context["developer_projects"], {})
+        self.assertEqual(
+            [developer["slug"] for developer in context["project_timeline"]["rows"]],
+            ["darryl"],
+        )
+        self.assertEqual(context["project_timeline"]["rows"][0]["projects"], [])
         self.assertEqual(context["cycle_projects_by_initiative"], {})
         self.assertNotIn("platform_teams", context)
         self.assertEqual(
@@ -981,6 +984,8 @@ class TeamContextProjectFilteringTest(unittest.TestCase):
 
         project = context["cycle_projects_by_initiative"]["Cycle"][0]
         self.assertEqual(project["target_status_text"], "6h left")
+        bar = context["project_timeline"]["rows"][0]["projects"][0]
+        self.assertEqual((bar["start_day"], bar["span_days"]), (1, 7))
 
 
 if __name__ == "__main__":

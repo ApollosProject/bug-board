@@ -9,7 +9,7 @@ class NavigationTest(unittest.TestCase):
         self.client = app_module.app.test_client()
 
     def test_local_pages_render_in_header_menu_not_footer(self):
-        response = self.client.get("/team")
+        response = self.client.get("/projects")
 
         body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
@@ -20,11 +20,12 @@ class NavigationTest(unittest.TestCase):
         self.assertIn('class="dropdown site-menu"', header)
         self.assertIn('aria-label="Open local pages menu"', header)
         self.assertIn('href="/apps"', header)
-        self.assertIn(">Teams</a>", header)
+        self.assertIn('href="/projects"', header)
+        self.assertIn(">Projects</a>", header)
         self.assertIn('href="/failing-dags"', header)
 
         self.assertNotIn('href="/apps"', footer)
-        self.assertNotIn('href="/team"', footer)
+        self.assertNotIn('href="/projects"', footer)
         self.assertNotIn('href="/failing-dags"', footer)
 
     def test_header_menu_overrides_pico_left_aligned_dropdown(self):
@@ -83,26 +84,35 @@ class NavigationTest(unittest.TestCase):
         counts.assert_called_once_with("bkraeling", 30)
         support.assert_called_once_with(config=config, projects=projects)
 
-    def test_team_labels_use_short_name(self):
+    def test_projects_page_and_timeline_use_project_labels(self):
         context = {
-            "developers": [],
-            "developer_projects": {},
+            "project_timeline": {
+                "weeks": [],
+                "rows": [],
+                "date_range": "Jul 13 – Aug 23",
+                "today_percent": 1.2,
+            },
             "cycle_projects_by_initiative": {},
             "completed_cycle_projects": [],
-            "on_call_support": [],
-            "support_issues": {},
         }
 
-        response = self.client.get("/team")
-        self.assertIn("<title>Teams</title>", response.get_data(as_text=True))
+        response = self.client.get("/projects")
+        self.assertIn("<title>Projects</title>", response.get_data(as_text=True))
 
         with patch.object(app_module, "_build_team_context", return_value=context):
-            partial_response = self.client.get("/partials/team/content")
+            partial_response = self.client.get("/partials/projects/content")
 
         partial_body = partial_response.get_data(as_text=True)
         self.assertEqual(partial_response.status_code, 200)
-        self.assertIn("<h2>Teams</h2>", partial_body)
-        self.assertNotIn("Engineering Teams", partial_body)
+        self.assertIn("<h2>Projects</h2>", partial_body)
+        self.assertIn("<h3>Timeline</h3>", partial_body)
+        self.assertNotIn("Current Focus", partial_body)
+
+    def test_legacy_team_url_renders_the_projects_page(self):
+        response = self.client.get("/team")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("<title>Projects</title>", response.get_data(as_text=True))
 
 
 if __name__ == "__main__":

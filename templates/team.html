@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Teams{% endblock %}
+{% block title %}Projects{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -14,7 +14,7 @@
 {% endblock %}
 
 {% block content %}
-      <div id="team-content" aria-busy="true"></div>
+      <div id="projects-content" aria-busy="true"></div>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -38,6 +38,6 @@
     }
   }
 
-  loadSection('team-content', '/partials/team/content');
+  loadSection('projects-content', '{{ url_for("projects_content_partial") }}');
 </script>
 {% endblock %}

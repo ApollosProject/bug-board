@@ -618,7 +618,7 @@ class AppVersionsRouteTest(unittest.TestCase):
         self.assertIn("<h1>Apps</h1>", body)
         self.assertIn("App data is unavailable", body)
         self.assertIn('href="/grid/apps"', body)
-        self.assertIn('href="/grid/team"', body)
+        self.assertIn('href="/grid/projects"', body)
 
     def test_legacy_app_versions_route_renders_apps_dashboard(self):
         with patch.object(

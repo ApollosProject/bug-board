@@ -1,35 +1,34 @@
-<h2>Teams</h2>
-<h2>Current Focus</h2>
-{% if developers %}
-<h4>Projects</h4>
-<ul>
-{% for dev in developers %}
-  <li>
-    <a href="{{ url_for('team_slug', slug=dev.slug) }}">{{ dev.name|first_name }}</a>
-    {% set projs = developer_projects.get(dev.slug, []) %}
-    {% if projs %}&ndash;{% for proj in projs %}
-      <a href="{{ proj.url }}">{{ proj.name }}</a>{% if not loop.last %}, {% endif %}
-    {% endfor %}{% endif %}
-  </li>
-{% endfor %}
-</ul>
-<hr />
-{% endif %}
-<h4>Support</h4>
-<ul>
-{%- for person in on_call_support -%}
-  <li>
-    <a href="{{ url_for('team_slug', slug=person.slug) }}">{{ person.name|first_name }}</a>
-    {% set issues = support_issues.get(person.slug) %}
-    {% if issues %}&ndash;{% for issue in issues %}
-      <a href="{{ issue.url }}">{{ issue.title }}</a>{% if not loop.last %}, {% endif %}
-    {% endfor %}{% endif %}
-  </li>
-{%- endfor -%}
-</ul>
+<h2>Projects</h2>
+<div class="project-timeline-heading">
+  <h3>Timeline</h3>
+  <small>Six-week view · {{ project_timeline.date_range }} · Red line is today</small>
+</div>
+<div class="project-timeline-scroll" tabindex="0" role="region" aria-label="Developer project timeline">
+  <div class="project-timeline">
+    <div class="project-timeline-header">
+      <strong>Developer</strong>
+      <div class="project-timeline-weeks">
+        {% for week in project_timeline.weeks %}<span><b>{{ week.start }}</b> – {{ week.end }}</span>{% endfor %}
+      </div>
+    </div>
+    {% for developer in project_timeline.rows %}
+      <div class="project-timeline-row">
+        <a class="project-timeline-developer" href="{{ url_for('team_slug', slug=developer.slug) }}">{{ developer.name|first_name }}</a>
+        <div class="project-timeline-track" style="--lanes: {{ developer.lane_count }}; --today: {{ project_timeline.today_percent }}%;">
+          <i class="project-timeline-today" aria-hidden="true"></i>
+          {% for project in developer.projects %}
+            <a href="{{ project.url }}" class="project-timeline-bar project-timeline-bar--{{ project.health_class }}" style="--start: {{ project.start_day }}; --span: {{ project.span_days }}; --lane: {{ project.lane }};" title="{{ project.name }}{% if project.startDate or project.targetDate %}: {{ project.startDate or 'Earlier' }} – {{ project.targetDate or 'Ongoing' }}{% endif %}">{{ project.name }}</a>
+          {% else %}
+            <small class="project-timeline-empty">No dated projects</small>
+          {% endfor %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
 <hr />
 {% if cycle_projects_by_initiative %}
-<h3>Projects</h3>
+<h3>All Projects</h3>
 <ul>
 {% for initiative, projects in cycle_projects_by_initiative.items() %}
   {% for project in projects %}
