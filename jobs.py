@@ -56,6 +56,7 @@ INACTIVE_PROJECT_STATUS_NAMES = {
     "released",
 }
 PROJECT_UPDATE_DUE_WEEKDAY = 4
+PROJECT_UPDATE_EARLY_WINDOW_DAYS = 2
 _airflow_fleet_unknown_heartbeat_failures = 0
 
 
@@ -132,7 +133,10 @@ def _format_overdue_project_update_detail(
     project: dict, update_due_date: date
 ) -> tuple[date, str] | None:
     last_update_dt = _get_project_last_update_dt(project)
-    if last_update_dt and last_update_dt.date() >= update_due_date:
+    earliest_on_time_update_date = update_due_date - timedelta(
+        days=PROJECT_UPDATE_EARLY_WINDOW_DAYS
+    )
+    if last_update_dt and last_update_dt.date() >= earliest_on_time_update_date:
         return None
 
     last_update_date = last_update_dt.date() if last_update_dt else date.min

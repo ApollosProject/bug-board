@@ -1043,7 +1043,7 @@ class PostProjectUpdatesTest(unittest.TestCase):
                 "targetDate": "2026-03-31",
                 "status": {"name": "In Development", "type": "started"},
                 "lead": {"displayName": "Alex"},
-                "lastUpdate": {"createdAt": "2026-03-12T16:00:00.000Z"},
+                "lastUpdate": {"createdAt": "2026-03-10T16:00:00.000Z"},
             },
             {
                 "name": "No Update",
@@ -1052,6 +1052,22 @@ class PostProjectUpdatesTest(unittest.TestCase):
                 "status": {"name": "In Development", "type": "started"},
                 "lead": {"displayName": "Alex"},
                 "lastUpdate": None,
+            },
+            {
+                "name": "Updated Wednesday",
+                "url": "https://linear.app/project/updated-wednesday",
+                "targetDate": "2026-03-31",
+                "status": {"name": "In Development", "type": "started"},
+                "lead": {"displayName": "Alex"},
+                "lastUpdate": {"createdAt": "2026-03-11T09:00:00.000Z"},
+            },
+            {
+                "name": "Updated Thursday",
+                "url": "https://linear.app/project/updated-thursday",
+                "targetDate": "2026-03-31",
+                "status": {"name": "In Development", "type": "started"},
+                "lead": {"displayName": "Alex"},
+                "lastUpdate": {"createdAt": "2026-03-12T09:00:00.000Z"},
             },
             {
                 "name": "Updated Friday",
@@ -1110,10 +1126,12 @@ class PostProjectUpdatesTest(unittest.TestCase):
         )
         self.assertIn(
             "- <https://linear.app/project/old-update|Old Update> - Due Mar 13; "
-            "last update Mar 12 - Lead: <@U1>",
+            "last update Mar 10 - Lead: <@U1>",
             message,
         )
         self.assertNotIn("Missing End Date", message)
+        self.assertNotIn("Updated Wednesday", message)
+        self.assertNotIn("Updated Thursday", message)
         self.assertNotIn("Updated Friday", message)
         self.assertNotIn("Backlog Missing Update", message)
         self.assertNotIn("Product Lead Missing Update", message)
