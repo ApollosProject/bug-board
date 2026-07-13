@@ -115,10 +115,13 @@ def _latest_completed_project_update_due_date(today: date) -> date:
     return today - timedelta(days=days_since_friday)
 
 
-def _requires_weekly_project_update(project: dict) -> bool:
+def _requires_weekly_project_update(project: dict, update_due_date: date) -> bool:
     if _is_inactive_project(project):
         return False
     if parse_iso_date(project.get("targetDate")) is None:
+        return False
+    start_date = parse_iso_date(project.get("startDate"))
+    if start_date is not None and update_due_date <= start_date:
         return False
     status_type = ((project.get("status") or {}).get("type") or "").strip().lower()
     return status_type == "started"
@@ -749,7 +752,7 @@ def post_project_updates():
         lead_md = get_slack_markdown_by_linear_username(lead) if lead else "No Lead"
         inactive = _is_inactive_project(project)
 
-        if _requires_weekly_project_update(project):
+        if _requires_weekly_project_update(project, update_due_date):
             update_detail = _format_overdue_project_update_detail(project, update_due_date)
             if update_detail:
                 last_update_date, update_status_text = update_detail
