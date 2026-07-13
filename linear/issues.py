@@ -3,7 +3,6 @@ from datetime import datetime, timezone
 from gql import gql
 
 from config import get_linear_team_key, get_platforms
-from constants import PRIORITY_TO_SCORE
 from issue_timing import format_issue_sla_text
 
 from .client import _compute_assignee_time_to_fix, _execute
@@ -373,26 +372,6 @@ def get_created_issues(priority, label, days=30):
         else:
             issue["assignee_time_to_fix"] = None
     return issues
-
-
-def by_assignee(issues):
-    assignee_issues = {}
-    for issue in issues:
-        if not issue["assignee"]:
-            continue
-        assignee = issue["assignee"]["displayName"]
-        if assignee not in assignee_issues:
-            assignee_issues[assignee] = {"score": 0, "issues": []}
-        assignee_issues[assignee]["issues"].append(issue)
-        score = PRIORITY_TO_SCORE.get(issue["priority"], 1)
-        assignee_issues[assignee]["score"] += score
-    return dict(
-        sorted(
-            assignee_issues.items(),
-            key=lambda x: x[1]["score"],
-            reverse=True,
-        )
-    )
 
 
 def get_stale_issues_by_assignee(issues, days=30):

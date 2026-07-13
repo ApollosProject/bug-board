@@ -3,7 +3,7 @@ import os
 import re
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any, TypedDict, TypeVar
 from urllib.parse import quote
@@ -29,7 +29,6 @@ from leaderboard import (
     calculate_cycle_project_member_points,
 )
 from linear.issues import (
-    by_assignee,
     by_platform,
     by_project,
     get_completed_issues_for_person,
@@ -997,12 +996,14 @@ def team_slug(slug):
 
 
 @app.route("/team")
-def team():
+@app.route("/projects")
+def projects():
     return render_template("team.html")
 
 
 @app.route("/partials/team/content")
-def team_content_partial():
+@app.route("/partials/projects/content")
+def projects_content_partial():
     cache_epoch = int(time.time() / INDEX_CACHE_TTL_SECONDS)
     context = _build_team_context(cache_epoch)
     return render_template("partials/team_content.html", **context)
@@ -1113,70 +1114,85 @@ def _build_team_context(_cache_epoch: int) -> dict:
         else:
             del projects_by_initiative[name]
 
-    # Determine which team members are participating in active projects
+    # Build a Monday-aligned six-week view for every engineering team member.
     active_projects = [p for projs in projects_by_initiative.values() for p in projs]
-
-    cycle_member_slugs = set()
-    member_projects: dict[str, set[tuple[str, str]]] = {}
+    today = datetime.now(timezone.utc).date()
+    timeline_start = today - timedelta(days=today.weekday())
+    timeline_end = timeline_start + timedelta(weeks=6)
+    timeline_developers = sorted(
+        [{"slug": slug, "name": format_name(slug)} for slug in engineering_team_slugs],
+        key=lambda developer: developer["name"],
+    )
+    projects_by_developer: dict[str, list[dict[str, Any]]] = {
+        developer["slug"]: [] for developer in timeline_developers
+    }
     for project in active_projects:
-        # Only include projects that have started (start date today or earlier)
-        starts_in = project.get("starts_in")
-        if starts_in is not None and starts_in > 0:
+        start = parse_iso_date(project.get("startDate"))
+        target = parse_iso_date(project.get("targetDate"))
+        if start is None and target is None:
             continue
+        visible_start = start or timeline_start
+        visible_end = target or (timeline_end - timedelta(days=1))
+        is_overdue = target is not None and target < today
+        if is_overdue:
+            visible_end = max(visible_end, today)
+        if visible_end < timeline_start or visible_start >= timeline_end:
+            continue
+        visible_start = max(visible_start, timeline_start)
+        visible_end = min(max(visible_end, visible_start), timeline_end - timedelta(days=1))
+        bar = {
+            **project,
+            "start_day": (visible_start - timeline_start).days + 1,
+            "span_days": (visible_end - visible_start).days + 1,
+            "health_class": "overdue" if is_overdue else project.get("health") or "neutral",
+            "_start": visible_start,
+            "_end": visible_end,
+        }
         lead = (project.get("lead") or {}).get("displayName")
         participants = []
         if lead:
             participants.append(lead)
         participants.extend(project.get("members", []))
+        assigned_slugs = set()
         for name in participants:
             slug = slug_for_name(name)
-            if slug and slug in engineering_team_slugs:
-                project_name = project.get("name")
-                project_url = project.get("url")
-                if not isinstance(project_name, str) or not isinstance(project_url, str):
-                    continue
-                cycle_member_slugs.add(slug)
-                member_projects.setdefault(slug, set()).add((project_name, project_url))
+            if slug and slug in engineering_team_slugs and slug not in assigned_slugs:
+                projects_by_developer[slug].append(dict(bar))
+                assigned_slugs.add(slug)
 
-    # Convert sets back to sorted lists of dicts
-    member_projects_list = {
-        slug: [{"name": name, "url": url} for name, url in sorted(projects, key=lambda x: x[0])]
-        for slug, projects in member_projects.items()
-    }
+    for developer in timeline_developers:
+        bars = projects_by_developer[developer["slug"]]
+        lane_ends: list[Any] = []
+        for bar in sorted(bars, key=lambda item: (item["_start"], item["_end"])):
+            lane = next(
+                (index for index, end in enumerate(lane_ends) if bar["_start"] > end),
+                len(lane_ends),
+            )
+            if lane == len(lane_ends):
+                lane_ends.append(bar["_end"])
+            else:
+                lane_ends[lane] = bar["_end"]
+            bar["lane"] = lane + 1
+        developer["projects"] = bars
+        developer["lane_count"] = max(len(lane_ends), 1)
 
-    developers = sorted(
-        [{"slug": slug, "name": format_name(slug)} for slug in cycle_member_slugs],
-        key=lambda d: d["name"],
-    )
-
-    support_slugs = [
-        slug
-        for slug in get_support_slugs(config=config, projects=cycle_projects)
-        if slug in engineering_team_slugs
-    ]
-    on_call_support = sorted(
-        [{"slug": name, "name": format_name(name)} for name in support_slugs],
-        key=lambda d: d["name"],
-    )
-
-    # Map open priority bug issues to on-call support members
-    priority_bugs = get_open_issues(2, "Bug")
-    bugs_by_assignee = by_assignee(priority_bugs)
-    support_issues = {}
-    for assignee, data in bugs_by_assignee.items():
-        slug = slug_for_name(assignee)
-        if slug and slug in engineering_team_slugs:
-            support_issues[slug] = [
-                {"title": issue["title"], "url": issue["url"]} for issue in data["issues"]
-            ]
+    timeline_weeks = []
+    for offset in range(6):
+        week_start = timeline_start + timedelta(weeks=offset)
+        week_end = week_start + timedelta(days=6)
+        timeline_weeks.append(
+            {"start": f"{week_start:%b} {week_start.day}", "end": f"{week_end:%b} {week_end.day}"}
+        )
 
     return {
-        "developers": developers,
-        "developer_projects": member_projects_list,
+        "project_timeline": {
+            "weeks": timeline_weeks,
+            "rows": timeline_developers,
+            "date_range": f"{timeline_weeks[0]['start']} – {timeline_weeks[-1]['end']}",
+            "today_percent": ((today - timeline_start).days + 0.5) / 42 * 100,
+        },
         "cycle_projects_by_initiative": projects_by_initiative,
         "completed_cycle_projects": completed_projects,
-        "on_call_support": on_call_support,
-        "support_issues": support_issues,
     }
 
 
