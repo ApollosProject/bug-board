@@ -19,7 +19,11 @@ from fleet_health_cache import (
     get_cached_fleet_health,
     should_use_redis_cache,
 )
-from github import merged_prs_by_author, merged_prs_by_reviewer
+from github import (
+    get_merged_pr_counts_for_user,
+    merged_prs_by_author,
+    merged_prs_by_reviewer,
+)
 from leaderboard import (
     calculate_cycle_project_lead_points,
     calculate_cycle_project_member_points,
@@ -405,8 +409,8 @@ EXECUTOR_TIMEOUT_SECONDS = 30
 # Number of worker threads used in the index route for parallel data fetching
 INDEX_THREADPOOL_MAX_WORKERS = 12
 # Number of worker threads used in the /team/<slug> route when fetching
-# Linear and GitHub data concurrently
-TEAM_THREADPOOL_MAX_WORKERS = 3
+# Linear projects, issues, and GitHub data concurrently
+TEAM_THREADPOOL_MAX_WORKERS = 4
 # Cache time-to-live in seconds for the index page
 INDEX_CACHE_TTL_SECONDS = 60
 
@@ -1145,7 +1149,11 @@ def _build_team_context(_cache_epoch: int) -> dict:
         key=lambda d: d["name"],
     )
 
-    support_slugs = [slug for slug in get_support_slugs() if slug in engineering_team_slugs]
+    support_slugs = [
+        slug
+        for slug in get_support_slugs(config=config, projects=cycle_projects)
+        if slug in engineering_team_slugs
+    ]
     on_call_support = sorted(
         [{"slug": name, "name": format_name(name)} for name in support_slugs],
         key=lambda d: d["name"],
@@ -1187,13 +1195,13 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
     with ThreadPoolExecutor(max_workers=TEAM_THREADPOOL_MAX_WORKERS) as executor:
         open_future = executor.submit(get_open_issues_for_person, login)
         completed_future = executor.submit(get_completed_issues_for_person, login, days)
+        projects_future = executor.submit(get_projects)
         github_future = None
         if github_username:
             github_future = executor.submit(
-                lambda: (
-                    merged_prs_by_author(days),
-                    merged_prs_by_reviewer(days),
-                )
+                get_merged_pr_counts_for_user,
+                github_username,
+                days,
             )
         open_items = sorted(
             open_future.result(timeout=EXECUTOR_TIMEOUT_SECONDS),
@@ -1205,10 +1213,9 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
             key=lambda x: x["completedAt"],
             reverse=True,
         )
-        if github_future and github_username:
-            author_map, reviewer_map = github_future.result(timeout=EXECUTOR_TIMEOUT_SECONDS)
-            prs_merged = len(author_map.get(github_username, []))
-            prs_reviewed = len(reviewer_map.get(github_username, []))
+        cycle_projects = projects_future.result(timeout=EXECUTOR_TIMEOUT_SECONDS)
+        if github_future:
+            prs_merged, prs_reviewed = github_future.result(timeout=EXECUTOR_TIMEOUT_SECONDS)
         else:
             prs_merged = prs_reviewed = 0
 
@@ -1251,8 +1258,7 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
     for issues in completed_by_project.values():
         issues.sort(key=lambda x: x["completedAt"], reverse=True)
 
-    # Fetch all projects and annotate date helpers
-    cycle_projects = get_projects()
+    # Annotate the projects fetched alongside issue and GitHub data.
     _annotate_project_schedule_fields(cycle_projects)
     for proj in cycle_projects:
         proj["is_inactive"] = is_inactive_project(proj)
@@ -1294,7 +1300,7 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
 
     project_names = {proj.get("name") for proj in cycle_projects if proj.get("name")}
 
-    on_support = slug in get_support_slugs()
+    on_support = slug in get_support_slugs(config=config, projects=cycle_projects)
     if on_support:
         open_current_cycle = {
             proj: issues

@@ -18,6 +18,30 @@ class _RecordingClient:
 
 
 class GraphQLClientRequestTests(unittest.TestCase):
+    def test_person_pr_counts_use_scoped_searches_and_only_count_approvals(self):
+        response = {
+            "authored": {"issueCount": 60},
+            "reviewed": {
+                "nodes": [
+                    {"reviews": {"nodes": [{"author": {"login": "Bkraeling"}}]}},
+                    {"reviews": {"nodes": [{"author": {"login": "someone-else"}}]}},
+                ],
+                "pageInfo": {"hasNextPage": False, "endCursor": None},
+            },
+        }
+
+        with (
+            patch.object(github, "token", "token"),
+            patch.object(github, "get_github_orgs", return_value=["apollosproject"]),
+            patch.object(github, "_execute", return_value=response) as execute,
+        ):
+            counts = github.get_merged_pr_counts_for_user("bkraeling", 30)
+
+        self.assertEqual(counts, (60, 1))
+        variables = execute.call_args.kwargs["variable_values"]
+        self.assertIn("author:bkraeling", variables["authored"])
+        self.assertIn("reviewed-by:bkraeling", variables["reviewed"])
+
     def test_github_client_allows_slow_repository_queries(self):
         previous_client = getattr(github._thread_local, "client", None)
         if hasattr(github._thread_local, "client"):

@@ -393,6 +393,77 @@ def _get_merged_prs(days: int = 30):
     return prs
 
 
+def get_merged_pr_counts_for_user(username: str, days: int = 30) -> tuple[int, int]:
+    """Return authored and approved-review PR counts for one GitHub user."""
+    if not token or not username:
+        return 0, 0
+    orgs = get_github_orgs()
+    if not orgs:
+        return 0, 0
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff_date = cutoff.date().isoformat()
+    org_filter = " ".join(f"org:{org}" for org in orgs)
+    base_query = f"{org_filter} is:pr is:merged merged:>={cutoff_date}"
+    authored_query = f"{base_query} author:{username}"
+    reviewed_query = f"{base_query} reviewed-by:{username}"
+    query = gql(
+        """
+        query MergedPRCounts($authored: String!, $reviewed: String!, $cursor: String) {
+          authored: search(type: ISSUE, query: $authored, first: 1) { issueCount }
+          reviewed: search(type: ISSUE, query: $reviewed, first: 100, after: $cursor) {
+            nodes {
+              ... on PullRequest {
+                reviews(first: 100, states: [APPROVED]) {
+                  nodes { author { login } }
+                }
+              }
+            }
+            pageInfo { hasNextPage endCursor }
+          }
+        }
+        """
+    )
+
+    authored_count = 0
+    reviewed_count = 0
+    cursor = None
+    normalized_username = username.casefold()
+    while True:
+        try:
+            data = _execute(
+                query,
+                variable_values={
+                    "authored": authored_query,
+                    "reviewed": reviewed_query,
+                    "cursor": cursor,
+                },
+            )
+        except Exception:
+            logging.exception("Failed to fetch merged PR counts for %s", username)
+            return 0, 0
+
+        authored = data.get("authored", {}) or {}
+        authored_count = authored.get("issueCount", 0) or 0
+        reviewed = data.get("reviewed", {}) or {}
+        reviewed_count += sum(
+            any(
+                ((review.get("author") or {}).get("login") or "").casefold() == normalized_username
+                for review in (pr.get("reviews") or {}).get("nodes", []) or []
+            )
+            for pr in reviewed.get("nodes", []) or []
+            if pr
+        )
+
+        page_info = reviewed.get("pageInfo", {}) or {}
+        next_cursor = page_info.get("endCursor") if page_info.get("hasNextPage") else None
+        if not next_cursor or next_cursor == cursor:
+            break
+        cursor = next_cursor
+
+    return authored_count, reviewed_count
+
+
 def merged_prs_by_author(days: int = 30) -> Dict[str, List[Dict[str, Any]]]:
     """Return merged PRs grouped by author within the given timeframe."""
     prs = _get_merged_prs(days)

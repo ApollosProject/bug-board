@@ -46,3 +46,18 @@ details.dropdown.site-menu > summary + ul {
   height: 0.12rem;
   width: 100%;
 }
+
+@keyframes busy-spinner {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+[aria-busy="true"]:not(input, select, textarea, html)::before {
+  animation: busy-spinner 0.8s linear infinite;
+  background-image: none;
+  border: 0.12em solid currentColor;
+  border-radius: 50%;
+  border-right-color: transparent;
+  box-sizing: border-box;
+}
