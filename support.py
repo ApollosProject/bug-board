@@ -65,7 +65,11 @@ def _is_active_today(project: Dict) -> bool:
     return True
 
 
-def get_support_slugs() -> Set[str]:
+def get_support_slugs(
+    *,
+    config: Dict | None = None,
+    projects: list[Dict] | None = None,
+) -> Set[str]:
     """
     Compute the set of people slugs who are on support today.
 
@@ -73,8 +77,10 @@ def get_support_slugs() -> Set[str]:
     on support. If assigned but today's date is outside the project's
     start/target window, they are on support.
     """
-    config = load_config()
-    projects = get_projects()
+    if config is None:
+        config = load_config()
+    if projects is None:
+        projects = get_projects()
     name_to_slug = _name_to_slug_map(config)
 
     assigned_active_slugs: Set[str] = set()
