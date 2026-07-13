@@ -476,6 +476,22 @@ class FixedFridayDateTime(datetime):
         return datetime(2026, 3, 13, 12, 0, 0, tzinfo=tz)
 
 
+class FixedMondayDateTime(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        if tz is None:
+            return datetime(2026, 3, 16, 12, 0, 0)
+        return datetime(2026, 3, 16, 12, 0, 0, tzinfo=tz)
+
+
+class FixedSaturdayDateTime(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        if tz is None:
+            return datetime(2026, 3, 21, 12, 0, 0)
+        return datetime(2026, 3, 21, 12, 0, 0, tzinfo=tz)
+
+
 class PostPriorityBugsTest(unittest.TestCase):
     def test_uses_linear_sla_windows_for_at_risk_and_overdue(self):
         posted = []
@@ -1159,6 +1175,40 @@ class PostProjectUpdatesTest(unittest.TestCase):
 
         posted = self._run(projects, config, datetime_cls=FixedFridayDateTime)
         self.assertEqual(posted, [])
+
+    def test_waits_for_first_project_update_deadline_after_start_date(self):
+        projects = [
+            {
+                "name": "Starting Sunday",
+                "url": "https://linear.app/project/starting-sunday",
+                "startDate": "2026-03-15",
+                "targetDate": "2026-03-31",
+                "status": {"name": "In Development", "type": "started"},
+                "lead": {"displayName": "Alex"},
+                "lastUpdate": None,
+            }
+        ]
+        config = {
+            "people": {
+                "alex": {
+                    "linear_username": "Alex",
+                    "slack_id": "U1",
+                    "team": "engineering",
+                },
+            }
+        }
+
+        posted_on_start_date = self._run(projects, config)
+        posted_after_start_date = self._run(projects, config, datetime_cls=FixedMondayDateTime)
+        posted_after_first_deadline = self._run(
+            projects, config, datetime_cls=FixedSaturdayDateTime
+        )
+
+        self.assertEqual(posted_on_start_date, [])
+        self.assertEqual(posted_after_start_date, [])
+        self.assertEqual(len(posted_after_first_deadline), 1)
+        self.assertIn("*Projects With Overdue Updates*", posted_after_first_deadline[0])
+        self.assertIn("Starting Sunday", posted_after_first_deadline[0])
 
 
 if __name__ == "__main__":
