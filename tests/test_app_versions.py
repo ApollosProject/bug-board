@@ -649,6 +649,7 @@ class AppVersionsRouteTest(unittest.TestCase):
                 "application_name": "One Church",
                 "app_version": "1.0.0",
                 "latest_app_version": "1.0.1",
+                "latest_app_version_source": "app_store",
                 "latest_app_version_source_label": "App Store",
                 "apollos_platform": "ios",
                 "apollos_version": "97",
@@ -665,6 +666,7 @@ class AppVersionsRouteTest(unittest.TestCase):
                 "application_name": "Two Church",
                 "app_version": "1.0.0",
                 "latest_app_version": "1.0.0",
+                "latest_app_version_source": "observed",
                 "latest_app_version_source_label": "Observed",
                 "apollos_platform": "android",
                 "apollos_version": "97",
@@ -699,10 +701,13 @@ class AppVersionsRouteTest(unittest.TestCase):
         self.assertIn('id="version-panel-ios"', body)
         self.assertNotIn("Latest observed", body)
         self.assertIn("One Church", body)
-        self.assertIn("Latest App", body)
+        self.assertNotIn("<th>Latest App</th>", body)
+        self.assertNotIn("<th>Observed Version</th>", body)
+        self.assertIn("<th>Apollos Runtime</th>", body)
         self.assertIn("<th>Source</th>", body)
         self.assertIn("1.0.1", body)
-        self.assertIn("App Store", body)
+        self.assertIn("App Store 1.0.1", body)
+        self.assertNotIn("App Store 1.0.0", body)
         self.assertIn("v2026.05.12.00 (abc1234)", body)
         self.assertIn("<code>TBD</code>", body)
         self.assertIn("Two Church", body)

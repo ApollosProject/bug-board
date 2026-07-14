@@ -100,6 +100,10 @@
     font-size: 0.9rem;
   }
 
+  .version-app-detail {
+    white-space: nowrap;
+  }
+
   .version-empty p:last-child,
   .version-setup p:last-child {
     margin-bottom: 0;
@@ -159,8 +163,7 @@
               <tr>
                 <th>Church</th>
                 <th>App</th>
-                <th>Latest App</th>
-                <th>Observed Version</th>
+                <th>Apollos Runtime</th>
                 <th>Source</th>
                 <th>Status</th>
                 <th>Seen</th>
@@ -177,13 +180,11 @@
                   </td>
                   <td>
                     {{ row.application_name }}<br />
-                    <span class="version-muted">Observed {{ row.app_version or "unknown" }}</span>
-                  </td>
-                  <td>
-                    <code>{{ row.latest_app_version or "unknown" }}</code><br />
-                    <span class="version-muted">
-                      {{ row.latest_app_version_source_label or "Observed" }}
-                    </span>
+                    <span class="version-muted version-app-detail">Observed {{ row.app_version or "unknown" }}</span>
+                    {% if row.latest_app_version_source == "app_store" and row.latest_app_version != row.app_version %}
+                      <br />
+                      <span class="version-muted version-app-detail">App Store {{ row.latest_app_version }}</span>
+                    {% endif %}
                   </td>
                   <td><code>{{ row.apollos_version }}</code></td>
                   <td><code>{{ row.source_display or "TBD" }}</code></td>
