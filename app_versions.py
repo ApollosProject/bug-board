@@ -4,11 +4,9 @@ import json
 import logging
 import os
 import re
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
-from functools import lru_cache
 from typing import Any
 
 import requests
@@ -29,10 +27,7 @@ APP_STORE_LOOKUP_URL = "https://itunes.apple.com/lookup"
 APP_STORE_LOOKUP_LIMIT = 24
 APP_STORE_LOOKUP_TIMEOUT_SECONDS = 5
 APP_STORE_LOOKUP_WORKERS = 8
-PLATFORMS_GITHUB_REPOSITORY = "ApollosProject/apollos-platforms"
-PLATFORMS_GITHUB_API_URL = f"https://api.github.com/repos/{PLATFORMS_GITHUB_REPOSITORY}"
-PLATFORM_SOURCE_CONTEXT_CACHE_SECONDS = 300
-GITHUB_LOOKUP_TIMEOUT_SECONDS = 5
+PLATFORMS_GITHUB_API_URL = "https://api.github.com/repos/ApollosProject/apollos-platforms"
 
 TIMESTAMP_COLUMN_CANDIDATES = (
     "timestamp",
@@ -58,10 +53,10 @@ FIELD_CANDIDATES = {
 }
 
 ROKU_ANALYTICS_VERSION_CANDIDATES = ("context_library_version",)
-MOBILE_PLATFORMS = {"android", "ios"}
 RELEASE_TAG_PLATFORMS = {"amazon", "androidtv", "tv", "tvos"}
 STABLE_RELEASE_TAG_PATTERN = re.compile(r"^v\d{4}\.\d{2}\.\d{2}\.\d{2}$")
 ALPHA_RELEASE_TAG_PATTERN = re.compile(r"^(v\d{4}\.\d{2}\.\d{2}\.\d{2})-alpha\.\d+$")
+SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{7,40}$")
 INTERNAL_DEPLOYMENT_TRACKS = {"beta", "development", "internal", "preview", "prerelease"}
 
 
@@ -123,8 +118,7 @@ def fetch_app_versions(config: AppVersionsConfig) -> tuple[list[dict[str, Any]],
     results = client.query(query, job_config=query_config).result()
     rows = [_row_to_dict(row) for row in results]
     source_context = _fetch_platform_source_context()
-    stable_release_revisions = source_context["stable_release_revisions"]
-    latest_rows = _select_latest_observed_versions(rows, stable_release_revisions)
+    latest_rows = _select_latest_observed_versions(rows, source_context["stable_release_revisions"])
     latest_rows = _enrich_app_store_versions(latest_rows)
     source_context["roku_revision_statuses"] = _fetch_roku_revision_statuses(
         latest_rows,
@@ -435,331 +429,132 @@ def _string_select_expression(
     return f"NULLIF(CAST(`{column}` AS STRING), '') AS {field_name}"
 
 
-def _github_request_headers() -> dict[str, str]:
-    headers = {
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
+def _github_json(path: str, params: dict[str, str] | None = None) -> Any:
+    headers = {"Accept": "application/vnd.github+json"}
     if token := os.getenv("GITHUB_TOKEN", "").strip():
         headers["Authorization"] = f"Bearer {token}"
-    return headers
+    try:
+        response = requests.get(
+            f"{PLATFORMS_GITHUB_API_URL}/{path}",
+            params=params,
+            headers=headers,
+            timeout=APP_STORE_LOOKUP_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        return response.json()
+    except (requests.RequestException, ValueError):
+        logging.warning("Unable to load Platforms %s from GitHub", path, exc_info=True)
+        return None
 
 
 def _fetch_platform_source_context() -> dict[str, Any]:
-    cache_bucket = int(time.time() // PLATFORM_SOURCE_CONTEXT_CACHE_SECONDS)
-    cached = _fetch_platform_source_context_cached(cache_bucket)
+    tags = _github_json("tags", {"per_page": "100"}) or []
+    commits = _github_json("commits", {"sha": "master", "path": "templates/roku", "per_page": "1"})
     return {
-        "stable_release_revisions": dict(cached["stable_release_revisions"]),
-        "roku_target_revision": cached.get("roku_target_revision"),
-    }
-
-
-@lru_cache(maxsize=2)
-def _fetch_platform_source_context_cached(_cache_bucket: int) -> dict[str, Any]:
-    stable_release_revisions: dict[str, str] = {}
-    roku_target_revision = None
-    headers = _github_request_headers()
-
-    try:
-        response = requests.get(
-            f"{PLATFORMS_GITHUB_API_URL}/tags",
-            params={"per_page": 100},
-            headers=headers,
-            timeout=GITHUB_LOOKUP_TIMEOUT_SECONDS,
-        )
-        response.raise_for_status()
-        tags = response.json()
-        if isinstance(tags, list):
-            for tag in tags:
-                if not isinstance(tag, dict):
-                    continue
-                name = _string_value(tag.get("name"))
-                commit = tag.get("commit") or {}
-                revision = _string_value(commit.get("sha")) if isinstance(commit, dict) else None
-                if name and revision and STABLE_RELEASE_TAG_PATTERN.fullmatch(name):
-                    stable_release_revisions[name] = revision
-    except (requests.RequestException, ValueError, TypeError):
-        logging.warning("Unable to load Platforms release tags from GitHub", exc_info=True)
-
-    try:
-        response = requests.get(
-            f"{PLATFORMS_GITHUB_API_URL}/commits",
-            params={"sha": "master", "path": "templates/roku", "per_page": "1"},
-            headers=headers,
-            timeout=GITHUB_LOOKUP_TIMEOUT_SECONDS,
-        )
-        response.raise_for_status()
-        commits = response.json()
-        if isinstance(commits, list) and commits and isinstance(commits[0], dict):
-            roku_target_revision = _string_value(commits[0].get("sha"))
-    except (requests.RequestException, ValueError, TypeError):
-        logging.warning("Unable to load the latest Roku revision from GitHub", exc_info=True)
-
-    return {
-        "stable_release_revisions": stable_release_revisions,
-        "roku_target_revision": roku_target_revision,
+        "stable_release_revisions": {
+            tag["name"]: tag["commit"]["sha"]
+            for tag in tags
+            if STABLE_RELEASE_TAG_PATTERN.fullmatch(tag.get("name", ""))
+        },
+        "roku_target_revision": commits[0]["sha"] if commits else None,
     }
 
 
 def _fetch_roku_revision_statuses(
-    rows: list[dict[str, Any]],
-    target_revision: str | None,
+    rows: list[dict[str, Any]], target_revision: str | None
 ) -> dict[str, str]:
-    if not target_revision:
+    revisions = list(
+        {
+            revision
+            for row in rows
+            if (_string_value(row.get("apollos_platform")) or "").lower() == "roku"
+            and (revision := _string_value(row.get("source_revision")))
+        }
+    )
+    if not target_revision or not revisions:
         return {}
-    revisions = {
-        revision
-        for row in rows
-        if (_string_value(row.get("apollos_platform")) or "").lower() == "roku"
-        and (revision := _string_value(row.get("source_revision")))
-    }
-    return {
-        revision: status
-        for revision in revisions
-        if (status := _fetch_revision_compare_status(target_revision, revision))
-    }
+    with ThreadPoolExecutor(max_workers=min(APP_STORE_LOOKUP_WORKERS, len(revisions))) as executor:
+        statuses = executor.map(
+            lambda revision: _fetch_revision_compare_status(target_revision, revision),
+            revisions,
+        )
+    return {revision: status for revision, status in zip(revisions, statuses) if status}
 
 
-@lru_cache(maxsize=256)
 def _fetch_revision_compare_status(target_revision: str, deployed_revision: str) -> str | None:
     if _revisions_match(target_revision, deployed_revision):
         return "identical"
-    if not re.fullmatch(r"[0-9a-fA-F]{7,40}", deployed_revision):
+    if not SHA_PATTERN.fullmatch(target_revision) or not SHA_PATTERN.fullmatch(deployed_revision):
         return None
-    try:
-        response = requests.get(
-            f"{PLATFORMS_GITHUB_API_URL}/compare/{target_revision}...{deployed_revision}",
-            headers=_github_request_headers(),
-            timeout=GITHUB_LOOKUP_TIMEOUT_SECONDS,
-        )
-        response.raise_for_status()
-        payload = response.json()
-        if isinstance(payload, dict):
-            return _string_value(payload.get("status"))
-    except (requests.RequestException, ValueError, TypeError):
-        logging.warning(
-            "Unable to compare Roku revision %s with %s",
-            deployed_revision,
-            target_revision,
-            exc_info=True,
-        )
-    return None
+    payload = _github_json(f"compare/{target_revision}...{deployed_revision}")
+    return _string_value(payload.get("status")) if isinstance(payload, dict) else None
 
 
 def _revisions_match(left: str, right: str) -> bool:
-    left_normalized = left.strip().lower()
-    right_normalized = right.strip().lower()
-    return left_normalized.startswith(right_normalized) or right_normalized.startswith(
-        left_normalized
-    )
-
-
-def _canonical_release_version(
-    row: dict[str, Any],
-    stable_release_revisions: dict[str, str],
-) -> str | None:
-    source_version = _string_value(row.get("source_version"))
-    if not source_version:
-        return None
-    if STABLE_RELEASE_TAG_PATTERN.fullmatch(source_version):
-        return source_version
-    match = ALPHA_RELEASE_TAG_PATTERN.fullmatch(source_version)
-    if not match:
-        return None
-    stable_version = match.group(1)
-    stable_revision = stable_release_revisions.get(stable_version)
-    source_revision = _string_value(row.get("source_revision"))
-    if not stable_revision or not source_revision:
-        return None
-    if not _revisions_match(stable_revision, source_revision):
-        return None
-    return stable_version
-
-
-def _decorate_observation(
-    row: dict[str, Any],
-    stable_release_revisions: dict[str, str],
-) -> dict[str, Any]:
-    updated = dict(row)
-    deployment_track = (_string_value(row.get("deployment_track")) or "").lower()
-    canonical_source_version = _canonical_release_version(row, stable_release_revisions)
-    source_version = (_string_value(row.get("source_version")) or "").lower()
-
-    if deployment_track == "production":
-        observation_scope = "production"
-    elif deployment_track in INTERNAL_DEPLOYMENT_TRACKS:
-        observation_scope = "internal"
-    elif canonical_source_version:
-        observation_scope = "legacy_production"
-    elif ALPHA_RELEASE_TAG_PATTERN.fullmatch(source_version) or source_version == "master":
-        observation_scope = "legacy_internal"
-    else:
-        observation_scope = "legacy_unknown"
-
-    updated["deployment_track"] = deployment_track or None
-    updated["observation_scope"] = observation_scope
-    updated["canonical_source_version"] = canonical_source_version
-    updated["is_production_observation"] = observation_scope in {
-        "production",
-        "legacy_production",
-    }
-    updated["is_internal_observation"] = observation_scope in {
-        "internal",
-        "legacy_internal",
-    }
-    return updated
+    if not SHA_PATTERN.fullmatch(left) or not SHA_PATTERN.fullmatch(right):
+        return False
+    left, right = left.lower(), right.lower()
+    return left.startswith(right) or right.startswith(left)
 
 
 def _annotate_version_status(
-    rows: list[dict[str, Any]],
-    source_context: dict[str, Any] | None = None,
+    rows: list[dict[str, Any]], source_context: dict[str, Any] | None = None
 ) -> list[dict[str, Any]]:
     source_context = source_context or {}
-    stable_release_revisions = source_context.get("stable_release_revisions") or {}
-    roku_target_revision = _string_value(source_context.get("roku_target_revision"))
-    roku_revision_statuses = source_context.get("roku_revision_statuses") or {}
-    prepared_rows = [_decorate_observation(row, stable_release_revisions) for row in rows]
-
-    confirmed_runtime_by_platform: dict[str, str] = {}
-    fallback_runtime_by_platform: dict[str, str] = {}
-    latest_release_by_platform: dict[str, str] = {}
-
-    def record_latest(target: dict[str, str], platform: str, version: str | None) -> None:
-        if not version:
-            return
-        current = target.get(platform)
-        if current is None or compare_versions(version, current) > 0:
-            target[platform] = version
-
-    for row in prepared_rows:
+    roku_statuses = source_context.get("roku_revision_statuses") or {}
+    latest_by_platform: dict[str, str] = {}
+    for row in rows:
         platform = (_string_value(row.get("apollos_platform")) or "unknown").lower()
-        version = _string_value(row.get("apollos_version"))
-        if platform in MOBILE_PLATFORMS or platform == "unknown":
-            if row.get("is_production_observation"):
-                record_latest(confirmed_runtime_by_platform, platform, version)
-            elif not row.get("is_internal_observation"):
-                record_latest(fallback_runtime_by_platform, platform, version)
-        elif platform in RELEASE_TAG_PLATFORMS and row.get("is_production_observation"):
-            record_latest(
-                latest_release_by_platform,
-                platform,
-                _string_value(row.get("canonical_source_version")),
+        version = _string_value(
+            row.get(
+                "canonical_source_version"
+                if platform in RELEASE_TAG_PLATFORMS
+                else "apollos_version"
             )
+        )
+        if version and (
+            platform not in latest_by_platform
+            or compare_versions(version, latest_by_platform[platform]) > 0
+        ):
+            latest_by_platform[platform] = version
 
     annotated = []
-    for row in prepared_rows:
+    for row in rows:
         updated = dict(row)
         platform = (_string_value(row.get("apollos_platform")) or "unknown").lower()
-        version_source = _string_value(row.get("version_source")) or "runtime"
         version = _string_value(row.get("apollos_version"))
-        observed_app_version = _string_value(row.get("app_version"))
-        latest_app_version = _string_value(row.get("latest_app_version")) or observed_app_version
-        latest_app_version_source = (
-            _string_value(row.get("latest_app_version_source")) or "observed"
-        )
         source_version = _string_value(row.get("source_version"))
         source_revision = _string_value(row.get("source_revision"))
-        canonical_source_version = _string_value(row.get("canonical_source_version"))
-
-        updated["latest_app_version"] = latest_app_version
-        updated["latest_app_version_source"] = latest_app_version_source
-        updated["latest_app_version_source_label"] = format_app_version_source_label(
-            latest_app_version_source
-        )
-        updated["version_source_label"] = format_version_source_label(version_source)
-
-        is_app_version_outdated = False
-        if observed_app_version and latest_app_version:
-            is_app_version_outdated = compare_versions(observed_app_version, latest_app_version) < 0
-        updated["is_app_version_outdated"] = is_app_version_outdated
-
-        is_runtime_outdated = False
-        is_source_outdated = False
-        is_source_status_tbd = False
+        release_version = _string_value(row.get("canonical_source_version"))
+        latest_version = latest_by_platform.get(platform)
         is_outdated = False
-        latest_runtime = None
-        latest_source_version = None
-        source_display = format_source_display(source_version, source_revision)
         freshness_display = version or "TBD"
-        version_status_label = "Observed"
-        version_status_class = "observed"
-
-        if platform in MOBILE_PLATFORMS or platform == "unknown":
-            latest_runtime = confirmed_runtime_by_platform.get(
-                platform
-            ) or fallback_runtime_by_platform.get(platform)
-            if version and latest_runtime:
-                is_runtime_outdated = compare_versions(version, latest_runtime) < 0
-            if row.get("is_internal_observation"):
-                version_status_label = (
-                    "Prerelease"
-                    if source_version and ALPHA_RELEASE_TAG_PATTERN.fullmatch(source_version)
-                    else "Internal"
-                )
-            elif not version:
-                version_status_label = "TBD"
-            else:
-                is_outdated = is_runtime_outdated
-                version_status_label = "Outdated" if is_outdated else "Current"
-                version_status_class = "outdated" if is_outdated else "current"
-        elif platform in RELEASE_TAG_PLATFORMS:
-            latest_source_version = latest_release_by_platform.get(platform)
-            source_display = canonical_source_version or source_version or "TBD"
-            freshness_display = source_display
-            is_source_status_tbd = not source_version and not source_revision
-            if row.get("is_internal_observation"):
-                version_status_label = (
-                    "Prerelease"
-                    if source_version and ALPHA_RELEASE_TAG_PATTERN.fullmatch(source_version)
-                    else "Internal"
-                )
-            elif canonical_source_version:
-                if latest_source_version:
-                    is_source_outdated = (
-                        compare_versions(canonical_source_version, latest_source_version) < 0
-                    )
-                is_outdated = is_source_outdated
-                version_status_label = "Outdated" if is_outdated else "Current"
-                version_status_class = "outdated" if is_outdated else "current"
-            elif is_source_status_tbd:
-                version_status_label = "TBD"
-            else:
-                version_status_label = "Unverified"
+        revision_status = None
+        if platform in RELEASE_TAG_PLATFORMS:
+            freshness_display = release_version or source_version or "TBD"
+            if release_version and latest_version:
+                is_outdated = compare_versions(release_version, latest_version) < 0
         elif platform == "roku":
-            source_display = source_revision[:7] if source_revision else "TBD"
-            freshness_display = source_display
-            is_source_status_tbd = not source_revision
-            revision_status = roku_revision_statuses.get(source_revision or "")
-            if (
-                source_revision
-                and roku_target_revision
-                and _revisions_match(source_revision, roku_target_revision)
-            ):
-                revision_status = "identical"
-            if not source_revision:
-                version_status_label = "TBD"
-            elif not roku_target_revision or not revision_status:
-                version_status_label = "Observed"
-            elif revision_status in {"ahead", "identical"}:
-                version_status_label = "Current"
-                version_status_class = "current"
-            elif revision_status == "behind":
-                is_source_outdated = True
-                is_outdated = True
-                version_status_label = "Outdated"
-                version_status_class = "outdated"
-            else:
-                version_status_label = "Unverified"
-            updated["latest_source_revision"] = roku_target_revision
+            freshness_display = source_revision[:7] if source_revision else "TBD"
+            revision_status = roku_statuses.get(source_revision or "")
+            is_outdated = revision_status == "behind"
+        elif version and latest_version:
+            is_outdated = compare_versions(version, latest_version) < 0
 
-        updated["latest_apollos_version"] = latest_runtime or version
-        updated["latest_source_version"] = latest_source_version
-        updated["is_runtime_outdated"] = is_runtime_outdated
-        updated["is_source_outdated"] = is_source_outdated
-        updated["is_source_status_tbd"] = is_source_status_tbd
         updated["is_outdated"] = is_outdated
-        updated["source_display"] = source_display
         updated["freshness_display"] = freshness_display
+        if freshness_display == "TBD":
+            version_status_label = "TBD"
+            version_status_class = "observed"
+        elif platform == "roku" and revision_status not in {"ahead", "behind", "identical"}:
+            version_status_label = "Unverified" if revision_status else "Observed"
+            version_status_class = "observed"
+        elif platform in RELEASE_TAG_PLATFORMS and not release_version:
+            version_status_label = "Unverified"
+            version_status_class = "observed"
+        else:
+            version_status_label = "Outdated" if is_outdated else "Current"
+            version_status_class = "outdated" if is_outdated else "current"
         updated["version_status_label"] = version_status_label
         updated["version_status_class"] = version_status_class
         updated["latest_seen_display"] = format_timestamp(row.get("latest_seen_at"))
@@ -876,31 +671,40 @@ def _select_latest_observed_versions(
     stable_release_revisions: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     stable_release_revisions = stable_release_revisions or {}
-    observations_by_app: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    latest_by_app: dict[tuple[str, str, str], dict[str, Any]] = {}
     for row in rows:
-        decorated = _decorate_observation(row, stable_release_revisions)
-        observations_by_app.setdefault(_app_identity_key(decorated), []).append(decorated)
-
-    selected = []
-    for observations in observations_by_app.values():
-        production = [row for row in observations if row["is_production_observation"]]
-        non_internal = [row for row in observations if not row["is_internal_observation"]]
-        candidates = production or non_internal or observations
-        current = candidates[0]
-        for candidate in candidates[1:]:
-            if _is_newer_observed_version(
-                candidate,
-                current,
-                stable_release_revisions,
-            ):
-                current = candidate
-        selected.append(current)
-    return selected
+        source_version = _string_value(row.get("source_version")) or ""
+        release_version = (
+            source_version if STABLE_RELEASE_TAG_PATTERN.fullmatch(source_version) else None
+        )
+        match = ALPHA_RELEASE_TAG_PATTERN.fullmatch(source_version)
+        if match and _revisions_match(
+            _string_value(row.get("source_revision")) or "",
+            stable_release_revisions.get(match.group(1), ""),
+        ):
+            release_version = match.group(1)
+        track = (_string_value(row.get("deployment_track")) or "").lower()
+        if track in INTERNAL_DEPLOYMENT_TRACKS or (
+            (match and not release_version) or source_version.lower() == "master"
+        ):
+            continue
+        candidate = dict(row)
+        candidate["canonical_source_version"] = release_version
+        platform = (_string_value(row.get("apollos_platform")) or "unknown").lower()
+        if platform in RELEASE_TAG_PLATFORMS:
+            candidate["apollos_version"] = release_version
+        elif platform == "roku":
+            candidate["apollos_version"] = _string_value(row.get("source_version"))
+        key = _app_identity_key(candidate)
+        current = latest_by_app.get(key)
+        if current is None or _is_newer_observed_version(candidate, current):
+            latest_by_app[key] = candidate
+    return list(latest_by_app.values())
 
 
 def _app_identity_key(row: dict[str, Any]) -> tuple[str, str, str]:
     church = _string_value(row.get("church")) or "Unknown church"
-    platform = _string_value(row.get("apollos_platform")) or "unknown"
+    platform = (_string_value(row.get("apollos_platform")) or "unknown").lower()
     bundle_id = (_string_value(row.get("bundle_id")) or "unknown").lower()
     if bundle_id in {"unknown", "roku"}:
         return church, platform, bundle_id
@@ -910,50 +714,15 @@ def _app_identity_key(row: dict[str, Any]) -> tuple[str, str, str]:
 def _is_newer_observed_version(
     candidate: dict[str, Any],
     current: dict[str, Any],
-    stable_release_revisions: dict[str, str] | None = None,
 ) -> bool:
-    stable_release_revisions = stable_release_revisions or {}
-    platform = (_string_value(candidate.get("apollos_platform")) or "unknown").lower()
-
-    if platform in RELEASE_TAG_PLATFORMS:
-        candidate_source_version = _string_value(
-            candidate.get("canonical_source_version")
-        ) or _canonical_release_version(candidate, stable_release_revisions)
-        candidate_source_version = candidate_source_version or _string_value(
-            candidate.get("source_version")
-        )
-        current_source_version = _string_value(
-            current.get("canonical_source_version")
-        ) or _canonical_release_version(current, stable_release_revisions)
-        current_source_version = current_source_version or _string_value(
-            current.get("source_version")
-        )
-        if candidate_source_version and current_source_version:
-            source_compare = compare_versions(candidate_source_version, current_source_version)
-            if source_compare != 0:
-                return source_compare > 0
-        elif candidate_source_version != current_source_version:
-            return bool(candidate_source_version)
-
-    if platform == "roku":
-        candidate_source_version = _string_value(candidate.get("source_version"))
-        current_source_version = _string_value(current.get("source_version"))
-        if candidate_source_version and current_source_version:
-            source_compare = compare_versions(candidate_source_version, current_source_version)
-            if source_compare != 0:
-                return source_compare > 0
-        elif candidate_source_version != current_source_version:
-            return bool(candidate_source_version)
-
-    if platform not in RELEASE_TAG_PLATFORMS and platform != "roku":
-        candidate_version = _string_value(candidate.get("apollos_version"))
-        current_version = _string_value(current.get("apollos_version"))
-        if candidate_version and current_version:
-            version_compare = compare_versions(candidate_version, current_version)
-            if version_compare != 0:
-                return version_compare > 0
-        elif candidate_version != current_version:
-            return bool(candidate_version)
+    candidate_version = _string_value(candidate.get("apollos_version"))
+    current_version = _string_value(current.get("apollos_version"))
+    if candidate_version and current_version:
+        version_compare = compare_versions(candidate_version, current_version)
+        if version_compare != 0:
+            return version_compare > 0
+    elif candidate_version != current_version:
+        return bool(candidate_version)
 
     candidate_app_version = _string_value(candidate.get("app_version"))
     current_app_version = _string_value(current.get("app_version"))
@@ -963,6 +732,15 @@ def _is_newer_observed_version(
             return app_version_compare > 0
     elif candidate_app_version != current_app_version:
         return bool(candidate_app_version)
+
+    candidate_source_version = _string_value(candidate.get("source_version"))
+    current_source_version = _string_value(current.get("source_version"))
+    if candidate_source_version and current_source_version:
+        source_version_compare = compare_versions(candidate_source_version, current_source_version)
+        if source_version_compare != 0:
+            return source_version_compare > 0
+    elif candidate_source_version != current_source_version:
+        return bool(candidate_source_version)
 
     candidate_church = _string_value(candidate.get("church")) or "Unknown church"
     current_church = _string_value(current.get("church")) or "Unknown church"
@@ -978,7 +756,7 @@ def build_platform_tabs(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     tabs = []
     rows_by_platform: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
-        platform = _string_value(row.get("apollos_platform")) or "unknown"
+        platform = (_string_value(row.get("apollos_platform")) or "unknown").lower()
         rows_by_platform.setdefault(platform, []).append(row)
 
     for platform, platform_rows in sorted(
@@ -992,23 +770,12 @@ def build_platform_tabs(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             {
                 "key": platform,
                 "label": format_platform_label(platform),
-                "freshness_column_label": format_freshness_column_label(platform),
                 "rows": platform_rows,
                 "row_count": len(platform_rows),
                 "outdated_count": sum(1 for row in platform_rows if row.get("is_outdated")),
             }
         )
     return tabs
-
-
-def format_freshness_column_label(platform: str) -> str:
-    if platform in MOBILE_PLATFORMS:
-        return "Expo Runtime"
-    if platform in RELEASE_TAG_PLATFORMS:
-        return "Release"
-    if platform == "roku":
-        return "Commit"
-    return "Version"
 
 
 def format_platform_label(platform: str) -> str:
@@ -1023,32 +790,6 @@ def format_platform_label(platform: str) -> str:
         "unknown": "Unknown",
     }
     return labels.get(platform, platform.replace("_", " ").title())
-
-
-def format_version_source_label(version_source: str) -> str:
-    labels = {
-        "analytics_library": "Analytics library",
-        "runtime": "Runtime",
-    }
-    return labels.get(version_source, version_source.replace("_", " ").title())
-
-
-def format_app_version_source_label(version_source: str) -> str:
-    labels = {
-        "app_store": "App Store",
-        "observed": "Observed",
-    }
-    return labels.get(version_source, version_source.replace("_", " ").title())
-
-
-def format_source_display(source_version: str | None, source_revision: str | None) -> str:
-    if source_version and source_revision:
-        return f"{source_version} ({source_revision[:7]})"
-    if source_version:
-        return source_version
-    if source_revision:
-        return source_revision[:7]
-    return "TBD"
 
 
 def compare_versions(left: str, right: str) -> int:

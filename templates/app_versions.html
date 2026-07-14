@@ -163,7 +163,7 @@
               <tr>
                 <th>Church</th>
                 <th>App</th>
-                <th>{{ tab.freshness_column_label }}</th>
+                <th>{{ "Expo Runtime" if tab.key in ("ios", "android") else "Release" if tab.key in ("amazon", "androidtv", "tv", "tvos") else "Commit" if tab.key == "roku" else "Version" }}</th>
                 <th>Status</th>
                 <th>Seen</th>
                 <th>Users</th>
@@ -185,7 +185,7 @@
                       <span class="version-muted version-app-detail">App Store {{ row.latest_app_version }}</span>
                     {% endif %}
                   </td>
-                  <td><code>{{ row.freshness_display or "TBD" }}</code></td>
+                  <td><code>{{ row.freshness_display or row.apollos_version or "TBD" }}</code></td>
                   <td>
                     <span class="version-status version-status--{{ row.version_status_class or ('outdated' if row.is_outdated else 'current') }}">
                       {{ row.version_status_label or ("Outdated" if row.is_outdated else "Current") }}
