@@ -33,7 +33,7 @@ python -m unittest discover -s tests -p 'test_*.py'
 2. Provide the required environment variables. The application expects the following values:
 
 - `LINEAR_API_KEY` – API token for Linear
-- `GITHUB_TOKEN` – GitHub token used for pull‑request data
+- `GITHUB_TOKEN` – GitHub token used for pull-request data and Platforms release/commit lookups
 - `SLACK_WEBHOOK_URL` – Webhook URL used by the worker to post messages
 - `MANAGER_SLACK_WEBHOOK_URL` – Webhook URL used for manager-facing summaries
 - `APP_URL` – Public URL where the app is hosted
@@ -118,27 +118,32 @@ The legacy `GET /airflow-fleet-health` Better Stack monitor endpoint has been re
 
 ## Apps dashboard
 
-`GET /apps` reads the Segment BigQuery export and shows the highest observed Apollos
-version signal per church/app/platform. It uses the analytics metadata sent by the mobile and TV
-apps, including the exported `apollos_version`, `app_version`, `app_update_id`, `bundle_id`,
-`application_name`, `church`, `apollos_platform`, `source_revision`, and `source_version` fields.
-Public App Store versions are also looked up by bundle ID when available so iOS rows can distinguish
-the observed installed app version from the current production App Store version. Roku Segment
-exports currently do not expose `apollos_version`, so Roku rows use the exported
-`context_library_version` and are labelled as analytics library versions.
+`GET /apps` reads the Segment BigQuery export and reports production freshness using the release
+signal appropriate to each platform:
+
+- iOS and Android compare the observed Expo runtime with the latest production runtime for that
+  platform.
+- tvOS, AndroidTV, and Amazon compare stable `apollos-platforms` release tags. An alpha observation
+  is treated as a prerelease unless its source revision exactly matches a published stable tag, in
+  which case the stable tag is displayed.
+- Roku compares its embedded source revision with the latest commit on `master` that changed
+  `templates/roku`. This reports source freshness without implying that the manual Roku deployment
+  itself was automated.
+
+New builds send `deployment_track` alongside `source_revision` and `source_version`, allowing the
+dashboard to keep internal and prerelease builds out of production baselines. Older observations
+without that field are classified from their release tag and revision. Public App Store versions
+are also looked up by bundle ID for iOS, but are shown as informational app-version context rather
+than used to determine Expo runtime freshness.
 
 The page first inspects `INFORMATION_SCHEMA.COLUMNS` for the configured Segment tables and only
 queries tables that expose a supported version signal, so Segment lifecycle-only app-store
-`version` fields are not mistaken for Apollos runtime versions. Runtime rows are marked outdated
-when their highest observed runtime is behind the highest runtime observed for the same platform in
-the lookback window, or when the observed app version is behind an available App Store version. If
-older clients are still active after a release, the dashboard keeps the highest observed runtime for
-the app instead of letting the most recent older-client event hide it. Mobile rows prefer the
-`apollos` Segment dataset, TV rows prefer `apollos_tv`, and Roku rows prefer `apollos_roku` so the
-same app event is not counted twice when Segment exports overlap.
-TV rows show `TBD` until source metadata appears in Segment exports. Once those fields are present,
-TV freshness uses the highest observed `source_version` for each TV platform instead of the static
-Expo runtime version.
+`version` fields are not mistaken for Apollos runtime versions. If older clients are still active
+after a release, the dashboard keeps the highest production observation for the app instead of
+letting the most recent older-client event hide it. Mobile rows prefer the `apollos` Segment
+dataset, TV rows prefer `apollos_tv`, and Roku rows prefer `apollos_roku` so the same app event is
+not counted twice when Segment exports overlap. Rows show `TBD` until the metadata required by their
+platform's freshness flow appears.
 
 To make the dashboard query live data locally, in production, or in review apps, set
 `BIGQUERY_SERVICE_ACCOUNT_JSON_BASE64`. The value should be a base64-encoded Google service
