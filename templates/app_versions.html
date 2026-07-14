@@ -116,8 +116,8 @@
   <div>
     <h1>Apps</h1>
     <p>
-      Observed app and platform version signals from Segment over the last {{ lookback_days }} days,
-      compared with public App Store versions when available.
+      Production freshness observed through Segment over the last {{ lookback_days }} days:
+      Expo runtime for mobile, release tag for TV, and source commit for Roku.
     </p>
   </div>
 </section>
@@ -163,8 +163,7 @@
               <tr>
                 <th>Church</th>
                 <th>App</th>
-                <th>Apollos Runtime</th>
-                <th>Source</th>
+                <th>{{ "Expo Runtime" if tab.key in ("ios", "android") else "Release" if tab.key in ("amazon", "androidtv", "tv", "tvos") else "Commit" if tab.key == "roku" else "Version" }}</th>
                 <th>Status</th>
                 <th>Seen</th>
                 <th>Users</th>
@@ -186,8 +185,7 @@
                       <span class="version-muted version-app-detail">App Store {{ row.latest_app_version }}</span>
                     {% endif %}
                   </td>
-                  <td><code>{{ row.apollos_version }}</code></td>
-                  <td><code>{{ row.source_display or "TBD" }}</code></td>
+                  <td><code>{{ row.freshness_display or row.apollos_version or "TBD" }}</code></td>
                   <td>
                     <span class="version-status version-status--{{ row.version_status_class or ('outdated' if row.is_outdated else 'current') }}">
                       {{ row.version_status_label or ("Outdated" if row.is_outdated else "Current") }}

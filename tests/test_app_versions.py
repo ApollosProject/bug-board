@@ -148,7 +148,7 @@ class AppVersionsContextTest(unittest.TestCase):
                 "bundle_id": "com.oldtv",
                 "apollos_version": "1.0.0",
                 "app_version": "1.0.0",
-                "source_version": "v2026.05.01.00",
+                "source_version": "v2026.05.01.00-alpha.1",
                 "source_revision": "abcdef123456",
                 "version_source": "runtime",
                 "latest_seen_at": datetime(2026, 5, 3, 12, 0, tzinfo=timezone.utc),
@@ -180,12 +180,19 @@ class AppVersionsContextTest(unittest.TestCase):
                 "application_name": "Roku",
                 "bundle_id": "roku",
                 "apollos_version": "2.0.0",
+                "source_revision": "ba95e2f5fe554f430d113f79761c1655376b8239",
                 "version_source": "analytics_library",
                 "latest_seen_at": datetime(2026, 5, 4, 12, 0, tzinfo=timezone.utc),
             },
         ]
 
-        annotated = app_versions._annotate_version_status(rows)
+        selected = app_versions._select_latest_observed_versions(
+            rows, {"v2026.05.01.00": "abcdef123456"}
+        )
+        annotated = app_versions._annotate_version_status(
+            selected,
+            {"roku_revision_statuses": {rows[-1]["source_revision"]: "behind"}},
+        )
 
         one_church = next(row for row in annotated if row["church"] == "one-church")
         two_church = next(row for row in annotated if row["church"] == "two-church")
@@ -195,23 +202,18 @@ class AppVersionsContextTest(unittest.TestCase):
         unknown_platform = next(row for row in annotated if row["church"] == "unknown-platform")
         roku_church = next(row for row in annotated if row["church"] == "roku-church")
         self.assertTrue(one_church["is_outdated"])
-        self.assertEqual(one_church["latest_apollos_version"], "101")
-        self.assertEqual(one_church["version_source_label"], "Runtime")
+        self.assertEqual(one_church["freshness_display"], "97")
         self.assertFalse(two_church["is_outdated"])
-        self.assertFalse(tv_church["is_outdated"])
-        self.assertTrue(tv_church["is_source_status_tbd"])
         self.assertEqual(tv_church["version_status_label"], "TBD")
-        self.assertEqual(tv_church["source_display"], "TBD")
         self.assertTrue(old_tv_church["is_outdated"])
-        self.assertTrue(old_tv_church["is_source_outdated"])
-        self.assertEqual(old_tv_church["source_display"], "v2026.05.01.00 (abcdef1)")
+        self.assertEqual(old_tv_church["freshness_display"], "v2026.05.01.00")
         self.assertFalse(new_tv_church["is_outdated"])
         self.assertFalse(unknown_platform["is_outdated"])
-        self.assertEqual(unknown_platform["latest_apollos_version"], "8.2.13")
-        self.assertFalse(roku_church["is_outdated"])
-        self.assertEqual(roku_church["version_source_label"], "Analytics library")
-        self.assertEqual(roku_church["version_status_label"], "TBD")
+        self.assertTrue(roku_church["is_outdated"])
+        self.assertEqual(roku_church["freshness_display"], "ba95e2f")
         self.assertEqual(annotated[0]["church"], "one-church")
+        self.assertTrue(app_versions._revisions_match("abcdef123456", "abcdef1"))
+        self.assertFalse(app_versions._revisions_match("abcdef123456", "abc"))
 
     def test_annotates_outdated_apps_by_app_store_version(self):
         rows = [
@@ -245,10 +247,7 @@ class AppVersionsContextTest(unittest.TestCase):
 
         bayside = next(row for row in annotated if row["church"] == "bayside")
         red_rocks = next(row for row in annotated if row["church"] == "red-rocks")
-        self.assertTrue(bayside["is_outdated"])
-        self.assertFalse(bayside["is_runtime_outdated"])
-        self.assertTrue(bayside["is_app_version_outdated"])
-        self.assertEqual(bayside["latest_app_version_source_label"], "App Store")
+        self.assertFalse(bayside["is_outdated"])
         self.assertFalse(red_rocks["is_outdated"])
 
     def test_enriches_app_store_versions_by_bundle_id(self):
@@ -414,6 +413,7 @@ class AppVersionsContextTest(unittest.TestCase):
                 "user_count": 7,
             },
         ]
+        rows.append({**rows[0], "apollos_version": "999", "deployment_track": "internal"})
 
         selected = app_versions._select_latest_observed_versions(rows)
 
@@ -493,7 +493,7 @@ class AppVersionsContextTest(unittest.TestCase):
 
     def test_builds_platform_tabs_with_outdated_counts(self):
         rows = [
-            {"apollos_platform": "ios", "is_outdated": True},
+            {"apollos_platform": "iOS", "is_outdated": True},
             {"apollos_platform": "ios", "is_outdated": False},
             {"apollos_platform": "android", "is_outdated": False},
             {"apollos_platform": "androidtv", "is_outdated": False},
@@ -529,6 +529,7 @@ class AppVersionsContextTest(unittest.TestCase):
                 "app_version": "app_version",
                 "source_revision": "source_revision",
                 "source_version": "source_version",
+                "deployment_track": "deployment_track",
                 "bundle_id": "bundle_id",
                 "application_name": "application_name",
                 "apollos_platform": "apollos_platform",
@@ -540,6 +541,7 @@ class AppVersionsContextTest(unittest.TestCase):
                 "appversion": "appVersion",
                 "sourcerevision": "sourceRevision",
                 "sourceversion": "sourceVersion",
+                "deploymenttrack": "deploymentTrack",
             },
             ("apollos_roku", "identifies"): {
                 "timestamp": "timestamp",
@@ -564,6 +566,7 @@ class AppVersionsContextTest(unittest.TestCase):
         self.assertIn("NULLIF(CAST(`apollosVersion` AS STRING), '') AS apollos_version", query)
         self.assertIn("NULLIF(CAST(`source_revision` AS STRING), '') AS source_revision", query)
         self.assertIn("NULLIF(CAST(`sourceVersion` AS STRING), '') AS source_version", query)
+        self.assertIn("AS deployment_track", query)
         self.assertIn(
             "NULLIF(CAST(`context_library_version` AS STRING), '') AS apollos_version",
             query,
@@ -703,13 +706,12 @@ class AppVersionsRouteTest(unittest.TestCase):
         self.assertIn("One Church", body)
         self.assertNotIn("<th>Latest App</th>", body)
         self.assertNotIn("<th>Observed Version</th>", body)
-        self.assertIn("<th>Apollos Runtime</th>", body)
-        self.assertIn("<th>Source</th>", body)
+        self.assertIn("<th>Expo Runtime</th>", body)
+        self.assertNotIn("<th>Source</th>", body)
         self.assertIn("1.0.1", body)
         self.assertIn("App Store 1.0.1", body)
         self.assertNotIn("App Store 1.0.0", body)
-        self.assertIn("v2026.05.12.00 (abc1234)", body)
-        self.assertIn("<code>TBD</code>", body)
+        self.assertIn("<code>97</code>", body)
         self.assertIn("Two Church", body)
         self.assertNotIn("<th>Platform</th>", body)
         self.assertNotIn("<th>Latest Observed</th>", body)
