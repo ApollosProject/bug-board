@@ -124,3 +124,4 @@ details.dropdown.site-menu > summary + ul {
 .project-timeline-bar--atRisk { background: #b26a00; }
 .project-timeline-bar--offTrack,
 .project-timeline-bar--overdue { background: #b83a3a; }
+.project-timeline-bar--completed { background: #3f6f57; opacity: 0.85; }

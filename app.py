@@ -1115,7 +1115,11 @@ def _build_team_context(_cache_epoch: int) -> dict:
             del projects_by_initiative[name]
 
     # Build a Monday-aligned six-week view for every engineering team member.
+    # Completed projects join the active ones so recently finished work still
+    # shows on the timeline; the date-window filter below drops older projects.
     active_projects = [p for projs in projects_by_initiative.values() for p in projs]
+    finished_projects = [p for p in completed_projects if is_completed_project(p)]
+    timeline_projects = active_projects + finished_projects
     today = datetime.now(timezone.utc).date()
     timeline_start = today - timedelta(days=today.weekday())
     timeline_end = timeline_start + timedelta(weeks=6)
@@ -1126,25 +1130,35 @@ def _build_team_context(_cache_epoch: int) -> dict:
     projects_by_developer: dict[str, list[dict[str, Any]]] = {
         developer["slug"]: [] for developer in timeline_developers
     }
-    for project in active_projects:
+    for project in timeline_projects:
+        is_completed = bool(project.get("is_inactive"))
         start = parse_iso_date(project.get("startDate"))
         target = parse_iso_date(project.get("targetDate"))
-        if start is None and target is None:
+        completed = parse_iso_date(project.get("completedAt"))
+        # A finished project's bar ends when it was completed, not at its target.
+        end_hint = completed if is_completed and completed else target
+        if start is None and end_hint is None:
             continue
         visible_start = start or timeline_start
-        visible_end = target or (timeline_end - timedelta(days=1))
-        is_overdue = target is not None and target < today
+        visible_end = end_hint or (timeline_end - timedelta(days=1))
+        is_overdue = not is_completed and target is not None and target < today
         if is_overdue:
             visible_end = max(visible_end, today)
         if visible_end < timeline_start or visible_start >= timeline_end:
             continue
         visible_start = max(visible_start, timeline_start)
         visible_end = min(max(visible_end, visible_start), timeline_end - timedelta(days=1))
+        if is_completed:
+            health_class = "completed"
+        elif is_overdue:
+            health_class = "overdue"
+        else:
+            health_class = project.get("health") or "neutral"
         bar = {
             **project,
             "start_day": (visible_start - timeline_start).days + 1,
             "span_days": (visible_end - visible_start).days + 1,
-            "health_class": "overdue" if is_overdue else project.get("health") or "neutral",
+            "health_class": health_class,
             "_start": visible_start,
             "_end": visible_end,
         }
