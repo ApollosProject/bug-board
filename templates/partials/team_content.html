@@ -7,13 +7,25 @@
   <div class="project-timeline">
     <div class="project-timeline-header">
       <strong>Developer</strong>
+      <span class="project-timeline-ready-heading">Ready</span>
       <div class="project-timeline-weeks">
         {% for week in project_timeline.weeks %}<span><b>{{ week.start }}</b> – {{ week.end }}</span>{% endfor %}
       </div>
     </div>
     {% for developer in project_timeline.rows %}
       <div class="project-timeline-row">
-        <a class="project-timeline-developer" href="{{ url_for('team_slug', slug=developer.slug) }}">{{ developer.name|first_name }}</a>
+        {% if developer.slug %}
+          <a class="project-timeline-developer" href="{{ url_for('team_slug', slug=developer.slug) }}">{{ developer.name|first_name }}</a>
+        {% else %}
+          <span class="project-timeline-developer">{{ developer.name }}</span>
+        {% endif %}
+        <div class="project-timeline-ready" aria-label="Ready projects for {{ developer.name }}">
+          {% for project in developer.ready_projects %}
+            <a href="{{ project.url }}" class="project-timeline-ready-project" title="{{ project.name }}">{{ project.name }}</a>
+          {% else %}
+            <span class="project-timeline-ready-empty" aria-hidden="true">—</span>
+          {% endfor %}
+        </div>
         <div class="project-timeline-track" style="--lanes: {{ developer.lane_count }}; --today: {{ project_timeline.today_percent }}%;">
           <i class="project-timeline-today" aria-hidden="true"></i>
           {% for project in developer.projects %}

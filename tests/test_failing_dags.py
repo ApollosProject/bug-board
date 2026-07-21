@@ -833,7 +833,7 @@ class TeamContextProjectFilteringTest(unittest.TestCase):
 
         self.assertEqual(
             [developer["slug"] for developer in context["project_timeline"]["rows"]],
-            ["darryl"],
+            ["darryl", None],
         )
         self.assertEqual(context["project_timeline"]["rows"][0]["projects"], [])
         self.assertEqual(context["cycle_projects_by_initiative"], {})
@@ -841,6 +841,43 @@ class TeamContextProjectFilteringTest(unittest.TestCase):
         self.assertEqual(
             [project["name"] for project in context["completed_cycle_projects"]],
             ["16KB Page Sizes for Android"],
+        )
+
+    def test_ready_project_without_engineering_member_uses_unassigned_row(self):
+        config = {
+            "people": {
+                "darryl": {
+                    "team": "engineering",
+                    "linear_username": "darryl",
+                }
+            },
+            "platforms": {},
+        }
+        ready_project = {
+            "id": "proj-1",
+            "name": "Add Tap Feed to Shortcuts in Crossroads Anywhere",
+            "url": "https://linear.example/project/tap-feed-shortcuts",
+            "health": None,
+            "status": {"name": "Ready", "type": "planned"},
+            "completedAt": None,
+            "startDate": None,
+            "targetDate": None,
+            "lead": None,
+            "initiatives": {"nodes": []},
+            "members": [],
+        }
+
+        with patch.object(app_module, "load_config", return_value=config):
+            with patch.object(app_module, "get_projects", return_value=[ready_project]):
+                context = app_module._build_team_context(1)
+
+        unassigned_row = context["project_timeline"]["rows"][-1]
+        self.assertEqual(unassigned_row["name"], "Unassigned")
+        self.assertIsNone(unassigned_row["slug"])
+        self.assertEqual(unassigned_row["projects"], [])
+        self.assertEqual(
+            [project["name"] for project in unassigned_row["ready_projects"]],
+            ["Add Tap Feed to Shortcuts in Crossroads Anywhere"],
         )
 
     def test_released_project_is_not_counted_as_current(self):

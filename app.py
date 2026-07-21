@@ -1062,19 +1062,24 @@ def _build_team_context(_cache_epoch: int) -> dict:
             return None
         return name_to_slug.get(parts[0])
 
-    def project_has_engineering_member(project: dict) -> bool:
-        """Return True when a project includes an engineering team member."""
+    def engineering_participant_slugs(project: dict) -> set[str]:
+        """Return the engineering team members participating in a project."""
         participants: list[str] = []
         lead = (project.get("lead") or {}).get("displayName")
         if lead:
             participants.append(lead)
         members = project.get("members") or []
         participants.extend(members)
+        slugs = set()
         for name in participants:
             slug = slug_for_name(name)
             if slug and slug in engineering_team_slugs:
-                return True
-        return False
+                slugs.add(slug)
+        return slugs
+
+    def project_has_engineering_member(project: dict) -> bool:
+        """Return True when a project includes an engineering team member."""
+        return bool(engineering_participant_slugs(project))
 
     cycle_projects = get_projects()
     _annotate_project_schedule_fields(cycle_projects)
@@ -1103,7 +1108,8 @@ def _build_team_context(_cache_epoch: int) -> dict:
     for name, projects in list(projects_by_initiative.items()):
         remaining = []
         for project in projects:
-            if not project_has_engineering_member(project):
+            is_ready = get_project_status_name(project) == "ready"
+            if not project_has_engineering_member(project) and not is_ready:
                 continue
             if project.get("is_inactive"):
                 completed_projects.append(project)
@@ -1127,11 +1133,23 @@ def _build_team_context(_cache_epoch: int) -> dict:
         [{"slug": slug, "name": format_name(slug)} for slug in engineering_team_slugs],
         key=lambda developer: developer["name"],
     )
-    projects_by_developer: dict[str, list[dict[str, Any]]] = {
-        developer["slug"]: [] for developer in timeline_developers
+    timeline_rows = [*timeline_developers, {"slug": None, "name": "Unassigned"}]
+    projects_by_developer: dict[str | None, list[dict[str, Any]]] = {
+        developer["slug"]: [] for developer in timeline_rows
+    }
+    ready_projects_by_developer: dict[str | None, list[dict[str, Any]]] = {
+        developer["slug"]: [] for developer in timeline_rows
     }
     for project in timeline_projects:
         is_completed = bool(project.get("is_inactive"))
+        assigned_slugs = engineering_participant_slugs(project)
+        if not is_completed and get_project_status_name(project) == "ready":
+            ready_row_slugs: set[str | None] = set(assigned_slugs)
+            if not ready_row_slugs:
+                ready_row_slugs.add(None)
+            for slug in ready_row_slugs:
+                ready_projects_by_developer[slug].append(project)
+            continue
         start = parse_iso_date(project.get("startDate"))
         target = parse_iso_date(project.get("targetDate"))
         completed = parse_iso_date(project.get("completedAt"))
@@ -1162,19 +1180,10 @@ def _build_team_context(_cache_epoch: int) -> dict:
             "_start": visible_start,
             "_end": visible_end,
         }
-        lead = (project.get("lead") or {}).get("displayName")
-        participants = []
-        if lead:
-            participants.append(lead)
-        participants.extend(project.get("members", []))
-        assigned_slugs = set()
-        for name in participants:
-            slug = slug_for_name(name)
-            if slug and slug in engineering_team_slugs and slug not in assigned_slugs:
-                projects_by_developer[slug].append(dict(bar))
-                assigned_slugs.add(slug)
+        for slug in assigned_slugs:
+            projects_by_developer[slug].append(dict(bar))
 
-    for developer in timeline_developers:
+    for developer in timeline_rows:
         bars = projects_by_developer[developer["slug"]]
         lane_ends: list[Any] = []
         for bar in sorted(bars, key=lambda item: (item["_start"], item["_end"])):
@@ -1188,6 +1197,10 @@ def _build_team_context(_cache_epoch: int) -> dict:
                 lane_ends[lane] = bar["_end"]
             bar["lane"] = lane + 1
         developer["projects"] = bars
+        developer["ready_projects"] = sorted(
+            ready_projects_by_developer[developer["slug"]],
+            key=lambda project: project.get("name") or "",
+        )
         developer["lane_count"] = max(len(lane_ends), 1)
 
     timeline_weeks = []
@@ -1201,7 +1214,7 @@ def _build_team_context(_cache_epoch: int) -> dict:
     return {
         "project_timeline": {
             "weeks": timeline_weeks,
-            "rows": timeline_developers,
+            "rows": timeline_rows,
             "date_range": f"{timeline_weeks[0]['start']} – {timeline_weeks[-1]['end']}",
             "today_percent": ((today - timeline_start).days + 0.5) / 42 * 100,
         },
