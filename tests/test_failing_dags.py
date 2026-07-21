@@ -843,6 +843,58 @@ class TeamContextProjectFilteringTest(unittest.TestCase):
             ["16KB Page Sizes for Android"],
         )
 
+    def test_only_ready_project_without_lead_is_listed_as_unassigned(self):
+        config = {
+            "people": {
+                "darryl": {
+                    "team": "engineering",
+                    "linear_username": "darryl",
+                }
+            },
+            "platforms": {},
+        }
+        ready_project = {
+            "id": "proj-1",
+            "name": "Add Tap Feed to Shortcuts in Crossroads Anywhere",
+            "url": "https://linear.example/project/tap-feed-shortcuts",
+            "health": None,
+            "status": {"name": "Ready", "type": "planned"},
+            "completedAt": None,
+            "startDate": None,
+            "targetDate": None,
+            "lead": None,
+            "initiatives": {"nodes": []},
+            "members": [],
+        }
+        led_ready_project = {
+            **ready_project,
+            "id": "proj-2",
+            "name": "Universal Giving Exports",
+            "url": "https://linear.example/project/universal-giving-exports",
+            "lead": {"displayName": "vincent"},
+            "members": ["shahbano", "vincent"],
+        }
+
+        with patch.object(app_module, "load_config", return_value=config):
+            with patch.object(
+                app_module,
+                "get_projects",
+                return_value=[ready_project, led_ready_project],
+            ):
+                context = app_module._build_team_context(1)
+
+        self.assertEqual(
+            [
+                project["name"]
+                for project in context["project_timeline"]["unassigned_ready_projects"]
+            ],
+            ["Add Tap Feed to Shortcuts in Crossroads Anywhere"],
+        )
+        self.assertEqual(
+            [developer["slug"] for developer in context["project_timeline"]["rows"]],
+            ["darryl"],
+        )
+
     def test_released_project_is_not_counted_as_current(self):
         config = {
             "people": {

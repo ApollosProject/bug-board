@@ -67,6 +67,28 @@ details.dropdown.site-menu > summary + ul {
   gap: 0.5rem 1rem; justify-content: space-between; margin: 1.5rem 0 0.75rem;
 }
 .project-timeline-heading h3 { margin: 0; }
+.project-ready-section {
+  border: 1px solid var(--pico-muted-border-color); border-radius: 0.5rem;
+  margin-bottom: 0.75rem; padding: 0.65rem;
+}
+.project-ready-section-heading {
+  align-items: baseline; display: flex; gap: 0.5rem; margin-bottom: 0.5rem;
+}
+.project-ready-section-heading strong {
+  color: var(--pico-muted-color); font-size: 0.7rem; text-transform: uppercase;
+}
+.project-ready-section-heading span { color: var(--pico-muted-color); font-size: 0.8rem; }
+.project-ready-projects {
+  display: grid; gap: 0.35rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(17rem, 100%), 1fr));
+}
+.project-ready-project {
+  align-items: center; background: #5d6b89; border-radius: 0.35rem; color: #fff;
+  display: flex; font-size: 0.75rem; font-weight: 600; min-height: 1.8rem;
+  min-width: 0; overflow: hidden; padding: 0.25rem 0.55rem; text-decoration: none;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.project-ready-project:hover { color: #fff; }
 .project-timeline-scroll {
   border: 1px solid var(--pico-muted-border-color); border-radius: 0.5rem; overflow-x: auto;
 }

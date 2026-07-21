@@ -89,6 +89,12 @@ class NavigationTest(unittest.TestCase):
             "project_timeline": {
                 "weeks": [],
                 "rows": [],
+                "unassigned_ready_projects": [
+                    {
+                        "name": "Add Tap Feed to Shortcuts",
+                        "url": "https://linear.example/project/tap-feed-shortcuts",
+                    }
+                ],
                 "date_range": "Jul 13 – Aug 23",
                 "today_percent": 1.2,
             },
@@ -106,6 +112,12 @@ class NavigationTest(unittest.TestCase):
         self.assertEqual(partial_response.status_code, 200)
         self.assertIn("<h2>Projects</h2>", partial_body)
         self.assertIn("<h3>Timeline</h3>", partial_body)
+        self.assertIn('aria-label="Ready unassigned projects"', partial_body)
+        self.assertIn("Unassigned projects", partial_body)
+        self.assertIn(
+            'href="https://linear.example/project/tap-feed-shortcuts"',
+            partial_body,
+        )
         self.assertNotIn("Current Focus", partial_body)
 
     def test_legacy_team_url_renders_the_projects_page(self):

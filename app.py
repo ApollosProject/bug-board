@@ -1062,24 +1062,38 @@ def _build_team_context(_cache_epoch: int) -> dict:
             return None
         return name_to_slug.get(parts[0])
 
-    def project_has_engineering_member(project: dict) -> bool:
-        """Return True when a project includes an engineering team member."""
+    def engineering_participant_slugs(project: dict) -> set[str]:
+        """Return the engineering team members participating in a project."""
         participants: list[str] = []
         lead = (project.get("lead") or {}).get("displayName")
         if lead:
             participants.append(lead)
         members = project.get("members") or []
         participants.extend(members)
+        slugs = set()
         for name in participants:
             slug = slug_for_name(name)
             if slug and slug in engineering_team_slugs:
-                return True
-        return False
+                slugs.add(slug)
+        return slugs
+
+    def project_has_engineering_member(project: dict) -> bool:
+        """Return True when a project includes an engineering team member."""
+        return bool(engineering_participant_slugs(project))
 
     cycle_projects = get_projects()
     _annotate_project_schedule_fields(cycle_projects)
     for proj in cycle_projects:
         proj["is_inactive"] = is_inactive_project(proj)
+    unassigned_ready_projects = sorted(
+        [
+            project
+            for project in cycle_projects
+            if get_project_status_name(project) == "ready"
+            and not (project.get("lead") or {}).get("displayName")
+        ],
+        key=lambda project: project.get("name") or "",
+    )
 
     # group projects by initiatives
     projects_by_initiative: dict[str, list[dict[str, Any]]] = {}
@@ -1132,6 +1146,7 @@ def _build_team_context(_cache_epoch: int) -> dict:
     }
     for project in timeline_projects:
         is_completed = bool(project.get("is_inactive"))
+        assigned_slugs = engineering_participant_slugs(project)
         start = parse_iso_date(project.get("startDate"))
         target = parse_iso_date(project.get("targetDate"))
         completed = parse_iso_date(project.get("completedAt"))
@@ -1162,17 +1177,8 @@ def _build_team_context(_cache_epoch: int) -> dict:
             "_start": visible_start,
             "_end": visible_end,
         }
-        lead = (project.get("lead") or {}).get("displayName")
-        participants = []
-        if lead:
-            participants.append(lead)
-        participants.extend(project.get("members", []))
-        assigned_slugs = set()
-        for name in participants:
-            slug = slug_for_name(name)
-            if slug and slug in engineering_team_slugs and slug not in assigned_slugs:
-                projects_by_developer[slug].append(dict(bar))
-                assigned_slugs.add(slug)
+        for slug in assigned_slugs:
+            projects_by_developer[slug].append(dict(bar))
 
     for developer in timeline_developers:
         bars = projects_by_developer[developer["slug"]]
@@ -1202,6 +1208,7 @@ def _build_team_context(_cache_epoch: int) -> dict:
         "project_timeline": {
             "weeks": timeline_weeks,
             "rows": timeline_developers,
+            "unassigned_ready_projects": unassigned_ready_projects,
             "date_range": f"{timeline_weeks[0]['start']} – {timeline_weeks[-1]['end']}",
             "today_percent": ((today - timeline_start).days + 0.5) / 42 * 100,
         },

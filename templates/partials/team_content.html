@@ -3,6 +3,19 @@
   <h3>Timeline</h3>
   <small>Six-week view · {{ project_timeline.date_range }} · Red line is today</small>
 </div>
+{% if project_timeline.unassigned_ready_projects %}
+  <section class="project-ready-section" aria-label="Ready unassigned projects">
+    <div class="project-ready-section-heading">
+      <strong>Ready</strong>
+      <span>Unassigned projects</span>
+    </div>
+    <div class="project-ready-projects">
+      {% for project in project_timeline.unassigned_ready_projects %}
+        <a href="{{ project.url }}" class="project-ready-project" title="{{ project.name }}">{{ project.name }}</a>
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}
 <div class="project-timeline-scroll" tabindex="0" role="region" aria-label="Developer project timeline">
   <div class="project-timeline">
     <div class="project-timeline-header">
