@@ -88,18 +88,11 @@ class NavigationTest(unittest.TestCase):
         context = {
             "project_timeline": {
                 "weeks": [],
-                "rows": [
+                "rows": [],
+                "unassigned_ready_projects": [
                     {
-                        "slug": None,
-                        "name": "Unassigned",
-                        "ready_projects": [
-                            {
-                                "name": "Add Tap Feed to Shortcuts",
-                                "url": "https://linear.example/project/tap-feed-shortcuts",
-                            }
-                        ],
-                        "projects": [],
-                        "lane_count": 1,
+                        "name": "Add Tap Feed to Shortcuts",
+                        "url": "https://linear.example/project/tap-feed-shortcuts",
                     }
                 ],
                 "date_range": "Jul 13 – Aug 23",
@@ -119,11 +112,8 @@ class NavigationTest(unittest.TestCase):
         self.assertEqual(partial_response.status_code, 200)
         self.assertIn("<h2>Projects</h2>", partial_body)
         self.assertIn("<h3>Timeline</h3>", partial_body)
-        self.assertIn('class="project-timeline-ready-heading">Ready</span>', partial_body)
-        self.assertIn(
-            'aria-label="Ready projects for Unassigned"',
-            partial_body,
-        )
+        self.assertIn('aria-label="Ready unassigned projects"', partial_body)
+        self.assertIn("Unassigned projects", partial_body)
         self.assertIn(
             'href="https://linear.example/project/tap-feed-shortcuts"',
             partial_body,

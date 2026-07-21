@@ -1085,6 +1085,15 @@ def _build_team_context(_cache_epoch: int) -> dict:
     _annotate_project_schedule_fields(cycle_projects)
     for proj in cycle_projects:
         proj["is_inactive"] = is_inactive_project(proj)
+    unassigned_ready_projects = sorted(
+        [
+            project
+            for project in cycle_projects
+            if get_project_status_name(project) == "ready"
+            and not (project.get("lead") or {}).get("displayName")
+        ],
+        key=lambda project: project.get("name") or "",
+    )
 
     # group projects by initiatives
     projects_by_initiative: dict[str, list[dict[str, Any]]] = {}
@@ -1108,10 +1117,7 @@ def _build_team_context(_cache_epoch: int) -> dict:
     for name, projects in list(projects_by_initiative.items()):
         remaining = []
         for project in projects:
-            is_unassigned_ready = get_project_status_name(project) == "ready" and not (
-                project.get("lead") or {}
-            ).get("displayName")
-            if not project_has_engineering_member(project) and not is_unassigned_ready:
+            if not project_has_engineering_member(project):
                 continue
             if project.get("is_inactive"):
                 completed_projects.append(project)
@@ -1135,25 +1141,12 @@ def _build_team_context(_cache_epoch: int) -> dict:
         [{"slug": slug, "name": format_name(slug)} for slug in engineering_team_slugs],
         key=lambda developer: developer["name"],
     )
-    timeline_rows = [*timeline_developers, {"slug": None, "name": "Unassigned"}]
-    projects_by_developer: dict[str | None, list[dict[str, Any]]] = {
-        developer["slug"]: [] for developer in timeline_rows
-    }
-    ready_projects_by_developer: dict[str | None, list[dict[str, Any]]] = {
-        developer["slug"]: [] for developer in timeline_rows
+    projects_by_developer: dict[str, list[dict[str, Any]]] = {
+        developer["slug"]: [] for developer in timeline_developers
     }
     for project in timeline_projects:
         is_completed = bool(project.get("is_inactive"))
         assigned_slugs = engineering_participant_slugs(project)
-        if not is_completed and get_project_status_name(project) == "ready":
-            ready_row_slugs: set[str | None] = set(assigned_slugs)
-            if not ready_row_slugs:
-                if (project.get("lead") or {}).get("displayName"):
-                    continue
-                ready_row_slugs.add(None)
-            for slug in ready_row_slugs:
-                ready_projects_by_developer[slug].append(project)
-            continue
         start = parse_iso_date(project.get("startDate"))
         target = parse_iso_date(project.get("targetDate"))
         completed = parse_iso_date(project.get("completedAt"))
@@ -1187,7 +1180,7 @@ def _build_team_context(_cache_epoch: int) -> dict:
         for slug in assigned_slugs:
             projects_by_developer[slug].append(dict(bar))
 
-    for developer in timeline_rows:
+    for developer in timeline_developers:
         bars = projects_by_developer[developer["slug"]]
         lane_ends: list[Any] = []
         for bar in sorted(bars, key=lambda item: (item["_start"], item["_end"])):
@@ -1201,10 +1194,6 @@ def _build_team_context(_cache_epoch: int) -> dict:
                 lane_ends[lane] = bar["_end"]
             bar["lane"] = lane + 1
         developer["projects"] = bars
-        developer["ready_projects"] = sorted(
-            ready_projects_by_developer[developer["slug"]],
-            key=lambda project: project.get("name") or "",
-        )
         developer["lane_count"] = max(len(lane_ends), 1)
 
     timeline_weeks = []
@@ -1218,7 +1207,8 @@ def _build_team_context(_cache_epoch: int) -> dict:
     return {
         "project_timeline": {
             "weeks": timeline_weeks,
-            "rows": timeline_rows,
+            "rows": timeline_developers,
+            "unassigned_ready_projects": unassigned_ready_projects,
             "date_range": f"{timeline_weeks[0]['start']} – {timeline_weeks[-1]['end']}",
             "today_percent": ((today - timeline_start).days + 0.5) / 42 * 100,
         },

@@ -833,7 +833,7 @@ class TeamContextProjectFilteringTest(unittest.TestCase):
 
         self.assertEqual(
             [developer["slug"] for developer in context["project_timeline"]["rows"]],
-            ["darryl", None],
+            ["darryl"],
         )
         self.assertEqual(context["project_timeline"]["rows"][0]["projects"], [])
         self.assertEqual(context["cycle_projects_by_initiative"], {})
@@ -843,7 +843,7 @@ class TeamContextProjectFilteringTest(unittest.TestCase):
             ["16KB Page Sizes for Android"],
         )
 
-    def test_only_ready_project_without_lead_uses_unassigned_row(self):
+    def test_only_ready_project_without_lead_is_listed_as_unassigned(self):
         config = {
             "people": {
                 "darryl": {
@@ -883,13 +883,16 @@ class TeamContextProjectFilteringTest(unittest.TestCase):
             ):
                 context = app_module._build_team_context(1)
 
-        unassigned_row = context["project_timeline"]["rows"][-1]
-        self.assertEqual(unassigned_row["name"], "Unassigned")
-        self.assertIsNone(unassigned_row["slug"])
-        self.assertEqual(unassigned_row["projects"], [])
         self.assertEqual(
-            [project["name"] for project in unassigned_row["ready_projects"]],
+            [
+                project["name"]
+                for project in context["project_timeline"]["unassigned_ready_projects"]
+            ],
             ["Add Tap Feed to Shortcuts in Crossroads Anywhere"],
+        )
+        self.assertEqual(
+            [developer["slug"] for developer in context["project_timeline"]["rows"]],
+            ["darryl"],
         )
 
     def test_released_project_is_not_counted_as_current(self):
