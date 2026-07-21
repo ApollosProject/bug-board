@@ -843,7 +843,7 @@ class TeamContextProjectFilteringTest(unittest.TestCase):
             ["16KB Page Sizes for Android"],
         )
 
-    def test_ready_project_without_engineering_member_uses_unassigned_row(self):
+    def test_only_ready_project_without_lead_uses_unassigned_row(self):
         config = {
             "people": {
                 "darryl": {
@@ -866,9 +866,21 @@ class TeamContextProjectFilteringTest(unittest.TestCase):
             "initiatives": {"nodes": []},
             "members": [],
         }
+        led_ready_project = {
+            **ready_project,
+            "id": "proj-2",
+            "name": "Universal Giving Exports",
+            "url": "https://linear.example/project/universal-giving-exports",
+            "lead": {"displayName": "vincent"},
+            "members": ["shahbano", "vincent"],
+        }
 
         with patch.object(app_module, "load_config", return_value=config):
-            with patch.object(app_module, "get_projects", return_value=[ready_project]):
+            with patch.object(
+                app_module,
+                "get_projects",
+                return_value=[ready_project, led_ready_project],
+            ):
                 context = app_module._build_team_context(1)
 
         unassigned_row = context["project_timeline"]["rows"][-1]

@@ -1108,8 +1108,10 @@ def _build_team_context(_cache_epoch: int) -> dict:
     for name, projects in list(projects_by_initiative.items()):
         remaining = []
         for project in projects:
-            is_ready = get_project_status_name(project) == "ready"
-            if not project_has_engineering_member(project) and not is_ready:
+            is_unassigned_ready = get_project_status_name(project) == "ready" and not (
+                project.get("lead") or {}
+            ).get("displayName")
+            if not project_has_engineering_member(project) and not is_unassigned_ready:
                 continue
             if project.get("is_inactive"):
                 completed_projects.append(project)
@@ -1146,6 +1148,8 @@ def _build_team_context(_cache_epoch: int) -> dict:
         if not is_completed and get_project_status_name(project) == "ready":
             ready_row_slugs: set[str | None] = set(assigned_slugs)
             if not ready_row_slugs:
+                if (project.get("lead") or {}).get("displayName"):
+                    continue
                 ready_row_slugs.add(None)
             for slug in ready_row_slugs:
                 ready_projects_by_developer[slug].append(project)
