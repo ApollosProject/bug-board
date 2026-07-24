@@ -45,6 +45,7 @@ from project_dates import (
     format_project_target_status,
     parse_iso_date,
 )
+from rippling_pto import get_rippling_pto_calendar
 from support import get_support_slugs
 
 
@@ -1141,7 +1142,32 @@ def _build_team_context(_cache_epoch: int) -> dict:
         [{"slug": slug, "name": format_name(slug)} for slug in engineering_team_slugs],
         key=lambda developer: developer["name"],
     )
+
+    def engineering_slug_for_ooo_summary(summary: str) -> str | None:
+        normalized_summary = normalize(summary)
+        full_name_matches = [
+            developer["slug"]
+            for developer in timeline_developers
+            if normalized_summary == developer["name"]
+            or normalized_summary.startswith(f"{developer['name']} ")
+        ]
+        if len(full_name_matches) == 1:
+            return full_name_matches[0]
+
+        summary_parts = normalized_summary.split()
+        if not summary_parts:
+            return None
+        first_name_matches = [
+            developer["slug"]
+            for developer in timeline_developers
+            if developer["name"].split()[0] == summary_parts[0]
+        ]
+        return first_name_matches[0] if len(first_name_matches) == 1 else None
+
     projects_by_developer: dict[str, list[dict[str, Any]]] = {
+        developer["slug"]: [] for developer in timeline_developers
+    }
+    ooo_by_developer: dict[str, list[dict[str, Any]]] = {
         developer["slug"]: [] for developer in timeline_developers
     }
     for project in timeline_projects:
@@ -1180,8 +1206,36 @@ def _build_team_context(_cache_epoch: int) -> dict:
         for slug in assigned_slugs:
             projects_by_developer[slug].append(dict(bar))
 
+    pto_calendar = get_rippling_pto_calendar()
+    for event in pto_calendar.events:
+        slug = engineering_slug_for_ooo_summary(event.summary)
+        if slug is None:
+            continue
+        if event.end < timeline_start or event.start >= timeline_end:
+            continue
+
+        visible_start = max(event.start, timeline_start)
+        visible_end = min(event.end, timeline_end - timedelta(days=1))
+        if event.start == event.end:
+            date_range = f"{event.start:%b} {event.start.day}"
+        else:
+            date_range = f"{event.start:%b} {event.start.day} – {event.end:%b} {event.end.day}"
+        title_prefix = "OOO" if event.is_all_day else "Partial-day OOO"
+        ooo_by_developer[slug].append(
+            {
+                "start_day": (visible_start - timeline_start).days + 1,
+                "span_days": (visible_end - visible_start).days + 1,
+                "title": f"{title_prefix} · {date_range}",
+                "is_partial_day": not event.is_all_day,
+                "_start": visible_start,
+                "_end": visible_end,
+            }
+        )
+
     for developer in timeline_developers:
-        bars = projects_by_developer[developer["slug"]]
+        project_bars = projects_by_developer[developer["slug"]]
+        ooo_bars = ooo_by_developer[developer["slug"]]
+        bars = project_bars + ooo_bars
         lane_ends: list[Any] = []
         for bar in sorted(bars, key=lambda item: (item["_start"], item["_end"])):
             lane = next(
@@ -1193,7 +1247,8 @@ def _build_team_context(_cache_epoch: int) -> dict:
             else:
                 lane_ends[lane] = bar["_end"]
             bar["lane"] = lane + 1
-        developer["projects"] = bars
+        developer["projects"] = project_bars
+        developer["ooo_events"] = ooo_bars
         developer["lane_count"] = max(len(lane_ends), 1)
 
     timeline_weeks = []
@@ -1211,6 +1266,8 @@ def _build_team_context(_cache_epoch: int) -> dict:
             "unassigned_ready_projects": unassigned_ready_projects,
             "date_range": f"{timeline_weeks[0]['start']} – {timeline_weeks[-1]['end']}",
             "today_percent": ((today - timeline_start).days + 0.5) / 42 * 100,
+            "ooo_configured": pto_calendar.configured,
+            "ooo_available": pto_calendar.available,
         },
         "cycle_projects_by_initiative": projects_by_initiative,
         "completed_cycle_projects": completed_projects,

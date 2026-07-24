@@ -147,3 +147,17 @@ details.dropdown.site-menu > summary + ul {
 .project-timeline-bar--offTrack,
 .project-timeline-bar--overdue { background: #b83a3a; }
 .project-timeline-bar--completed { background: #3f6f57; opacity: 0.85; }
+.project-timeline-bar--ooo {
+  background: repeating-linear-gradient(
+    135deg, #5b4a8f 0, #5b4a8f 0.35rem, #7561b5 0.35rem, #7561b5 0.7rem
+  );
+}
+.project-timeline-bar--ooo-partial { border: 1px dashed #fff; }
+.project-timeline-ooo-note::before {
+  background: repeating-linear-gradient(
+    135deg, #5b4a8f 0, #5b4a8f 0.2rem, #7561b5 0.2rem, #7561b5 0.4rem
+  );
+  border-radius: 0.2rem; content: ""; display: inline-block; height: 0.65rem;
+  margin-right: 0.25rem; vertical-align: -0.04rem; width: 0.9rem;
+}
+.project-timeline-ooo-unavailable { color: #b83a3a; }
