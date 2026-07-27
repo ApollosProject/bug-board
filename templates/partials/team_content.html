@@ -1,7 +1,14 @@
 <h2>Projects</h2>
 <div class="project-timeline-heading">
   <h3>Timeline</h3>
-  <small>Six-week view · {{ project_timeline.date_range }} · Red line is today</small>
+  <small>
+    Six-week view · {{ project_timeline.date_range }} · Red line is today
+    {% if project_timeline.ooo_available %}
+      · <span class="project-timeline-ooo-note">OOO from Rippling · direct reports calendar</span>
+    {% elif project_timeline.ooo_configured %}
+      · <span class="project-timeline-ooo-unavailable">Rippling OOO unavailable</span>
+    {% endif %}
+  </small>
 </div>
 {% if project_timeline.unassigned_ready_projects %}
   <section class="project-ready-section" aria-label="Ready unassigned projects">
@@ -29,11 +36,16 @@
         <a class="project-timeline-developer" href="{{ url_for('team_slug', slug=developer.slug) }}">{{ developer.name|first_name }}</a>
         <div class="project-timeline-track" style="--lanes: {{ developer.lane_count }}; --today: {{ project_timeline.today_percent }}%;">
           <i class="project-timeline-today" aria-hidden="true"></i>
-          {% for project in developer.projects %}
-            <a href="{{ project.url }}" class="project-timeline-bar project-timeline-bar--{{ project.health_class }}" style="--start: {{ project.start_day }}; --span: {{ project.span_days }}; --lane: {{ project.lane }};" title="{{ project.name }}{% if project.startDate or project.targetDate %}: {{ project.startDate or 'Earlier' }} – {{ project.targetDate or 'Ongoing' }}{% endif %}">{{ project.name }}</a>
+          {% if developer.projects or developer.ooo_events %}
+            {% for project in developer.projects %}
+              <a href="{{ project.url }}" class="project-timeline-bar project-timeline-bar--{{ project.health_class }}" style="--start: {{ project.start_day }}; --span: {{ project.span_days }}; --lane: {{ project.lane }};" title="{{ project.name }}{% if project.startDate or project.targetDate %}: {{ project.startDate or 'Earlier' }} – {{ project.targetDate or 'Ongoing' }}{% endif %}">{{ project.name }}</a>
+            {% endfor %}
+            {% for event in developer.ooo_events %}
+              <span class="project-timeline-bar project-timeline-bar--ooo{% if event.is_partial_day %} project-timeline-bar--ooo-partial{% endif %}" style="--start: {{ event.start_day }}; --span: {{ event.span_days }}; --lane: {{ event.lane }};" title="{{ event.title }}" aria-label="{{ event.title }}" role="img">{% if event.span_days > 1 %}OOO{% endif %}</span>
+            {% endfor %}
           {% else %}
             <small class="project-timeline-empty">No dated projects</small>
-          {% endfor %}
+          {% endif %}
         </div>
       </div>
     {% endfor %}

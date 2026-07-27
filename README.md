@@ -53,6 +53,8 @@ python -m unittest discover -s tests -p 'test_*.py'
 - `BIGQUERY_SERVICE_ACCOUNT_JSON_BASE64` – Base64-encoded Google service account JSON for BigQuery access
 - `APP_VERSIONS_LOOKBACK_DAYS` – Optional lookback window for `/apps` (default: `30`)
 - `APP_VERSIONS_LIMIT` – Optional maximum app rows rendered by `/apps` (default: `1000`)
+- `RIPPLING_PTO_CALENDAR_URL` – Optional private Rippling direct-reports calendar subscription URL used to add OOO bars to the project timeline; treat this value as a secret
+- `RIPPLING_PTO_TIMEZONE` – Optional IANA time zone used to place timed PTO entries on calendar days (default: `America/New_York`)
 
 These can be placed in a `.env` file or exported in your shell.
 
