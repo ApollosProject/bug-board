@@ -1,7 +1,15 @@
 import unittest
+from datetime import datetime
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlparse
 
 import app as app_module
+
+
+class FixedDateTime(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return cls(2026, 7, 31, 12, tzinfo=tz)
 
 
 class NavigationTest(unittest.TestCase):
@@ -68,6 +76,7 @@ class NavigationTest(unittest.TestCase):
         self.addCleanup(app_module._build_person_context.cache_clear)
 
         with (
+            patch.object(app_module, "datetime", FixedDateTime),
             patch.object(app_module, "load_config", return_value=config),
             patch.object(app_module, "get_open_issues_for_person", return_value=[]),
             patch.object(app_module, "get_completed_issues_for_person", return_value=[]),
@@ -80,6 +89,12 @@ class NavigationTest(unittest.TestCase):
             context = app_module._build_person_context("brandon", 30, 1)
 
         self.assertEqual((context["prs_merged"], context["prs_reviewed"]), (60, 53))
+        merged_pr_query = parse_qs(urlparse(context["github_merged_prs_url"]).query)["q"][0]
+        self.assertIn("author:bkraeling", merged_pr_query)
+        self.assertIn("merged:>=2026-07-01", merged_pr_query)
+        with app_module.app.test_request_context():
+            body = app_module.render_template("partials/person_content.html", **context)
+        self.assertIn("merged%3A%3E%3D2026-07-01", body)
         fetch.assert_called_once_with()
         counts.assert_called_once_with("bkraeling", 30)
         support.assert_called_once_with(config=config, projects=projects)
