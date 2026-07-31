@@ -59,6 +59,15 @@ def format_display_name(linear_username: str) -> str:
     return re.sub(r"[._-]+", " ", linear_username).title()
 
 
+def github_merged_prs_url(username: str, days: int) -> str:
+    cutoff_date = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
+    query = (
+        f"is:closed is:pr author:{username} archived:false "
+        f"merged:>={cutoff_date}"
+    )
+    return f"https://github.com/pulls?q={quote(query, safe='')}"
+
+
 INACTIVE_PROJECT_STATUS_NAMES = {
     "completed",
     "incomplete",
@@ -1423,6 +1432,9 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
         "person_name": person_name,
         "linear_username": login,
         "github_username": github_username,
+        "github_merged_prs_url": (
+            github_merged_prs_url(github_username, days) if github_username else None
+        ),
         "days": days,
         "open_current_cycle": open_current_cycle,
         "open_other": open_other,
