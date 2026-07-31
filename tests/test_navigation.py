@@ -89,9 +89,7 @@ class NavigationTest(unittest.TestCase):
             context = app_module._build_person_context("brandon", 30, 1)
 
         self.assertEqual((context["prs_merged"], context["prs_reviewed"]), (60, 53))
-        merged_pr_query = parse_qs(
-            urlparse(context["github_merged_prs_url"]).query
-        )["q"][0]
+        merged_pr_query = parse_qs(urlparse(context["github_merged_prs_url"]).query)["q"][0]
         self.assertIn("author:bkraeling", merged_pr_query)
         self.assertIn("merged:>=2026-07-01", merged_pr_query)
         with app_module.app.test_request_context():

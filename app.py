@@ -61,10 +61,7 @@ def format_display_name(linear_username: str) -> str:
 
 def github_merged_prs_url(username: str, days: int) -> str:
     cutoff_date = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
-    query = (
-        f"is:closed is:pr author:{username} archived:false "
-        f"merged:>={cutoff_date}"
-    )
+    query = f"is:closed is:pr author:{username} archived:false merged:>={cutoff_date}"
     return f"https://github.com/pulls?q={quote(query, safe='')}"
 
 
