@@ -24,6 +24,7 @@ from github import (
     get_merged_pr_counts_for_user,
 )
 from leaderboard import calculate_cycle_project_points
+from leaderboard_cache import get_cached_leaderboard
 from linear.issues import (
     by_platform,
     by_project,
@@ -864,8 +865,7 @@ def _build_open_items_context(days: int, _cache_epoch: int) -> dict:
     }
 
 
-@lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
-def _build_leaderboard_context(days: int, _cache_epoch: int) -> dict:
+def compute_leaderboard_context(days: int) -> dict:
     with ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS) as executor:
         completed_work_future = executor.submit(
             get_completed_issues_summary_for_labels,
@@ -897,6 +897,11 @@ def _build_leaderboard_context(days: int, _cache_epoch: int) -> dict:
         "days": days,
         "leaderboard_entries": leaderboard_entries,
     }
+
+
+@lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
+def _build_leaderboard_context(days: int, _cache_epoch: int) -> dict:
+    return compute_leaderboard_context(days)
 
 
 @lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
@@ -960,6 +965,17 @@ def index_open_items_partial():
 @app.route("/partials/index/leaderboard")
 def index_leaderboard_partial():
     days = request.args.get("days", default=30, type=int)
+    if should_use_redis_cache():
+        cached = get_cached_leaderboard(days)
+        if cached is not None:
+            return render_template("partials/index_leaderboard.html", **cached)
+        logging.warning("Leaderboard cache miss while REDIS_URL is configured")
+        return render_template(
+            "partials/index_leaderboard.html",
+            days=days,
+            leaderboard_entries=[],
+            leaderboard_unavailable=True,
+        )
     cache_epoch = int(time.time() / INDEX_CACHE_TTL_SECONDS)
     context = _build_leaderboard_context(days, cache_epoch)
     return render_template("partials/index_leaderboard.html", **context)

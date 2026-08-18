@@ -42,6 +42,11 @@ def _install_import_shims() -> None:
     fleet_health_module.should_use_redis_cache = lambda: False
     sys.modules.setdefault("fleet_health_cache", fleet_health_module)
 
+    leaderboard_cache_module = cast(Any, types.ModuleType("leaderboard_cache"))
+    leaderboard_cache_module.DEFAULT_LEADERBOARD_DAYS = 30
+    leaderboard_cache_module.refresh_leaderboard_cache = lambda *args, **kwargs: {}
+    sys.modules.setdefault("leaderboard_cache", leaderboard_cache_module)
+
     github_module = cast(Any, types.ModuleType("github"))
     github_module.GitHubDataError = type("GitHubDataError", (RuntimeError,), {})
     github_module.get_pr_diff = lambda *args, **kwargs: ""
@@ -89,6 +94,7 @@ for module_name in [
     "fleet_health_cache",
     "github",
     "leaderboard",
+    "leaderboard_cache",
     "linear",
     "linear.issues",
     "linear.projects",
@@ -217,6 +223,43 @@ class RunDebugJobsTest(unittest.TestCase):
         leaderboard.assert_called_once_with()
         stale.assert_called_once_with()
         project_updates.assert_called_once_with()
+
+    def test_refreshes_leaderboard_cache_when_redis_is_configured(self):
+        with patch.object(jobs_module, "should_use_redis_cache", return_value=True):
+            with patch.object(jobs_module, "refresh_airflow_fleet_health_cache_job"):
+                with patch.object(jobs_module, "refresh_leaderboard_cache_job") as refresh:
+                    with patch.object(jobs_module, "post_inactive_engineers"):
+                        with patch.object(jobs_module, "post_priority_bugs"):
+                            with patch.object(jobs_module, "post_leaderboard"):
+                                with patch.object(jobs_module, "post_stale"):
+                                    with patch.object(jobs_module, "post_project_updates"):
+                                        jobs_module.run_debug_jobs()
+
+        refresh.assert_called_once_with()
+
+
+class ConfigureLeaderboardCacheJobTest(unittest.TestCase):
+    def test_schedules_leaderboard_refresh_when_redis_is_configured(self):
+        recorded_jobs = []
+
+        def fake_every(interval=None):
+            return _FakeScheduledJob(recorded_jobs, interval=interval)
+
+        with patch.object(jobs_module, "should_use_redis_cache", return_value=True):
+            with patch.object(jobs_module, "refresh_airflow_fleet_health_cache_job"):
+                with patch.object(jobs_module, "refresh_leaderboard_cache_job"):
+                    with patch.object(jobs_module.schedule, "every", side_effect=fake_every):
+                        jobs_module.configure_scheduled_jobs()
+                        self.assertIn(
+                            {
+                                "interval": 60,
+                                "unit": "seconds",
+                                "at_time": None,
+                                "timezone": None,
+                                "func": jobs_module.refresh_leaderboard_cache_job,
+                            },
+                            recorded_jobs,
+                        )
 
 
 class PostStaleTest(unittest.TestCase):

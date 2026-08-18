@@ -21,6 +21,7 @@ from github import (
 )
 from issue_timing import format_issue_sla_text, parse_linear_dt
 from leaderboard import calculate_cycle_project_points
+from leaderboard_cache import DEFAULT_LEADERBOARD_DAYS, refresh_leaderboard_cache
 from linear.issues import (
     get_completed_issues,
     get_completed_issues_for_person,
@@ -41,6 +42,7 @@ RETRY_SLEEP_SECONDS = 5
 MAX_DIFF_CHARS = 12000
 MAX_DIFF_FILES = 20
 FLEET_HEALTH_REFRESH_DEFAULT_SECONDS = 60
+LEADERBOARD_REFRESH_DEFAULT_SECONDS = 60
 AIRFLOW_FLEET_HEARTBEAT_TIMEOUT_SECONDS = 10
 AIRFLOW_FLEET_UNKNOWN_HEARTBEAT_FAILURE_THRESHOLD = 3
 STALE_LINEAR_ISSUE_DAYS = 21
@@ -170,6 +172,15 @@ def refresh_airflow_fleet_health_cache_job():
         payload.get("status"),
         status,
         payload.get("evaluated_dags"),
+    )
+
+
+def refresh_leaderboard_cache_job():
+    context = refresh_leaderboard_cache(DEFAULT_LEADERBOARD_DAYS)
+    logging.info(
+        "Refreshed leaderboard cache (days=%s, entries=%s)",
+        context.get("days"),
+        len(context.get("leaderboard_entries") or []),
     )
 
 
@@ -934,6 +945,7 @@ def post_weekly_changelog():
 def run_debug_jobs() -> None:
     if should_use_redis_cache():
         refresh_airflow_fleet_health_cache_job()
+        refresh_leaderboard_cache_job()
     post_inactive_engineers()
     post_priority_bugs()
     post_leaderboard()
@@ -954,8 +966,19 @@ def configure_scheduled_jobs() -> None:
             "Scheduled airflow fleet health cache refresh every %s seconds",
             refresh_interval_seconds,
         )
+        leaderboard_refresh_seconds = _read_positive_int_env(
+            "LEADERBOARD_REFRESH_SECONDS",
+            LEADERBOARD_REFRESH_DEFAULT_SECONDS,
+        )
+        schedule.every(leaderboard_refresh_seconds).seconds.do(refresh_leaderboard_cache_job)
+        refresh_leaderboard_cache_job()
+        logging.info(
+            "Scheduled leaderboard cache refresh every %s seconds",
+            leaderboard_refresh_seconds,
+        )
     else:
         logging.info("REDIS_URL not set; airflow fleet health cache refresh is disabled")
+        logging.info("REDIS_URL not set; leaderboard cache refresh is disabled")
 
     schedule.every().friday.at("13:00").do(post_inactive_engineers)
     schedule.every().day.at("12:00").do(post_priority_bugs)

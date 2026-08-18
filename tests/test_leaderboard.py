@@ -12,13 +12,13 @@ def _import_leaderboard_with_stub():
 
     linear_projects_module = types.ModuleType("linear.projects")
 
-    def _get_projects():
+    def _get_completed_cycle_projects():
         return []
 
     def _get_completed_issue_assignees_by_project(project_ids):
         return {project_id: [] for project_id in project_ids}
 
-    linear_projects_module.get_projects = _get_projects
+    linear_projects_module.get_completed_cycle_projects = _get_completed_cycle_projects
     linear_projects_module.get_completed_issue_assignees_by_project = (
         _get_completed_issue_assignees_by_project
     )
@@ -55,7 +55,9 @@ class CycleProjectPointsTest(TestCase):
         ]
         now = datetime(2026, 4, 7, tzinfo=timezone.utc)
 
-        with patch.object(leaderboard_module, "get_projects", return_value=projects):
+        with patch.object(
+            leaderboard_module, "get_completed_cycle_projects", return_value=projects
+        ):
             with patch.object(
                 leaderboard_module,
                 "get_completed_issue_assignees_by_project",
@@ -85,7 +87,9 @@ class CycleProjectPointsTest(TestCase):
         ]
         now = datetime(2026, 4, 7, tzinfo=timezone.utc)
 
-        with patch.object(leaderboard_module, "get_projects", return_value=projects):
+        with patch.object(
+            leaderboard_module, "get_completed_cycle_projects", return_value=projects
+        ):
             lead_points, member_points = leaderboard_module.calculate_cycle_project_points(30, now)
 
         self.assertEqual(lead_points, {})
@@ -107,7 +111,9 @@ class CycleProjectPointsTest(TestCase):
         ]
         now = datetime(2026, 4, 7, tzinfo=timezone.utc)
 
-        with patch.object(leaderboard_module, "get_projects", return_value=projects):
+        with patch.object(
+            leaderboard_module, "get_completed_cycle_projects", return_value=projects
+        ):
             with patch.object(
                 leaderboard_module,
                 "get_completed_issue_assignees_by_project",
@@ -133,7 +139,9 @@ class CycleProjectPointsTest(TestCase):
         ]
         now = datetime(2026, 4, 7, tzinfo=timezone.utc)
 
-        with patch.object(leaderboard_module, "get_projects", return_value=projects):
+        with patch.object(
+            leaderboard_module, "get_completed_cycle_projects", return_value=projects
+        ):
             with patch.object(
                 leaderboard_module,
                 "get_completed_issue_assignees_by_project",
