@@ -1,3 +1,9 @@
+{% macro stdev_badge(key) -%}
+  {%- set stat = (metric_stdevs or {}).get(key) -%}
+  {%- if stat -%}
+  <small class="metric-stdev" data-tooltip="{{ stat.tooltip }}">{{ stat.label }}</small>
+  {%- endif -%}
+{%- endmacro %}
 <h2>{{ 'Current Support Work' if on_call_support else 'Current Project Work' }}</h2>
 {% if open_current_cycle %}
 {% for project, issues in open_current_cycle.items() %}
@@ -46,12 +52,14 @@
         {% endif %}
       </header>
       <h1>{{ prs_merged }}</h1>
+      {{ stdev_badge('prs_merged') }}
     </article>
   </div>
   <div>
     <article>
       <header>PRs Reviewed</header>
       <h1>{{ prs_reviewed }}</h1>
+      {{ stdev_badge('prs_reviewed') }}
     </article>
   </div>
 </div>
@@ -60,6 +68,7 @@
     <article>
       <header><a href="https://linear.app/differential/view/sla-issues-7e2098ebf79e">Priority Bugs Fixed</a></header>
       <h1>{{ priority_bugs_fixed }}</h1>
+      {{ stdev_badge('priority_bugs_fixed') }}
     </article>
   </div>
   <div>
@@ -70,6 +79,7 @@
       {% else %}
       <h1>n/a</h1>
       {% endif %}
+      {{ stdev_badge('priority_bug_avg_time_to_fix') }}
     </article>
   </div>
 </div>
@@ -87,6 +97,7 @@
       <h1{% if days >= 7 and rate < 2 %} class="low"{% elif days >= 7 and rate >= 5 %} class="high"{% endif %}>
         {{ all_work_done }}
       </h1>
+      {{ stdev_badge('all_work_done') }}
     </article>
   </div>
   <div>
@@ -97,6 +108,7 @@
       {% else %}
       <h1>n/a</h1>
       {% endif %}
+      {{ stdev_badge('avg_all_time_to_fix') }}
     </article>
   </div>
 </div>
@@ -105,18 +117,21 @@
     <article>
       <header><a href="https://linear.app/differential/projects/all">Current Projects</a></header>
       <h1>{{ lead_current_projects }}</h1>
+      {{ stdev_badge('lead_current_projects') }}
     </article>
   </div>
   <div>
     <article>
       <header><a href="https://linear.app/differential/projects/all">Completed Projects</a></header>
       <h1>{{ lead_completed_projects }}</h1>
+      {{ stdev_badge('lead_completed_projects') }}
     </article>
   </div>
   <div>
     <article>
       <header><a href="https://linear.app/differential/projects/all">Incomplete Projects</a></header>
       <h1>{{ lead_incomplete_projects }}</h1>
+      {{ stdev_badge('lead_incomplete_projects') }}
     </article>
   </div>
   <div>
@@ -127,6 +142,7 @@
       {% else %}
       <h1>n/a</h1>
       {% endif %}
+      {{ stdev_badge('lead_completed_projects_avg_early_late') }}
     </article>
   </div>
 </div>

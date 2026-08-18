@@ -245,3 +245,13 @@ details.dropdown.site-menu > summary + ul {
   margin-right: 0.25rem; vertical-align: -0.04rem; width: 0.9rem;
 }
 .project-timeline-ooo-unavailable { color: #b83a3a; }
+
+.metric-stdev {
+  color: var(--pico-muted-color);
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  margin-top: 0.15rem;
+  opacity: 0.7;
+}

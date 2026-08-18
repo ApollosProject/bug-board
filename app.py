@@ -38,6 +38,7 @@ from linear.issues import (
     get_time_data,
 )
 from linear.projects import get_projects
+from person_stats import metric_stdevs_for_person, person_card_metrics
 from project_dates import (
     format_project_start_status,
     format_project_target_status,
@@ -177,6 +178,69 @@ def format_average_project_schedule_variance(
 
     direction = "late" if average_variance_days > 0 else "early"
     return f"{display}d {direction}"
+
+
+def _normalize_person_name(value: str | None) -> str:
+    if not value:
+        return ""
+    cleaned = value.replace(".", " ").replace("-", " ").strip()
+    return re.sub(r"\s+", " ", cleaned).lower()
+
+
+def _person_display_name(person_cfg: dict[str, Any], slug: str) -> str:
+    login = person_cfg.get("linear_username", slug)
+    return str(login).replace(".", " ").replace("-", " ").title()
+
+
+def _engineering_people(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    people = config.get("people", {})
+    return {
+        slug: info for slug, info in people.items() if info.get("team") == ENGINEERING_TEAM_SLUG
+    }
+
+
+def _configured_github_username(person_cfg: dict[str, Any]) -> str | None:
+    raw_github_username = person_cfg.get("github_username")
+    if isinstance(raw_github_username, str) and raw_github_username:
+        return raw_github_username
+    return None
+
+
+def _led_projects_for_person(
+    cycle_projects: list[dict[str, Any]], person_cfg: dict[str, Any], slug: str
+) -> list[dict[str, Any]]:
+    person_name = _person_display_name(person_cfg, slug)
+    normalized_person_name = _normalize_person_name(
+        person_cfg.get("linear_display_name") or person_name
+    )
+    return [
+        project
+        for project in cycle_projects
+        if _normalize_person_name((project.get("lead") or {}).get("displayName"))
+        == normalized_person_name
+    ]
+
+
+def _lead_project_metrics(
+    led_projects: list[dict[str, Any]],
+) -> tuple[int, int, int, float | None]:
+    lead_completed_projects = sum(1 for project in led_projects if is_completed_project(project))
+    lead_incomplete_projects = sum(1 for project in led_projects if is_incomplete_project(project))
+    lead_current_projects = sum(1 for project in led_projects if not project.get("is_inactive"))
+    variances = [
+        variance_days
+        for project in led_projects
+        if is_completed_project(project)
+        for variance_days in [get_project_schedule_variance_days(project)]
+        if variance_days is not None
+    ]
+    average_variance = sum(variances) / len(variances) if variances else None
+    return (
+        lead_current_projects,
+        lead_completed_projects,
+        lead_incomplete_projects,
+        average_variance,
+    )
 
 
 app = Flask(__name__)
@@ -1328,6 +1392,31 @@ def _build_team_context(_cache_epoch: int) -> dict:
     }
 
 
+def _card_metrics_for_config_person(
+    slug: str,
+    person_cfg: dict[str, Any],
+    completed_items: list[dict[str, Any]],
+    cycle_projects: list[dict[str, Any]],
+    prs_merged: int,
+    prs_reviewed: int,
+) -> dict[str, float | int | None]:
+    (
+        lead_current_projects,
+        lead_completed_projects,
+        lead_incomplete_projects,
+        average_completed_project_variance,
+    ) = _lead_project_metrics(_led_projects_for_person(cycle_projects, person_cfg, slug))
+    return person_card_metrics(
+        prs_merged=prs_merged,
+        prs_reviewed=prs_reviewed,
+        completed_items=completed_items,
+        lead_current_projects=lead_current_projects,
+        lead_completed_projects=lead_completed_projects,
+        lead_incomplete_projects=lead_incomplete_projects,
+        average_completed_project_variance=average_completed_project_variance,
+    )
+
+
 @lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
 def _build_person_context(
     slug: str,
@@ -1341,14 +1430,16 @@ def _build_person_context(
     config = load_config()
     person_cfg = config.get("people", {}).get(slug) or {}
     login = person_cfg.get("linear_username", slug)
-    person_name = login.replace(".", " ").replace("-", " ").title()
-    raw_github_username = person_cfg.get("github_username")
-    github_username = (
-        raw_github_username
-        if isinstance(raw_github_username, str) and raw_github_username
-        else None
-    )
-    with ThreadPoolExecutor(max_workers=TEAM_THREADPOOL_MAX_WORKERS) as executor:
+    person_name = _person_display_name(person_cfg, slug)
+    github_username = _configured_github_username(person_cfg)
+    engineering_people = _engineering_people(config)
+    other_engineers = {key: info for key, info in engineering_people.items() if key != slug}
+    extra_workers = 0
+    if len(engineering_people) >= 2:
+        extra_workers = len(other_engineers) + sum(
+            1 for info in other_engineers.values() if _configured_github_username(info)
+        )
+    with ThreadPoolExecutor(max_workers=TEAM_THREADPOOL_MAX_WORKERS + extra_workers) as executor:
         open_future = executor.submit(get_open_issues_for_person, login)
         completed_future = executor.submit(get_completed_issues_for_person, login, days, window)
         projects_future = executor.submit(get_projects)
@@ -1360,6 +1451,25 @@ def _build_person_context(
                 days,
                 window,
             )
+        other_completed_futures: dict[str, Future[list[dict[str, Any]]]] = {}
+        other_github_futures: dict[str, Future[tuple[int, int]]] = {}
+        if len(engineering_people) >= 2:
+            for other_slug, info in other_engineers.items():
+                other_login = info.get("linear_username", other_slug)
+                other_completed_futures[other_slug] = executor.submit(
+                    get_completed_issues_for_person,
+                    other_login,
+                    days,
+                    window,
+                )
+                other_github_username = _configured_github_username(info)
+                if other_github_username:
+                    other_github_futures[other_slug] = executor.submit(
+                        get_merged_pr_counts_for_user,
+                        other_github_username,
+                        days,
+                        window,
+                    )
         open_items = sorted(
             open_future.result(timeout=EXECUTOR_TIMEOUT_SECONDS),
             key=lambda x: x["updatedAt"],
@@ -1376,35 +1486,61 @@ def _build_person_context(
         else:
             prs_merged = prs_reviewed = 0
 
-    priority_fix_times = []
-    priority_bugs_fixed = 0
-    for issue in completed_items:
-        is_priority_bug = issue.get("priority", 5) <= 2 and any(
-            lbl.get("name") == "Bug" for lbl in issue.get("labels", {}).get("nodes", [])
-        )
-        if not is_priority_bug:
-            continue
-        priority_bugs_fixed += 1
-        if issue.get("assignee_time_to_fix") is not None:
-            fix_time = issue["assignee_time_to_fix"]
-            priority_fix_times.append(fix_time)
+        _annotate_project_schedule_fields(cycle_projects)
+        for proj in cycle_projects:
+            proj["is_inactive"] = is_inactive_project(proj)
 
-    if priority_fix_times:
-        avg_priority_bug_fix = int(sum(priority_fix_times) / len(priority_fix_times))
-    else:
-        avg_priority_bug_fix = None
+        team_metrics = []
+        for other_slug, info in other_engineers.items():
+            completed_future_for_other = other_completed_futures.get(other_slug)
+            if completed_future_for_other is None:
+                continue
+            try:
+                other_completed = completed_future_for_other.result(
+                    timeout=EXECUTOR_TIMEOUT_SECONDS
+                )
+            except Exception:
+                logging.exception(
+                    "Failed to load completed issues for %s while computing person stdevs",
+                    other_slug,
+                )
+                continue
+            other_github_future = other_github_futures.get(other_slug)
+            if other_github_future is not None:
+                try:
+                    other_prs_merged, other_prs_reviewed = other_github_future.result(
+                        timeout=EXECUTOR_TIMEOUT_SECONDS
+                    )
+                except Exception:
+                    logging.exception(
+                        "Failed to load GitHub counts for %s while computing person stdevs",
+                        other_slug,
+                    )
+                    other_prs_merged = other_prs_reviewed = 0
+            else:
+                other_prs_merged = other_prs_reviewed = 0
+            team_metrics.append(
+                _card_metrics_for_config_person(
+                    other_slug,
+                    info,
+                    other_completed,
+                    cycle_projects,
+                    other_prs_merged,
+                    other_prs_reviewed,
+                )
+            )
 
-    # Compute metrics for all completed work
-    all_work_done = len(completed_items)
-    all_fix_times = [
-        issue["assignee_time_to_fix"]
-        for issue in completed_items
-        if issue.get("assignee_time_to_fix") is not None
-    ]
-    if all_fix_times:
-        avg_all_time_to_fix = int(sum(all_fix_times) / len(all_fix_times))
-    else:
-        avg_all_time_to_fix = None
+    current_metrics = _card_metrics_for_config_person(
+        slug,
+        person_cfg,
+        completed_items,
+        cycle_projects,
+        prs_merged,
+        prs_reviewed,
+    )
+    if slug in engineering_people:
+        team_metrics.append(current_metrics)
+    metric_stdevs = metric_stdevs_for_person(current_metrics, team_metrics)
 
     # Group open and completed items by project
     open_by_project = by_project(open_items)
@@ -1414,46 +1550,6 @@ def _build_person_context(
         issues.sort(key=lambda x: x["updatedAt"], reverse=True)
     for issues in completed_by_project.values():
         issues.sort(key=lambda x: x["completedAt"], reverse=True)
-
-    # Annotate the projects fetched alongside issue and GitHub data.
-    _annotate_project_schedule_fields(cycle_projects)
-    for proj in cycle_projects:
-        proj["is_inactive"] = is_inactive_project(proj)
-
-    def _normalize_text(value: str | None) -> str:
-        if not value:
-            return ""
-        cleaned = value.replace(".", " ").replace("-", " ").strip()
-        return re.sub(r"\s+", " ", cleaned).lower()
-
-    def normalize_display_name(value: str | None) -> str:
-        return _normalize_text(value)
-
-    normalized_person_name = normalize_display_name(
-        person_cfg.get("linear_display_name") or person_name
-    )
-    led_projects = [
-        project
-        for project in cycle_projects
-        if normalize_display_name((project.get("lead") or {}).get("displayName"))
-        == normalized_person_name
-    ]
-    lead_completed_projects = sum(1 for project in led_projects if is_completed_project(project))
-    lead_incomplete_projects = sum(1 for project in led_projects if is_incomplete_project(project))
-    lead_current_projects = sum(1 for project in led_projects if not project.get("is_inactive"))
-    lead_completed_project_variances = [
-        variance_days
-        for project in led_projects
-        if is_completed_project(project)
-        for variance_days in [get_project_schedule_variance_days(project)]
-        if variance_days is not None
-    ]
-    if lead_completed_project_variances:
-        average_completed_project_variance = sum(lead_completed_project_variances) / len(
-            lead_completed_project_variances
-        )
-    else:
-        average_completed_project_variance = None
 
     project_names = {proj.get("name") for proj in cycle_projects if proj.get("name")}
 
@@ -1495,18 +1591,19 @@ def _build_person_context(
         "completed_by_project": completed_by_project,
         "on_call_support": on_support,
         "work_by_platform": work_by_platform,
-        "prs_merged": prs_merged,
-        "prs_reviewed": prs_reviewed,
-        "priority_bug_avg_time_to_fix": avg_priority_bug_fix,
-        "priority_bugs_fixed": priority_bugs_fixed,
-        "all_work_done": all_work_done,
-        "avg_all_time_to_fix": avg_all_time_to_fix,
-        "lead_completed_projects": lead_completed_projects,
-        "lead_current_projects": lead_current_projects,
-        "lead_incomplete_projects": lead_incomplete_projects,
+        "prs_merged": current_metrics["prs_merged"],
+        "prs_reviewed": current_metrics["prs_reviewed"],
+        "priority_bug_avg_time_to_fix": current_metrics["priority_bug_avg_time_to_fix"],
+        "priority_bugs_fixed": current_metrics["priority_bugs_fixed"],
+        "all_work_done": current_metrics["all_work_done"],
+        "avg_all_time_to_fix": current_metrics["avg_all_time_to_fix"],
+        "lead_completed_projects": current_metrics["lead_completed_projects"],
+        "lead_current_projects": current_metrics["lead_current_projects"],
+        "lead_incomplete_projects": current_metrics["lead_incomplete_projects"],
         "lead_completed_projects_avg_early_late": format_average_project_schedule_variance(
-            average_completed_project_variance
+            current_metrics["lead_completed_projects_avg_early_late"]
         ),
+        "metric_stdevs": metric_stdevs,
         "platform_labels": platform_labels,
         "platform_values": platform_values,
     }
