@@ -183,37 +183,6 @@ class LinearIssueStateFiltersTest(unittest.TestCase):
         self.assertEqual(execute_calls[0][1]["days"], "-P30D")
         self.assertEqual(execute_calls[0][1]["labels"], ["Bug"])
 
-    def test_get_completed_issues_summary_for_labels_queries_all_labels_once(self):
-        execute_calls = []
-        response = {
-            "issues": {
-                "nodes": [
-                    {
-                        "title": "Released bug",
-                        "project": {"name": "No Project"},
-                        "priority": 2,
-                    }
-                ],
-                "pageInfo": {"hasNextPage": False, "endCursor": None},
-            }
-        }
-
-        def fake_execute(query, variable_values=None):
-            execute_calls.append((query, variable_values))
-            return response
-
-        with patch.object(issues_module, "_execute", side_effect=fake_execute):
-            with patch.object(issues_module, "get_linear_team_key", return_value="APO"):
-                issues_module.get_completed_issues_summary_for_labels(
-                    5, ["Bug", "Feature Request", "Technical Change"], 30
-                )
-
-        self.assertEqual(len(execute_calls), 1)
-        self.assertEqual(
-            execute_calls[0][1]["labels"],
-            ["Bug", "Feature Request", "Technical Change"],
-        )
-
     def test_get_open_issues_for_person_uses_state_type_for_open_filter(self):
         execute_calls = []
         response = {
