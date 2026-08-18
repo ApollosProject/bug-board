@@ -42,6 +42,31 @@ class GraphQLClientRequestTests(unittest.TestCase):
         self.assertIn("author:bkraeling", variables["authored"])
         self.assertIn("reviewed-by:bkraeling", variables["reviewed"])
 
+    def test_merged_prs_for_leaderboard_uses_a_single_search(self):
+        response = {
+            "search": {
+                "nodes": [
+                    {
+                        "author": {"login": "alice"},
+                        "reviews": {"nodes": [{"author": {"login": "bob"}, "state": "APPROVED"}]},
+                    }
+                ],
+                "pageInfo": {"hasNextPage": False, "endCursor": None},
+            }
+        }
+
+        github._reset_merged_prs_cache()
+        with (
+            patch.object(github, "token", "token"),
+            patch.object(github, "get_github_orgs", return_value=["apollosproject"]),
+            patch.object(github, "_execute", return_value=response) as execute,
+        ):
+            by_author, by_reviewer = github.merged_prs_for_leaderboard(30)
+
+        self.assertEqual(execute.call_count, 1)
+        self.assertEqual(list(by_author), ["alice"])
+        self.assertEqual(list(by_reviewer), ["bob"])
+
     def test_github_client_allows_slow_repository_queries(self):
         previous_client = getattr(github._thread_local, "client", None)
         if hasattr(github._thread_local, "client"):

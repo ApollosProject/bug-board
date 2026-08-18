@@ -48,12 +48,23 @@ def _install_import_shims() -> None:
     github_module.get_prs_waiting_for_review_by_reviewer = lambda *args, **kwargs: {}
     github_module.merged_prs_by_author = lambda *args, **kwargs: {}
     github_module.merged_prs_by_reviewer = lambda *args, **kwargs: {}
+    github_module.merged_prs_for_leaderboard = lambda *args, **kwargs: ({}, {})
     sys.modules.setdefault("github", github_module)
 
     leaderboard_module = cast(Any, types.ModuleType("leaderboard"))
     leaderboard_module.calculate_cycle_project_lead_points = lambda *args, **kwargs: 0
     leaderboard_module.calculate_cycle_project_member_points = lambda *args, **kwargs: 0
+    leaderboard_module.calculate_cycle_project_points = lambda *args, **kwargs: ({}, {})
     sys.modules.setdefault("leaderboard", leaderboard_module)
+
+    leaderboard_cache_module = cast(Any, types.ModuleType("leaderboard_cache"))
+    leaderboard_cache_module.DEFAULT_LEADERBOARD_DAYS = 30
+    leaderboard_cache_module.DEFAULT_REFRESH_SECONDS = 60
+    leaderboard_cache_module.refresh_leaderboard_cache = lambda *args, **kwargs: {
+        "days": 30,
+        "leaderboard_entries": [],
+    }
+    sys.modules.setdefault("leaderboard_cache", leaderboard_cache_module)
 
     linear_package = cast(Any, types.ModuleType("linear"))
     linear_package.__path__ = []
@@ -91,6 +102,7 @@ for module_name in [
     "fleet_health_cache",
     "github",
     "leaderboard",
+    "leaderboard_cache",
     "linear",
     "linear.issues",
     "linear.projects",

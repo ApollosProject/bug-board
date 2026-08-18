@@ -241,7 +241,7 @@ def get_completed_issues_summary(priority, label, days=30):
             $cursor: String
         ) {
           issues(
-            first: 50
+            first: 250
             after: $cursor
             filter: {
               team: { key: { eq: $team_key } }

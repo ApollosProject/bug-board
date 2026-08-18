@@ -22,5 +22,15 @@ select = ["E", "F", "I", "W"]
 [tool.vulture]
 exclude = ["venv", ".venv", "env", ".env", "__pycache__", ".git", "static", "templates", ".tox", "build", "dist", "*.egg-info", "tests"]
 ignore_decorators = ["@app.route", "@app.template_filter"]
-ignore_names = ["breakdown", "post_weekly_changelog"]
+ignore_names = [
+    "breakdown",
+    "post_weekly_changelog",
+    "reset_leaderboard_runtime_cache",
+    "merged_prs_by_author",
+    "merged_prs_by_reviewer",
+    "calculate_cycle_project_lead_points",
+    "calculate_cycle_project_member_points",
+    "get_completed_project_issue_assignees",
+    "_reset_merged_prs_cache",
+]
 min_confidence = 60

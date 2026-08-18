@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 
 from constants import (
     CYCLE_PROJECT_LEAD_POINTS_PER_WEEK,
     CYCLE_PROJECT_MEMBER_POINTS_PER_WEEK,
 )
-from linear.projects import get_completed_project_issue_assignees, get_projects
+from linear.projects import get_completed_project_issue_assignees_by_project, get_projects
 
 
 def _parse_date(value: str | None) -> datetime | None:
@@ -51,8 +52,7 @@ def _calculate_cycle_project_points(
     projects = get_projects()
     timeframe_start = now - timedelta(days=days)
     week_segments = _build_week_segments(timeframe_start, now)
-    points_by_lead: dict[str, int] = {}
-    points_by_member: dict[str, int] = {}
+    scoring_projects: list[tuple[str | None, str, int]] = []
     for project in projects:
         if not _is_completed_project(project):
             continue
@@ -71,39 +71,58 @@ def _calculate_cycle_project_points(
         window_start = max(start_at, timeframe_start)
         if window_end <= window_start:
             continue
-        scoring_segments = [
-            (segment_start, segment_end)
+        scoring_weeks = sum(
+            1
             for segment_start, segment_end in week_segments
             if min(window_end, segment_end) > max(window_start, segment_start)
-        ]
-        if not scoring_segments:
-            continue
-        project_id = project.get("id")
-        contributors = (
-            {
-                contributor
-                for contributor in get_completed_project_issue_assignees(project_id)
-                if contributor and contributor != lead_name
-            }
-            if project_id
-            else set()
         )
-        for _ in scoring_segments:
-            points_by_lead[lead_name] = (
-                points_by_lead.get(lead_name, 0) + CYCLE_PROJECT_LEAD_POINTS_PER_WEEK
+        if not scoring_weeks:
+            continue
+        scoring_projects.append((project.get("id"), lead_name, scoring_weeks))
+
+    project_ids = [project_id for project_id, _, _ in scoring_projects if project_id]
+    assignees_by_project = (
+        get_completed_project_issue_assignees_by_project(project_ids) if project_ids else {}
+    )
+
+    points_by_lead: dict[str, int] = {}
+    points_by_member: dict[str, int] = {}
+    for project_id, lead_name, scoring_weeks in scoring_projects:
+        points_by_lead[lead_name] = (
+            points_by_lead.get(lead_name, 0) + CYCLE_PROJECT_LEAD_POINTS_PER_WEEK * scoring_weeks
+        )
+        if not project_id:
+            continue
+        for contributor in assignees_by_project.get(project_id, []):
+            if not contributor or contributor == lead_name:
+                continue
+            points_by_member[contributor] = (
+                points_by_member.get(contributor, 0)
+                + CYCLE_PROJECT_MEMBER_POINTS_PER_WEEK * scoring_weeks
             )
-            for contributor in contributors:
-                points_by_member[contributor] = (
-                    points_by_member.get(contributor, 0) + CYCLE_PROJECT_MEMBER_POINTS_PER_WEEK
-                )
     return points_by_lead, points_by_member
 
 
+@lru_cache(maxsize=16)
+def _calculate_cycle_project_points_cached(
+    days: int, now_key: str
+) -> tuple[dict[str, int], dict[str, int]]:
+    return _calculate_cycle_project_points(days, datetime.fromisoformat(now_key))
+
+
+def calculate_cycle_project_points(
+    days: int, now: datetime | None = None
+) -> tuple[dict[str, int], dict[str, int]]:
+    if now is None:
+        return _calculate_cycle_project_points(days, None)
+    return _calculate_cycle_project_points_cached(days, now.isoformat())
+
+
 def calculate_cycle_project_lead_points(days: int, now: datetime | None = None) -> dict[str, int]:
-    lead_points, _ = _calculate_cycle_project_points(days, now)
+    lead_points, _ = calculate_cycle_project_points(days, now)
     return lead_points
 
 
 def calculate_cycle_project_member_points(days: int, now: datetime | None = None) -> dict[str, int]:
-    _, member_points = _calculate_cycle_project_points(days, now)
+    _, member_points = calculate_cycle_project_points(days, now)
     return member_points

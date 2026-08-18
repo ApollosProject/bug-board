@@ -1,7 +1,8 @@
 import logging
 import os
 import threading
-from concurrent.futures import ThreadPoolExecutor
+import time
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any, Dict, List
@@ -335,7 +336,20 @@ def prs_by_approver():
     return prs_by_approver
 
 
-def _get_merged_prs(days: int = 30):
+_merged_prs_lock = threading.Lock()
+_merged_prs_cache: dict[int, tuple[float, List[Dict[str, Any]]]] = {}
+_merged_prs_inflight: dict[int, Future[List[Dict[str, Any]]]] = {}
+_merged_prs_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="github-prs")
+MERGED_PRS_CACHE_TTL_SECONDS = 60
+
+
+def _reset_merged_prs_cache() -> None:
+    with _merged_prs_lock:
+        _merged_prs_cache.clear()
+        _merged_prs_inflight.clear()
+
+
+def _fetch_merged_prs(days: int) -> List[Dict[str, Any]]:
     """Return merged PRs within the last ``days`` days using GitHub search."""
     if not token:
         return []
@@ -390,6 +404,30 @@ def _get_merged_prs(days: int = 30):
         pages += 1
         if pages >= max_pages:
             break
+    return prs
+
+
+def _get_merged_prs(days: int = 30) -> List[Dict[str, Any]]:
+    now = time.time()
+    with _merged_prs_lock:
+        cached = _merged_prs_cache.get(days)
+        if cached and now - cached[0] < MERGED_PRS_CACHE_TTL_SECONDS:
+            return cached[1]
+        inflight = _merged_prs_inflight.get(days)
+        if inflight is None:
+            inflight = _merged_prs_executor.submit(_fetch_merged_prs, days)
+            _merged_prs_inflight[days] = inflight
+
+    try:
+        prs = inflight.result()
+    except Exception:
+        logging.exception("Failed to fetch merged GitHub PRs for days=%s", days)
+        prs = []
+    finally:
+        with _merged_prs_lock:
+            if _merged_prs_inflight.get(days) is inflight:
+                _merged_prs_inflight.pop(days, None)
+            _merged_prs_cache[days] = (time.time(), prs)
     return prs
 
 
@@ -464,21 +502,21 @@ def get_merged_pr_counts_for_user(username: str, days: int = 30) -> tuple[int, i
     return authored_count, reviewed_count
 
 
-def merged_prs_by_author(days: int = 30) -> Dict[str, List[Dict[str, Any]]]:
-    """Return merged PRs grouped by author within the given timeframe."""
-    prs = _get_merged_prs(days)
+def _group_merged_prs_by_author(
+    prs: List[Dict[str, Any]],
+) -> Dict[str, List[Dict[str, Any]]]:
     prs_by_author: Dict[str, List[Dict[str, Any]]] = {}
     for pr in prs:
-        author = pr.get("author", {}).get("login")
+        author = (pr.get("author") or {}).get("login")
         if not author:
             continue
         prs_by_author.setdefault(author, []).append(pr)
     return prs_by_author
 
 
-def merged_prs_by_reviewer(days: int = 30) -> Dict[str, List[Dict[str, Any]]]:
-    """Return merged PRs grouped by reviewer within the given timeframe."""
-    prs = _get_merged_prs(days)
+def _group_merged_prs_by_reviewer(
+    prs: List[Dict[str, Any]],
+) -> Dict[str, List[Dict[str, Any]]]:
     prs_by_reviewer: Dict[str, List[Dict[str, Any]]] = {}
     for pr in prs:
         for review in pr.get("reviews", {}).get("nodes", []):
@@ -486,6 +524,24 @@ def merged_prs_by_reviewer(days: int = 30) -> Dict[str, List[Dict[str, Any]]]:
                 reviewer = review["author"]["login"]
                 prs_by_reviewer.setdefault(reviewer, []).append(pr)
     return prs_by_reviewer
+
+
+def merged_prs_for_leaderboard(
+    days: int = 30,
+) -> tuple[Dict[str, List[Dict[str, Any]]], Dict[str, List[Dict[str, Any]]]]:
+    """Return merged PRs grouped by author and reviewer from a single GitHub search."""
+    prs = _get_merged_prs(days)
+    return _group_merged_prs_by_author(prs), _group_merged_prs_by_reviewer(prs)
+
+
+def merged_prs_by_author(days: int = 30) -> Dict[str, List[Dict[str, Any]]]:
+    """Return merged PRs grouped by author within the given timeframe."""
+    return _group_merged_prs_by_author(_get_merged_prs(days))
+
+
+def merged_prs_by_reviewer(days: int = 30) -> Dict[str, List[Dict[str, Any]]]:
+    """Return merged PRs grouped by reviewer within the given timeframe."""
+    return _group_merged_prs_by_reviewer(_get_merged_prs(days))
 
 
 def get_prs_waiting_for_review_by_reviewer():

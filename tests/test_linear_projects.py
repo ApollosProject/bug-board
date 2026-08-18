@@ -93,8 +93,11 @@ class GetCompletedProjectIssueAssigneesTest(unittest.TestCase):
                         "endCursor": "issue-cursor-1",
                     },
                     "nodes": [
-                        {"assignee": {"displayName": "Austin Witherow"}},
-                        {"assignee": None},
+                        {
+                            "assignee": {"displayName": "Austin Witherow"},
+                            "project": {"id": "project-2"},
+                        },
+                        {"assignee": None, "project": {"id": "project-2"}},
                     ],
                 }
             },
@@ -102,8 +105,14 @@ class GetCompletedProjectIssueAssigneesTest(unittest.TestCase):
                 "issues": {
                     "pageInfo": {"hasNextPage": False, "endCursor": None},
                     "nodes": [
-                        {"assignee": {"displayName": "Later Page Contributor"}},
-                        {"assignee": {"displayName": "Austin Witherow"}},
+                        {
+                            "assignee": {"displayName": "Later Page Contributor"},
+                            "project": {"id": "project-2"},
+                        },
+                        {
+                            "assignee": {"displayName": "Austin Witherow"},
+                            "project": {"id": "project-2"},
+                        },
                     ],
                 }
             },
@@ -122,12 +131,44 @@ class GetCompletedProjectIssueAssigneesTest(unittest.TestCase):
         self.assertEqual(
             calls,
             [
-                {"project_id": "project-2", "after": None},
-                {"project_id": "project-2", "after": "issue-cursor-1"},
+                {"project_ids": ["project-2"], "after": None},
+                {"project_ids": ["project-2"], "after": "issue-cursor-1"},
             ],
         )
-        self.assertIn("$project_id: ID!", queries[0])
+        self.assertIn("$project_ids: [ID!]", queries[0])
         self.assertEqual(assignees, ["Austin Witherow", "Later Page Contributor"])
+
+    def test_batches_assignees_for_multiple_projects_in_one_query(self):
+        def fake_execute(_query, variable_values=None):
+            self.assertEqual(variable_values["project_ids"], ["project-1", "project-2"])
+            return {
+                "issues": {
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    "nodes": [
+                        {
+                            "assignee": {"displayName": "Austin"},
+                            "project": {"id": "project-1"},
+                        },
+                        {
+                            "assignee": {"displayName": "Nick"},
+                            "project": {"id": "project-2"},
+                        },
+                        {
+                            "assignee": {"displayName": "Austin"},
+                            "project": {"id": "project-2"},
+                        },
+                    ],
+                }
+            }
+
+        with patch.object(project_module, "_execute", side_effect=fake_execute) as execute:
+            assignees = project_module.get_completed_project_issue_assignees_by_project(
+                ["project-1", "project-2", "project-1"]
+            )
+
+        execute.assert_called_once()
+        self.assertEqual(assignees["project-1"], ["Austin"])
+        self.assertEqual(assignees["project-2"], ["Austin", "Nick"])
 
 
 if __name__ == "__main__":

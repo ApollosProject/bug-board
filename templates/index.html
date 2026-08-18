@@ -30,7 +30,9 @@
     #}
     <section id="resolution-by-priority" aria-busy="true"></section>
     <section id="open-items" aria-busy="true"></section>
-    <section id="leaderboard" aria-busy="true"></section>
+    <section id="leaderboard"{% if not leaderboard_html %} aria-busy="true"{% endif %}>
+      {{ leaderboard_html|safe if leaderboard_html else '' }}
+    </section>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -122,6 +124,8 @@
     `/partials/index/resolution-by-priority?days=${days}`
   );
   loadSection('open-items', `/partials/index/open-items?days=${days}`);
+  {% if not leaderboard_html %}
   loadSection('leaderboard', `/partials/index/leaderboard?days=${days}`);
+  {% endif %}
 </script>
 {% endblock %}

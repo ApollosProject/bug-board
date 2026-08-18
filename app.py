@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
 from datetime import datetime, timedelta, timezone
@@ -21,13 +22,10 @@ from fleet_health_cache import (
 )
 from github import (
     get_merged_pr_counts_for_user,
-    merged_prs_by_author,
-    merged_prs_by_reviewer,
+    merged_prs_for_leaderboard,
 )
-from leaderboard import (
-    calculate_cycle_project_lead_points,
-    calculate_cycle_project_member_points,
-)
+from leaderboard import calculate_cycle_project_points
+from leaderboard_cache import get_cached_leaderboard, store_cached_leaderboard
 from linear.issues import (
     by_platform,
     by_project,
@@ -419,6 +417,8 @@ INDEX_THREADPOOL_MAX_WORKERS = 12
 TEAM_THREADPOOL_MAX_WORKERS = 4
 # Cache time-to-live in seconds for the index page
 INDEX_CACHE_TTL_SECONDS = 60
+LEADERBOARD_CACHE_TTL_SECONDS = 60
+LEADERBOARD_MAX_STALE_SECONDS = 600
 
 
 class BreakdownCategory(TypedDict):
@@ -500,7 +500,9 @@ ResultType = TypeVar("ResultType")
 
 
 def get_future_result_with_timeout(
-    future: Future[ResultType], default_value: ResultType, timeout: int = INDEX_FUTURE_TIMEOUT
+    future: Future[ResultType],
+    default_value: ResultType,
+    timeout: float = INDEX_FUTURE_TIMEOUT,
 ) -> ResultType:
     """
     Get result from a future with a timeout, returning a default value on timeout.
@@ -526,6 +528,8 @@ def _build_leaderboard_entries(
     completed_technical_changes: list,
     merged_reviews: dict,
     merged_authored_prs: dict,
+    cycle_lead_points: dict[str, int] | None = None,
+    cycle_member_points: dict[str, int] | None = None,
 ) -> list[LeaderboardEntry]:
     config_data = load_config()
     people_config = config_data.get("people", {})
@@ -677,7 +681,13 @@ def _build_leaderboard_entries(
                 pr_points,
             )
 
-    cycle_lead_points = calculate_cycle_project_lead_points(days)
+    if cycle_lead_points is None or cycle_member_points is None:
+        computed_lead_points, computed_member_points = calculate_cycle_project_points(days)
+        if cycle_lead_points is None:
+            cycle_lead_points = computed_lead_points
+        if cycle_member_points is None:
+            cycle_member_points = computed_member_points
+
     for lead_name, points in cycle_lead_points.items():
         slug = resolve_slug(lead_name, format_display_name(lead_name))
         if slug:
@@ -706,7 +716,6 @@ def _build_leaderboard_entries(
                 points,
             )
 
-    cycle_member_points = calculate_cycle_project_member_points(days)
     for member_name, points in cycle_member_points.items():
         slug = resolve_slug(member_name, format_display_name(member_name))
         if slug:
@@ -872,9 +881,28 @@ def _build_open_items_context(days: int, _cache_epoch: int) -> dict:
     }
 
 
-@lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
-def _build_leaderboard_context(days: int, _cache_epoch: int) -> dict:
-    with ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS) as executor:
+LEADERBOARD_GITHUB_WAIT_SECONDS = 2
+
+
+def compute_leaderboard_context(days: int, wait_for_github: bool = False) -> dict:
+    deadline = time.monotonic() + INDEX_FUTURE_TIMEOUT
+
+    def take_future(
+        future: Future[ResultType],
+        default_value: ResultType,
+        timeout: float | None = None,
+    ) -> ResultType:
+        remaining = deadline - time.monotonic() if timeout is None else timeout
+        remaining = max(0.0, remaining)
+        try:
+            return future.result(timeout=remaining)
+        except Exception:
+            logging.exception("Leaderboard source failed; continuing with partial data")
+            return default_value
+
+    executor = ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS)
+    github_complete = False
+    try:
         completed_bugs_future = executor.submit(get_completed_issues_summary, 5, "Bug", days)
         completed_feature_requests_future = executor.submit(
             get_completed_issues_summary, 5, "Feature Request", days
@@ -882,26 +910,34 @@ def _build_leaderboard_context(days: int, _cache_epoch: int) -> dict:
         completed_technical_changes_future = executor.submit(
             get_completed_issues_summary, 5, "Technical Change", days
         )
-        reviews_future = executor.submit(merged_prs_by_reviewer, days)
-        authored_prs_future = executor.submit(merged_prs_by_author, days)
+        github_future = executor.submit(merged_prs_for_leaderboard, days)
+        cycle_points_future = executor.submit(calculate_cycle_project_points, days)
 
-    completed_bugs_result = get_future_result_with_timeout(completed_bugs_future, [])
-    completed_bugs = [issue for issue in completed_bugs_result if not issue.get("project")]
-    completed_feature_requests_result = get_future_result_with_timeout(
-        completed_feature_requests_future, []
-    )
-    completed_feature_requests = [
-        issue for issue in completed_feature_requests_result if not issue.get("project")
-    ]
-    completed_technical_changes_result = get_future_result_with_timeout(
-        completed_technical_changes_future, []
-    )
-    completed_technical_changes = [
-        issue for issue in completed_technical_changes_result if not issue.get("project")
-    ]
+        completed_bugs_result = take_future(completed_bugs_future, [])
+        completed_bugs = [issue for issue in completed_bugs_result if not issue.get("project")]
+        completed_feature_requests_result = take_future(completed_feature_requests_future, [])
+        completed_feature_requests = [
+            issue for issue in completed_feature_requests_result if not issue.get("project")
+        ]
+        completed_technical_changes_result = take_future(completed_technical_changes_future, [])
+        completed_technical_changes = [
+            issue for issue in completed_technical_changes_result if not issue.get("project")
+        ]
+        cycle_lead_points, cycle_member_points = take_future(cycle_points_future, ({}, {}))
 
-    merged_reviews = get_future_result_with_timeout(reviews_future, {})
-    merged_authored_prs = get_future_result_with_timeout(authored_prs_future, {})
+        remaining = max(0.0, deadline - time.monotonic())
+        github_wait = 30.0 if wait_for_github else min(LEADERBOARD_GITHUB_WAIT_SECONDS, remaining)
+        try:
+            merged_authored_prs, merged_reviews = github_future.result(timeout=github_wait)
+            github_complete = True
+        except TimeoutError:
+            logging.warning("Leaderboard GitHub scores not ready yet; showing Linear scores first")
+            merged_authored_prs, merged_reviews = {}, {}
+        except Exception:
+            logging.exception("Leaderboard GitHub source failed; continuing without PR scores")
+            merged_authored_prs, merged_reviews = {}, {}
+    finally:
+        executor.shutdown(wait=False, cancel_futures=False)
 
     leaderboard_entries = _build_leaderboard_entries(
         days=days,
@@ -910,12 +946,161 @@ def _build_leaderboard_context(days: int, _cache_epoch: int) -> dict:
         completed_technical_changes=completed_technical_changes,
         merged_reviews=merged_reviews,
         merged_authored_prs=merged_authored_prs,
+        cycle_lead_points=cycle_lead_points,
+        cycle_member_points=cycle_member_points,
     )
 
     return {
         "days": days,
         "leaderboard_entries": leaderboard_entries,
+        "complete": github_complete,
     }
+
+
+_leaderboard_state_lock = threading.Lock()
+_leaderboard_memory_cache: dict[int, tuple[float, dict]] = {}
+_leaderboard_inflight: dict[int, Future[dict]] = {}
+_leaderboard_refresh_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="leaderboard")
+
+
+def _empty_leaderboard_context(days: int) -> dict:
+    return {"days": days, "leaderboard_entries": []}
+
+
+def _public_leaderboard_context(context: dict, days: int) -> dict:
+    return {
+        "days": days,
+        "leaderboard_entries": context.get("leaderboard_entries") or [],
+    }
+
+
+def _store_leaderboard_memory_cache(
+    days: int, context: dict, cached_at: float | None = None
+) -> None:
+    public_context = _public_leaderboard_context(context, days)
+    with _leaderboard_state_lock:
+        _leaderboard_memory_cache[days] = (
+            time.time() if cached_at is None else cached_at,
+            public_context,
+        )
+
+
+def _read_leaderboard_memory_cache(days: int) -> tuple[dict | None, bool]:
+    now = time.time()
+    with _leaderboard_state_lock:
+        cached = _leaderboard_memory_cache.get(days)
+    if not cached:
+        return None, False
+    cached_at, context = cached
+    age = now - cached_at
+    if age <= LEADERBOARD_CACHE_TTL_SECONDS:
+        return context, True
+    if age <= LEADERBOARD_MAX_STALE_SECONDS:
+        return context, False
+    return None, False
+
+
+def _read_leaderboard_redis_cache(days: int) -> tuple[dict | None, bool]:
+    cached = get_cached_leaderboard(days)
+    if cached is None:
+        return None, False
+    cached_at = float(cached.get("cached_at_epoch") or 0)
+    context = _public_leaderboard_context(cached, days)
+    _store_leaderboard_memory_cache(days, context, cached_at=cached_at)
+    age = time.time() - cached_at
+    return context, age <= LEADERBOARD_CACHE_TTL_SECONDS
+
+
+def _compute_and_store_leaderboard_context(days: int, wait_for_github: bool = False) -> dict:
+    try:
+        context = compute_leaderboard_context(days, wait_for_github=wait_for_github)
+    except Exception:
+        logging.exception("Failed to compute leaderboard context for days=%s", days)
+        cached, _fresh = _read_leaderboard_memory_cache(days)
+        return cached or _empty_leaderboard_context(days)
+
+    public_context = _public_leaderboard_context(context, days)
+    complete = bool(context.get("complete", True))
+    cached_at = time.time() if complete else time.time() - LEADERBOARD_CACHE_TTL_SECONDS - 1
+    _store_leaderboard_memory_cache(days, public_context, cached_at=cached_at)
+    if complete:
+        try:
+            store_cached_leaderboard(days, public_context)
+        except Exception:
+            logging.exception("Failed to persist leaderboard cache for days=%s", days)
+    public_context = dict(public_context)
+    public_context["complete"] = complete
+    return public_context
+
+
+def _start_leaderboard_refresh(days: int, wait_for_github: bool = False) -> Future[dict]:
+    with _leaderboard_state_lock:
+        inflight = _leaderboard_inflight.get(days)
+        if inflight is not None and not inflight.done():
+            return inflight
+
+        holder: dict[str, Future[dict]] = {}
+
+        def refresh() -> dict:
+            context = _empty_leaderboard_context(days)
+            try:
+                context = _compute_and_store_leaderboard_context(
+                    days, wait_for_github=wait_for_github
+                )
+                return context
+            finally:
+                with _leaderboard_state_lock:
+                    if _leaderboard_inflight.get(days) is holder.get("future"):
+                        _leaderboard_inflight.pop(days, None)
+                if not context.get("complete") and not wait_for_github:
+                    _start_leaderboard_refresh(days, wait_for_github=True)
+
+        future = _leaderboard_refresh_executor.submit(refresh)
+        holder["future"] = future
+        _leaderboard_inflight[days] = future
+        return future
+
+
+def peek_leaderboard_context(days: int) -> dict | None:
+    """Return a cached leaderboard without starting a live rebuild."""
+    context, _fresh = _read_leaderboard_memory_cache(days)
+    if context is not None:
+        return context
+    context, _fresh = _read_leaderboard_redis_cache(days)
+    return context
+
+
+def prefetch_leaderboard_context(days: int) -> None:
+    context, fresh = _read_leaderboard_memory_cache(days)
+    if context is None:
+        context, fresh = _read_leaderboard_redis_cache(days)
+    if fresh:
+        return
+    _start_leaderboard_refresh(days)
+
+
+def get_leaderboard_context(days: int) -> dict:
+    context, fresh = _read_leaderboard_memory_cache(days)
+    if context is None:
+        context, fresh = _read_leaderboard_redis_cache(days)
+    if fresh and context is not None:
+        return context
+
+    refresh_future = _start_leaderboard_refresh(days)
+    if context is not None:
+        return context
+
+    try:
+        return refresh_future.result(timeout=INDEX_FUTURE_TIMEOUT + 2)
+    except Exception:
+        logging.exception("Timed out waiting for leaderboard context for days=%s", days)
+        return _empty_leaderboard_context(days)
+
+
+def reset_leaderboard_runtime_cache() -> None:
+    with _leaderboard_state_lock:
+        _leaderboard_memory_cache.clear()
+        _leaderboard_inflight.clear()
 
 
 @lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
@@ -949,7 +1134,18 @@ def _build_resolution_by_priority_context(days: int, _cache_epoch: int) -> dict:
 @app.route("/")
 def index():
     days = request.args.get("days", default=30, type=int)
-    return render_template("index.html", days=days)
+    cached_leaderboard = peek_leaderboard_context(days)
+    prefetch_leaderboard_context(days)
+    leaderboard_html = (
+        render_template("partials/index_leaderboard.html", **cached_leaderboard)
+        if cached_leaderboard is not None
+        else None
+    )
+    return render_template(
+        "index.html",
+        days=days,
+        leaderboard_html=leaderboard_html,
+    )
 
 
 @app.route("/partials/index/priority-stats")
@@ -979,8 +1175,7 @@ def index_open_items_partial():
 @app.route("/partials/index/leaderboard")
 def index_leaderboard_partial():
     days = request.args.get("days", default=30, type=int)
-    cache_epoch = int(time.time() / INDEX_CACHE_TTL_SECONDS)
-    context = _build_leaderboard_context(days, cache_epoch)
+    context = get_leaderboard_context(days)
     return render_template("partials/index_leaderboard.html", **context)
 
 
