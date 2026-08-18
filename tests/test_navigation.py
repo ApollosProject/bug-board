@@ -96,8 +96,34 @@ class NavigationTest(unittest.TestCase):
             body = app_module.render_template("partials/person_content.html", **context)
         self.assertIn("merged%3A%3E%3D2026-07-01", body)
         fetch.assert_called_once_with()
-        counts.assert_called_once_with("bkraeling", 30)
+        counts.assert_called_once_with("bkraeling", 30, counts.call_args.args[2])
         support.assert_called_once_with(config=config, projects=projects)
+
+    def test_index_and_person_pages_accept_date_ranges(self):
+        index = self.client.get("/?start=2026-01-01&end=2026-01-31&days=7")
+        index_body = index.get_data(as_text=True)
+        self.assertEqual(index.status_code, 200)
+        self.assertIn('name="start"', index_body)
+        self.assertIn('value="2026-01-01"', index_body)
+        self.assertIn('value="2026-01-31"', index_body)
+
+        config = {
+            "people": {
+                "brandon": {
+                    "linear_username": "brandon",
+                    "github_username": "bkraeling",
+                }
+            }
+        }
+        app_module._build_person_context.cache_clear()
+        self.addCleanup(app_module._build_person_context.cache_clear)
+        with patch.object(app_module, "load_config", return_value=config):
+            person = self.client.get("/team/brandon?start=2026-01-01&end=2026-01-31")
+        person_body = person.get_data(as_text=True)
+        self.assertEqual(person.status_code, 200)
+        self.assertIn('"start": "2026-01-01"', person_body)
+        self.assertIn('"end": "2026-01-31"', person_body)
+        self.assertIn("`/partials/team/${slug}/content?${windowQs}`", person_body)
 
     def test_projects_page_and_timeline_use_project_labels(self):
         context = {
