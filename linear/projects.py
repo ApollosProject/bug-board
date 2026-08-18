@@ -4,21 +4,30 @@ from config import get_linear_team_key
 
 from .client import _execute
 
+COMPLETED_ISSUE_ASSIGNEE_PROJECT_CHUNK_SIZE = 50
 
-def get_completed_project_issue_assignees(project_id: str) -> list[str]:
-    """Return sorted unique assignee display names for a project's completed issues."""
+
+def get_completed_issue_assignees_by_project(project_ids: list[str]) -> dict[str, list[str]]:
+    """Return sorted unique completed-issue assignees keyed by project id."""
+    unique_project_ids = list(dict.fromkeys(project_id for project_id in project_ids if project_id))
+    if not unique_project_ids:
+        return {}
+
     query = gql(
         """
-        query CompletedProjectIssueAssignees($project_id: ID!, $after: String) {
+        query CompletedIssueAssigneesByProject($project_ids: [ID!], $after: String) {
           issues(
-            first: 50
+            first: 100
             after: $after
             filter: {
-              project: { id: { eq: $project_id } }
+              project: { id: { in: $project_ids } }
               state: { type: { in: ["completed"] } }
             }
           ) {
             nodes {
+              project {
+                id
+              }
               assignee {
                 displayName
               }
@@ -32,23 +41,33 @@ def get_completed_project_issue_assignees(project_id: str) -> list[str]:
         """
     )
 
-    assignees: set[str] = set()
-    after = None
-    while True:
-        data = _execute(query, variable_values={"project_id": project_id, "after": after})
-        issue_connection = data.get("issues", {}) or {}
-        for issue in issue_connection.get("nodes", []) or []:
-            assignee = issue.get("assignee") or {}
-            display_name = assignee.get("displayName")
-            if display_name:
-                assignees.add(display_name)
-        page_info = issue_connection.get("pageInfo", {}) or {}
-        if not page_info.get("hasNextPage"):
-            break
-        after = page_info.get("endCursor")
-        if not after:
-            break
-    return sorted(assignees)
+    assignees_by_project: dict[str, set[str]] = {
+        project_id: set() for project_id in unique_project_ids
+    }
+    for chunk_start in range(
+        0, len(unique_project_ids), COMPLETED_ISSUE_ASSIGNEE_PROJECT_CHUNK_SIZE
+    ):
+        chunk_ids = unique_project_ids[
+            chunk_start : chunk_start + COMPLETED_ISSUE_ASSIGNEE_PROJECT_CHUNK_SIZE
+        ]
+        after = None
+        while True:
+            data = _execute(query, variable_values={"project_ids": chunk_ids, "after": after})
+            issue_connection = data.get("issues", {}) or {}
+            for issue in issue_connection.get("nodes", []) or []:
+                project = issue.get("project") or {}
+                project_id = project.get("id")
+                assignee = issue.get("assignee") or {}
+                display_name = assignee.get("displayName")
+                if project_id in assignees_by_project and display_name:
+                    assignees_by_project[project_id].add(display_name)
+            page_info = issue_connection.get("pageInfo", {}) or {}
+            if not page_info.get("hasNextPage"):
+                break
+            after = page_info.get("endCursor")
+            if not after:
+                break
+    return {project_id: sorted(assignees) for project_id, assignees in assignees_by_project.items()}
 
 
 def _normalize_project_members(projects: list[dict]) -> list[dict]:

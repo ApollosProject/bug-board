@@ -464,9 +464,7 @@ def get_merged_pr_counts_for_user(username: str, days: int = 30) -> tuple[int, i
     return authored_count, reviewed_count
 
 
-def merged_prs_by_author(days: int = 30) -> Dict[str, List[Dict[str, Any]]]:
-    """Return merged PRs grouped by author within the given timeframe."""
-    prs = _get_merged_prs(days)
+def _group_merged_prs_by_author(prs: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
     prs_by_author: Dict[str, List[Dict[str, Any]]] = {}
     for pr in prs:
         author = pr.get("author", {}).get("login")
@@ -476,9 +474,7 @@ def merged_prs_by_author(days: int = 30) -> Dict[str, List[Dict[str, Any]]]:
     return prs_by_author
 
 
-def merged_prs_by_reviewer(days: int = 30) -> Dict[str, List[Dict[str, Any]]]:
-    """Return merged PRs grouped by reviewer within the given timeframe."""
-    prs = _get_merged_prs(days)
+def _group_merged_prs_by_reviewer(prs: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
     prs_by_reviewer: Dict[str, List[Dict[str, Any]]] = {}
     for pr in prs:
         for review in pr.get("reviews", {}).get("nodes", []):
@@ -486,6 +482,14 @@ def merged_prs_by_reviewer(days: int = 30) -> Dict[str, List[Dict[str, Any]]]:
                 reviewer = review["author"]["login"]
                 prs_by_reviewer.setdefault(reviewer, []).append(pr)
     return prs_by_reviewer
+
+
+def get_merged_pr_activity(
+    days: int = 30,
+) -> tuple[Dict[str, List[Dict[str, Any]]], Dict[str, List[Dict[str, Any]]]]:
+    """Return merged PRs grouped by author and reviewer from one GitHub search."""
+    prs = _get_merged_prs(days)
+    return _group_merged_prs_by_author(prs), _group_merged_prs_by_reviewer(prs)
 
 
 def get_prs_waiting_for_review_by_reviewer():
