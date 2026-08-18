@@ -1,7 +1,7 @@
 import importlib
 import sys
 import types
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -146,3 +146,34 @@ class CycleProjectPointsTest(TestCase):
         assignees_mock.assert_not_called()
         self.assertEqual(lead_points, {})
         self.assertEqual(member_points, {})
+
+    def test_date_range_scores_projects_inside_the_selected_window(self):
+        from time_window import TimeWindow
+
+        leaderboard_module = _import_leaderboard_with_stub()
+        projects = [
+            {
+                "id": "project-1",
+                "name": "Google Pay",
+                "status": {"name": "Released", "type": "completed"},
+                "completedAt": "2026-04-03T00:00:00.000Z",
+                "startDate": "2026-02-09",
+                "targetDate": "2026-03-30",
+                "lead": {"displayName": "nick"},
+                "members": ["Austin"],
+            }
+        ]
+        window = TimeWindow.from_dates(date(2026, 3, 1), date(2026, 3, 31))
+
+        with patch.object(leaderboard_module, "get_projects", return_value=projects):
+            with patch.object(
+                leaderboard_module,
+                "get_completed_issue_assignees_by_project",
+                return_value={"project-1": ["Austin"]},
+            ):
+                lead_points, member_points = leaderboard_module.calculate_cycle_project_points(
+                    30, window=window
+                )
+
+        self.assertEqual(lead_points, {"nick": 150})
+        self.assertEqual(member_points, {"Austin": 75})

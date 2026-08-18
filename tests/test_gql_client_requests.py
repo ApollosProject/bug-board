@@ -57,7 +57,7 @@ class GraphQLClientRequestTests(unittest.TestCase):
         with patch.object(github, "_get_merged_prs", return_value=prs) as fetch:
             authored, reviewed = github.get_merged_pr_activity(30)
 
-        fetch.assert_called_once_with(30)
+        fetch.assert_called_once_with(30, None)
         self.assertEqual(list(authored), ["alice", "bob"])
         self.assertEqual(list(reviewed), ["bob", "alice"])
         self.assertEqual(len(authored["alice"]), 1)

@@ -12,6 +12,7 @@ from gql import Client, GraphQLRequest, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 
 from config import get_github_orgs
+from time_window import TimeWindow
 
 load_dotenv()
 
@@ -335,17 +336,19 @@ def prs_by_approver():
     return prs_by_approver
 
 
-def _get_merged_prs(days: int = 30):
+def _merged_search_qualifier(days: int = 30, window: TimeWindow | None = None) -> str:
+    return TimeWindow.resolve(days, window=window).github_merged_qualifier()
+
+
+def _get_merged_prs(days: int = 30, window: TimeWindow | None = None):
     """Return merged PRs within the last ``days`` days using GitHub search."""
     if not token:
         return []
     orgs = get_github_orgs()
     if not orgs:
         return []
-    cutoff = datetime.utcnow() - timedelta(days=days)
-    cutoff_date = cutoff.date().isoformat()
     org_filter = " ".join(f"org:{org}" for org in orgs)
-    search_query = f"{org_filter} is:pr is:merged merged:>={cutoff_date}"
+    search_query = f"{org_filter} is:pr is:merged {_merged_search_qualifier(days, window)}"
     query = gql(
         """
         query SearchMergedPRs($query: String!, $cursor: String) {
@@ -393,7 +396,9 @@ def _get_merged_prs(days: int = 30):
     return prs
 
 
-def get_merged_pr_counts_for_user(username: str, days: int = 30) -> tuple[int, int]:
+def get_merged_pr_counts_for_user(
+    username: str, days: int = 30, window: TimeWindow | None = None
+) -> tuple[int, int]:
     """Return authored and approved-review PR counts for one GitHub user."""
     if not token or not username:
         return 0, 0
@@ -401,10 +406,8 @@ def get_merged_pr_counts_for_user(username: str, days: int = 30) -> tuple[int, i
     if not orgs:
         return 0, 0
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    cutoff_date = cutoff.date().isoformat()
     org_filter = " ".join(f"org:{org}" for org in orgs)
-    base_query = f"{org_filter} is:pr is:merged merged:>={cutoff_date}"
+    base_query = f"{org_filter} is:pr is:merged {_merged_search_qualifier(days, window)}"
     authored_query = f"{base_query} author:{username}"
     reviewed_query = f"{base_query} reviewed-by:{username}"
     query = gql(
@@ -486,9 +489,10 @@ def _group_merged_prs_by_reviewer(prs: List[Dict[str, Any]]) -> Dict[str, List[D
 
 def get_merged_pr_activity(
     days: int = 30,
+    window: TimeWindow | None = None,
 ) -> tuple[Dict[str, List[Dict[str, Any]]], Dict[str, List[Dict[str, Any]]]]:
     """Return merged PRs grouped by author and reviewer from one GitHub search."""
-    prs = _get_merged_prs(days)
+    prs = _get_merged_prs(days, window)
     return _group_merged_prs_by_author(prs), _group_merged_prs_by_reviewer(prs)
 
 
