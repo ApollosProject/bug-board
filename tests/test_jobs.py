@@ -42,6 +42,11 @@ def _install_import_shims() -> None:
     fleet_health_module.should_use_redis_cache = lambda: False
     sys.modules.setdefault("fleet_health_cache", fleet_health_module)
 
+    leaderboard_cache_module = cast(Any, types.ModuleType("leaderboard_cache"))
+    leaderboard_cache_module.DEFAULT_LEADERBOARD_DAYS = 30
+    leaderboard_cache_module.refresh_leaderboard_cache = lambda *args, **kwargs: {}
+    sys.modules.setdefault("leaderboard_cache", leaderboard_cache_module)
+
     github_module = cast(Any, types.ModuleType("github"))
     github_module.GitHubDataError = type("GitHubDataError", (RuntimeError,), {})
     github_module.get_pr_diff = lambda *args, **kwargs: ""
@@ -89,6 +94,7 @@ for module_name in [
     "fleet_health_cache",
     "github",
     "leaderboard",
+    "leaderboard_cache",
     "linear",
     "linear.issues",
     "linear.projects",
@@ -200,6 +206,24 @@ class ConfigureScheduledJobsTest(unittest.TestCase):
             },
             recorded_jobs,
         )
+
+    def test_schedules_leaderboard_refresh_when_redis_is_configured(self):
+        recorded_jobs = []
+
+        def fake_every(interval=None):
+            return _FakeScheduledJob(recorded_jobs, interval=interval)
+
+        with patch.object(jobs_module, "should_use_redis_cache", return_value=True):
+            with patch.object(jobs_module, "refresh_airflow_fleet_health_cache_job"):
+                with patch.object(jobs_module, "refresh_leaderboard_cache_job"):
+                    with patch.object(jobs_module.schedule, "every", side_effect=fake_every):
+                        jobs_module.configure_scheduled_jobs()
+                        self.assertTrue(
+                            any(
+                                job["func"] is jobs_module.refresh_leaderboard_cache_job
+                                for job in recorded_jobs
+                            )
+                        )
 
 
 class RunDebugJobsTest(unittest.TestCase):

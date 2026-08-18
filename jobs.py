@@ -21,6 +21,7 @@ from github import (
 )
 from issue_timing import format_issue_sla_text, parse_linear_dt
 from leaderboard import calculate_cycle_project_points
+from leaderboard_cache import DEFAULT_LEADERBOARD_DAYS, refresh_leaderboard_cache
 from linear.issues import (
     get_completed_issues,
     get_completed_issues_for_person,
@@ -171,6 +172,12 @@ def refresh_airflow_fleet_health_cache_job():
         status,
         payload.get("evaluated_dags"),
     )
+
+
+def refresh_leaderboard_cache_job():
+    context = refresh_leaderboard_cache(DEFAULT_LEADERBOARD_DAYS)
+    n = len(context.get("leaderboard_entries") or [])
+    logging.info("Refreshed leaderboard cache (days=%s, entries=%s)", context.get("days"), n)
 
 
 def report_airflow_fleet_health_heartbeat(payload: dict, status: int) -> None:
@@ -934,6 +941,7 @@ def post_weekly_changelog():
 def run_debug_jobs() -> None:
     if should_use_redis_cache():
         refresh_airflow_fleet_health_cache_job()
+        refresh_leaderboard_cache_job()
     post_inactive_engineers()
     post_priority_bugs()
     post_leaderboard()
@@ -950,12 +958,14 @@ def configure_scheduled_jobs() -> None:
         )
         schedule.every(refresh_interval_seconds).seconds.do(refresh_airflow_fleet_health_cache_job)
         refresh_airflow_fleet_health_cache_job()
+        schedule.every(refresh_interval_seconds).seconds.do(refresh_leaderboard_cache_job)
+        refresh_leaderboard_cache_job()
         logging.info(
-            "Scheduled airflow fleet health cache refresh every %s seconds",
+            "Scheduled airflow fleet health and leaderboard cache refresh every %s seconds",
             refresh_interval_seconds,
         )
     else:
-        logging.info("REDIS_URL not set; airflow fleet health cache refresh is disabled")
+        logging.info("REDIS_URL not set; cache refresh is disabled")
 
     schedule.every().friday.at("13:00").do(post_inactive_engineers)
     schedule.every().day.at("12:00").do(post_priority_bugs)

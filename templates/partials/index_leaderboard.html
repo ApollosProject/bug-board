@@ -25,7 +25,11 @@
     </tr>
   </thead>
   <tbody>
-    {% if leaderboard_entries %}
+    {% if leaderboard_unavailable %}
+      <tr>
+        <td colspan="2">Leaderboard is refreshing.</td>
+      </tr>
+    {% elif leaderboard_entries %}
       {% for entry in leaderboard_entries %}
       <tr>
         <td>

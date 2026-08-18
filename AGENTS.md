@@ -29,7 +29,7 @@ CI (`.github/workflows/ci.yml`) uses Python 3.12. The `.python-version` file say
 
 ### Environment variables
 
-The app runs without any env vars for basic page rendering. External-API-dependent features (leaderboard data, team member views, Airflow fleet health) require `LINEAR_API_KEY`, `GITHUB_TOKEN`, `AIRFLOW_API_BASE_URL`, and `AIRFLOW_API_TOKEN`. The worker process (`python jobs.py`) requires `SLACK_WEBHOOK_URL` and `APP_URL`. See `README.md` for the full list.
+The app runs without any env vars for basic page rendering. External-API-dependent features (leaderboard data, team member views, Airflow fleet health) require `LINEAR_API_KEY`, `GITHUB_TOKEN`, `AIRFLOW_API_BASE_URL`, and `AIRFLOW_API_TOKEN`. The worker process (`python jobs.py`) requires `SLACK_WEBHOOK_URL` and `APP_URL`. When `REDIS_URL` is set, the worker also refreshes the homepage leaderboard cache. See `README.md` for the full list.
 
 ### Gotchas
 
