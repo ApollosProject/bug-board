@@ -23,3 +23,13 @@ class TimeWindowTest(unittest.TestCase):
             TimeWindow.resolve(days=7, start="bad", end="2026-02-01", now=now).preset_days,
             7,
         )
+        self.assertEqual(
+            preset.template_vars()["window_query"],
+            {"days": 30},
+        )
+        self.assertEqual(preset.template_vars()["start"], "2026-07-01")
+        self.assertEqual(preset.template_vars()["end"], "2026-07-31")
+        self.assertEqual(
+            custom.template_vars()["window_query"],
+            {"start": "2026-01-01", "end": "2026-01-31"},
+        )
