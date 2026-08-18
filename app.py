@@ -38,6 +38,7 @@ from linear.issues import (
     get_time_data,
 )
 from linear.projects import get_projects
+from person_stats import issue_card_values, metric_stdevs_for_person
 from project_dates import (
     format_project_start_status,
     format_project_target_status,
@@ -1348,7 +1349,24 @@ def _build_person_context(
         if isinstance(raw_github_username, str) and raw_github_username
         else None
     )
-    with ThreadPoolExecutor(max_workers=TEAM_THREADPOOL_MAX_WORKERS) as executor:
+    engineering_people = {
+        key: info
+        for key, info in config.get("people", {}).items()
+        if info.get("team") == ENGINEERING_TEAM_SLUG
+    }
+    other_engineers = {key: info for key, info in engineering_people.items() if key != slug}
+    extra_workers = 0
+    if len(engineering_people) >= 2:
+        extra_workers = len(other_engineers) + sum(
+            1
+            for info in other_engineers.values()
+            if isinstance(info.get("github_username"), str) and info.get("github_username")
+        )
+    other_completed_futures: dict[str, Future[list[dict[str, Any]]]] = {}
+    other_github_futures: dict[str, Future[tuple[int, int]]] = {}
+    with ThreadPoolExecutor(
+        max_workers=min(INDEX_THREADPOOL_MAX_WORKERS, TEAM_THREADPOOL_MAX_WORKERS + extra_workers)
+    ) as executor:
         open_future = executor.submit(get_open_issues_for_person, login)
         completed_future = executor.submit(get_completed_issues_for_person, login, days, window)
         projects_future = executor.submit(get_projects)
@@ -1360,6 +1378,22 @@ def _build_person_context(
                 days,
                 window,
             )
+        if len(engineering_people) >= 2:
+            for other_slug, info in other_engineers.items():
+                other_completed_futures[other_slug] = executor.submit(
+                    get_completed_issues_for_person,
+                    info.get("linear_username", other_slug),
+                    days,
+                    window,
+                )
+                other_github_username = info.get("github_username")
+                if isinstance(other_github_username, str) and other_github_username:
+                    other_github_futures[other_slug] = executor.submit(
+                        get_merged_pr_counts_for_user,
+                        other_github_username,
+                        days,
+                        window,
+                    )
         open_items = sorted(
             open_future.result(timeout=EXECUTOR_TIMEOUT_SECONDS),
             key=lambda x: x["updatedAt"],
@@ -1455,6 +1489,67 @@ def _build_person_context(
     else:
         average_completed_project_variance = None
 
+    current_metrics = {
+        "prs_merged": prs_merged,
+        "prs_reviewed": prs_reviewed,
+        **issue_card_values(completed_items),
+        "lead_current_projects": lead_current_projects,
+        "lead_completed_projects": lead_completed_projects,
+        "lead_incomplete_projects": lead_incomplete_projects,
+        "lead_completed_projects_avg_early_late": average_completed_project_variance,
+    }
+    team_metrics = [current_metrics] if slug in engineering_people else []
+    for other_slug, info in other_engineers.items():
+        completed_future_for_other = other_completed_futures.get(other_slug)
+        if completed_future_for_other is None:
+            continue
+        try:
+            other_completed = completed_future_for_other.result(timeout=EXECUTOR_TIMEOUT_SECONDS)
+        except TimeoutError:
+            continue
+        other_github_future = other_github_futures.get(other_slug)
+        other_prs_merged, other_prs_reviewed = (
+            get_future_result_with_timeout(other_github_future, (0, 0), EXECUTOR_TIMEOUT_SECONDS)
+            if other_github_future is not None
+            else (0, 0)
+        )
+        other_name = (
+            str(info.get("linear_username", other_slug)).replace(".", " ").replace("-", " ").title()
+        )
+        other_led = [
+            project
+            for project in cycle_projects
+            if normalize_display_name((project.get("lead") or {}).get("displayName"))
+            == normalize_display_name(info.get("linear_display_name") or other_name)
+        ]
+        other_variances = [
+            variance_days
+            for project in other_led
+            if is_completed_project(project)
+            for variance_days in [get_project_schedule_variance_days(project)]
+            if variance_days is not None
+        ]
+        team_metrics.append(
+            {
+                "prs_merged": other_prs_merged,
+                "prs_reviewed": other_prs_reviewed,
+                **issue_card_values(other_completed),
+                "lead_current_projects": sum(
+                    1 for project in other_led if not project.get("is_inactive")
+                ),
+                "lead_completed_projects": sum(
+                    1 for project in other_led if is_completed_project(project)
+                ),
+                "lead_incomplete_projects": sum(
+                    1 for project in other_led if is_incomplete_project(project)
+                ),
+                "lead_completed_projects_avg_early_late": (
+                    sum(other_variances) / len(other_variances) if other_variances else None
+                ),
+            }
+        )
+    metric_stdevs = metric_stdevs_for_person(current_metrics, team_metrics)
+
     project_names = {proj.get("name") for proj in cycle_projects if proj.get("name")}
 
     on_support = slug in get_support_slugs(config=config, projects=cycle_projects)
@@ -1507,6 +1602,7 @@ def _build_person_context(
         "lead_completed_projects_avg_early_late": format_average_project_schedule_variance(
             average_completed_project_variance
         ),
+        "metric_stdevs": metric_stdevs,
         "platform_labels": platform_labels,
         "platform_values": platform_values,
     }
