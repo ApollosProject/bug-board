@@ -48,6 +48,18 @@ class NavigationTest(unittest.TestCase):
         self.assertIn("right: 0;", site_menu_rule)
         self.assertIn("max-width: calc(100vw - 2rem);", site_menu_rule)
 
+    def test_time_window_controls_stay_compact(self):
+        with open("static/styles.css") as styles_file:
+            styles = styles_file.read()
+
+        toolbar = styles.split(".time-window {", 1)[1].split("}", 1)[0]
+        self.assertIn("display: flex;", toolbar)
+        self.assertIn("flex-wrap: wrap;", toolbar)
+
+        inputs = styles.split(".time-window input,", 1)[1].split("}", 1)[0]
+        self.assertIn("width: auto;", inputs)
+        self.assertIn("min-height: 2.25rem;", inputs)
+
     def test_busy_indicators_use_a_css_rotation_animation(self):
         with open("static/styles.css") as styles_file:
             styles = styles_file.read()
@@ -103,6 +115,9 @@ class NavigationTest(unittest.TestCase):
         index = self.client.get("/?start=2026-01-01&end=2026-01-31&days=7")
         index_body = index.get_data(as_text=True)
         self.assertEqual(index.status_code, 200)
+        self.assertIn('class="time-window"', index_body)
+        self.assertIn('class="time-window-presets"', index_body)
+        self.assertIn('class="time-window-custom"', index_body)
         self.assertIn('name="start"', index_body)
         self.assertIn('value="2026-01-01"', index_body)
         self.assertIn('value="2026-01-31"', index_body)

@@ -47,6 +47,90 @@ details.dropdown.site-menu > summary + ul {
   width: 100%;
 }
 
+.time-window {
+  --pico-form-element-spacing-vertical: 0.3rem;
+  --pico-form-element-spacing-horizontal: 0.55rem;
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  margin: 0 0 1rem;
+}
+
+.time-window form {
+  align-items: center;
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.time-window label {
+  align-items: center;
+  color: var(--pico-muted-color);
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 600;
+  gap: 0.35rem;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.time-window input,
+.time-window button {
+  height: 2.25rem;
+  margin: 0;
+  min-height: 2.25rem;
+  width: auto;
+}
+
+.time-window input[type="date"] {
+  font-size: 0.85rem;
+  font-weight: 400;
+  padding: 0 0.5rem;
+  text-transform: none;
+  width: 10.5rem;
+}
+
+.time-window-presets {
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: 0.35rem;
+  overflow: hidden;
+}
+
+.time-window-presets button {
+  --pico-background-color: transparent;
+  --pico-border-color: transparent;
+  --pico-box-shadow: none;
+  --pico-color: var(--pico-muted-color);
+  border-radius: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0 0.75rem;
+}
+
+.time-window-presets button:not(:last-child) {
+  border-right: 1px solid var(--pico-muted-border-color);
+}
+
+.time-window-presets button[aria-pressed="true"] {
+  --pico-background-color: var(--pico-primary-background);
+  --pico-color: var(--pico-primary-inverse);
+}
+
+.time-window-custom button {
+  --pico-background-color: transparent;
+  --pico-border-color: var(--pico-muted-border-color);
+  --pico-box-shadow: none;
+  --pico-color: var(--pico-color);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0 0.75rem;
+}
+
 @keyframes busy-spinner {
   to {
     transform: rotate(360deg);
