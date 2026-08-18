@@ -1,6 +1,6 @@
 {% set presets = presets if presets is defined else [7, 30, 90] %}
 <div class="time-window">
-  <form method="get" class="time-window-presets">
+  <form method="get" class="time-window-presets" aria-label="Lookback period">
     {% for n in presets %}
     <button
       type="submit"

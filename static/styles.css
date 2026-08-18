@@ -60,10 +60,12 @@ details.dropdown.site-menu > summary + ul {
 .time-window form {
   align-items: center;
   display: flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   flex-wrap: wrap;
   gap: 0.4rem;
   margin: 0;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .time-window label {
