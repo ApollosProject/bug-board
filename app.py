@@ -24,7 +24,7 @@ from github import (
     get_merged_pr_counts_for_user,
 )
 from leaderboard import calculate_cycle_project_points
-from leaderboard_cache import get_cached_leaderboard
+from leaderboard_cache import DEFAULT_LEADERBOARD_DAYS, get_cached_leaderboard
 from linear.issues import (
     by_platform,
     by_project,
@@ -965,11 +965,11 @@ def index_open_items_partial():
 @app.route("/partials/index/leaderboard")
 def index_leaderboard_partial():
     days = request.args.get("days", default=30, type=int)
-    if should_use_redis_cache():
+    if should_use_redis_cache() and days == DEFAULT_LEADERBOARD_DAYS:
         cached = get_cached_leaderboard(days)
         if cached is not None:
             return render_template("partials/index_leaderboard.html", **cached)
-        logging.warning("Leaderboard cache miss while REDIS_URL is configured")
+        logging.info("Leaderboard cache miss while REDIS_URL is configured (days=%s)", days)
         return render_template(
             "partials/index_leaderboard.html",
             days=days,

@@ -42,7 +42,6 @@ RETRY_SLEEP_SECONDS = 5
 MAX_DIFF_CHARS = 12000
 MAX_DIFF_FILES = 20
 FLEET_HEALTH_REFRESH_DEFAULT_SECONDS = 60
-LEADERBOARD_REFRESH_DEFAULT_SECONDS = 60
 AIRFLOW_FLEET_HEARTBEAT_TIMEOUT_SECONDS = 10
 AIRFLOW_FLEET_UNKNOWN_HEARTBEAT_FAILURE_THRESHOLD = 3
 STALE_LINEAR_ISSUE_DAYS = 21
@@ -177,11 +176,8 @@ def refresh_airflow_fleet_health_cache_job():
 
 def refresh_leaderboard_cache_job():
     context = refresh_leaderboard_cache(DEFAULT_LEADERBOARD_DAYS)
-    logging.info(
-        "Refreshed leaderboard cache (days=%s, entries=%s)",
-        context.get("days"),
-        len(context.get("leaderboard_entries") or []),
-    )
+    n = len(context.get("leaderboard_entries") or [])
+    logging.info("Refreshed leaderboard cache (days=%s, entries=%s)", context.get("days"), n)
 
 
 def report_airflow_fleet_health_heartbeat(payload: dict, status: int) -> None:
@@ -962,23 +958,14 @@ def configure_scheduled_jobs() -> None:
         )
         schedule.every(refresh_interval_seconds).seconds.do(refresh_airflow_fleet_health_cache_job)
         refresh_airflow_fleet_health_cache_job()
-        logging.info(
-            "Scheduled airflow fleet health cache refresh every %s seconds",
-            refresh_interval_seconds,
-        )
-        leaderboard_refresh_seconds = _read_positive_int_env(
-            "LEADERBOARD_REFRESH_SECONDS",
-            LEADERBOARD_REFRESH_DEFAULT_SECONDS,
-        )
-        schedule.every(leaderboard_refresh_seconds).seconds.do(refresh_leaderboard_cache_job)
+        schedule.every(refresh_interval_seconds).seconds.do(refresh_leaderboard_cache_job)
         refresh_leaderboard_cache_job()
         logging.info(
-            "Scheduled leaderboard cache refresh every %s seconds",
-            leaderboard_refresh_seconds,
+            "Scheduled airflow fleet health and leaderboard cache refresh every %s seconds",
+            refresh_interval_seconds,
         )
     else:
-        logging.info("REDIS_URL not set; airflow fleet health cache refresh is disabled")
-        logging.info("REDIS_URL not set; leaderboard cache refresh is disabled")
+        logging.info("REDIS_URL not set; cache refresh is disabled")
 
     schedule.every().friday.at("13:00").do(post_inactive_engineers)
     schedule.every().day.at("12:00").do(post_priority_bugs)

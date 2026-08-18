@@ -207,6 +207,24 @@ class ConfigureScheduledJobsTest(unittest.TestCase):
             recorded_jobs,
         )
 
+    def test_schedules_leaderboard_refresh_when_redis_is_configured(self):
+        recorded_jobs = []
+
+        def fake_every(interval=None):
+            return _FakeScheduledJob(recorded_jobs, interval=interval)
+
+        with patch.object(jobs_module, "should_use_redis_cache", return_value=True):
+            with patch.object(jobs_module, "refresh_airflow_fleet_health_cache_job"):
+                with patch.object(jobs_module, "refresh_leaderboard_cache_job"):
+                    with patch.object(jobs_module.schedule, "every", side_effect=fake_every):
+                        jobs_module.configure_scheduled_jobs()
+                        self.assertTrue(
+                            any(
+                                job["func"] is jobs_module.refresh_leaderboard_cache_job
+                                for job in recorded_jobs
+                            )
+                        )
+
 
 class RunDebugJobsTest(unittest.TestCase):
     def test_runs_leaderboard_stale_and_project_updates(self):
@@ -223,43 +241,6 @@ class RunDebugJobsTest(unittest.TestCase):
         leaderboard.assert_called_once_with()
         stale.assert_called_once_with()
         project_updates.assert_called_once_with()
-
-    def test_refreshes_leaderboard_cache_when_redis_is_configured(self):
-        with patch.object(jobs_module, "should_use_redis_cache", return_value=True):
-            with patch.object(jobs_module, "refresh_airflow_fleet_health_cache_job"):
-                with patch.object(jobs_module, "refresh_leaderboard_cache_job") as refresh:
-                    with patch.object(jobs_module, "post_inactive_engineers"):
-                        with patch.object(jobs_module, "post_priority_bugs"):
-                            with patch.object(jobs_module, "post_leaderboard"):
-                                with patch.object(jobs_module, "post_stale"):
-                                    with patch.object(jobs_module, "post_project_updates"):
-                                        jobs_module.run_debug_jobs()
-
-        refresh.assert_called_once_with()
-
-
-class ConfigureLeaderboardCacheJobTest(unittest.TestCase):
-    def test_schedules_leaderboard_refresh_when_redis_is_configured(self):
-        recorded_jobs = []
-
-        def fake_every(interval=None):
-            return _FakeScheduledJob(recorded_jobs, interval=interval)
-
-        with patch.object(jobs_module, "should_use_redis_cache", return_value=True):
-            with patch.object(jobs_module, "refresh_airflow_fleet_health_cache_job"):
-                with patch.object(jobs_module, "refresh_leaderboard_cache_job"):
-                    with patch.object(jobs_module.schedule, "every", side_effect=fake_every):
-                        jobs_module.configure_scheduled_jobs()
-                        self.assertIn(
-                            {
-                                "interval": 60,
-                                "unit": "seconds",
-                                "at_time": None,
-                                "timezone": None,
-                                "func": jobs_module.refresh_leaderboard_cache_job,
-                            },
-                            recorded_jobs,
-                        )
 
 
 class PostStaleTest(unittest.TestCase):

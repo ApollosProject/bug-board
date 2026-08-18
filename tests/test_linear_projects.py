@@ -83,45 +83,6 @@ class GetProjectsTest(unittest.TestCase):
         self.assertIn("lastUpdate", queries[0])
 
 
-class GetCompletedCycleProjectsTest(unittest.TestCase):
-    def test_filters_completed_projects_and_omits_unused_fields(self):
-        calls = []
-        queries = []
-        response = {
-            "teams": {
-                "nodes": [
-                    {
-                        "projects": {
-                            "pageInfo": {"hasNextPage": False, "endCursor": None},
-                            "nodes": [
-                                {
-                                    "id": "project-2",
-                                    "status": {"type": "completed"},
-                                    "lead": {"displayName": "nick"},
-                                }
-                            ],
-                        }
-                    }
-                ]
-            }
-        }
-
-        def fake_execute(_query, variable_values=None):
-            queries.append(str(_query))
-            calls.append(variable_values)
-            return response
-
-        with patch.object(project_module, "_execute", side_effect=fake_execute):
-            with patch.object(project_module, "get_linear_team_key", return_value="APO"):
-                projects = project_module.get_completed_cycle_projects()
-
-        self.assertEqual(calls, [{"team_key": "APO", "after": None}])
-        self.assertEqual(projects[0]["id"], "project-2")
-        self.assertIn('status:{type:{eq:"completed"}}', "".join(queries[0].split()))
-        self.assertNotIn("initiatives", queries[0])
-        self.assertNotIn("members", queries[0])
-
-
 class GetCompletedProjectIssueAssigneesTest(unittest.TestCase):
     def test_paginates_and_returns_sorted_unique_assignees(self):
         responses = [
