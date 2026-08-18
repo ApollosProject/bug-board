@@ -68,6 +68,12 @@ class TimeWindow:
     def inclusive_end_date(self) -> date:
         return (self.end - timedelta(microseconds=1)).date()
 
+    @property
+    def duration_days(self) -> int:
+        if self.preset_days is not None:
+            return self.preset_days
+        return max((self.end - self.start).days, 1)
+
     def linear_bounds(self) -> dict[str, str]:
         return {"after": _to_linear_datetime(self.start), "before": _to_linear_datetime(self.end)}
 
@@ -76,3 +82,25 @@ class TimeWindow:
         if self.preset_days is not None:
             return f"merged:>={start}"
         return f"merged:>={start} merged:<={self.inclusive_end_date.isoformat()}"
+
+    def query_args(self) -> dict[str, str | int]:
+        if self.preset_days is not None:
+            return {"days": self.preset_days}
+        return {"start": self.start.date().isoformat(), "end": self.inclusive_end_date.isoformat()}
+
+    def cache_parts(self) -> tuple[int | None, str | None, str | None]:
+        query = self.query_args()
+        return query.get("days"), query.get("start"), query.get("end")  # type: ignore[return-value]
+
+    def template_vars(self) -> dict[str, object]:
+        query = self.query_args()
+        start, end = query.get("start"), query.get("end")
+        label = f"{self.preset_days}d" if self.preset_days is not None else f"{start} – {end}"
+        return {
+            "days": self.duration_days,
+            "preset_days": self.preset_days,
+            "start": start,
+            "end": end,
+            "window_label": label,
+            "window_query": query,
+        }
