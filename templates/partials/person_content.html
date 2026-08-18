@@ -1,7 +1,7 @@
 {% macro stdev_badge(key) -%}
   {%- set stat = (metric_stdevs or {}).get(key) -%}
   {%- if stat -%}
-  <small class="metric-stdev" data-tooltip="{{ stat.tooltip }}">{{ stat.label }}</small>
+  <small class="metric-stdev" data-tooltip="{{ stat.tooltip }}" data-placement="bottom">{{ stat.label }}</small>
   {%- endif -%}
 {%- endmacro %}
 <h2>{{ 'Current Support Work' if on_call_support else 'Current Project Work' }}</h2>

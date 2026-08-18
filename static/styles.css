@@ -255,3 +255,10 @@ details.dropdown.site-menu > summary + ul {
   margin-top: 0.15rem;
   opacity: 0.7;
 }
+
+.metric-stdev[data-tooltip]::before {
+  max-width: min(12rem, calc(100vw - 2rem));
+  overflow: hidden;
+  text-align: left;
+  white-space: normal;
+}
