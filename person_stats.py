@@ -16,6 +16,14 @@ CARD_METRIC_KEYS = (
     "lead_completed_projects_avg_early_late",
 )
 
+LOWER_IS_BETTER_METRIC_KEYS = frozenset(
+    {
+        "priority_bug_avg_time_to_fix",
+        "avg_all_time_to_fix",
+        "lead_completed_projects_avg_early_late",
+    }
+)
+
 MetricValue = float | int | None
 
 
@@ -56,8 +64,9 @@ def format_stdev_label(z: float) -> str:
     return f"{sign}{abs(z):.1f}σ"
 
 
-def format_stdev_tooltip(values: list[float]) -> str:
-    return f"eng avg {statistics.fmean(values):.1f} · σ {statistics.pstdev(values):.1f}"
+def format_stdev_tooltip(values: list[float], *, lower_is_better: bool = False) -> str:
+    tooltip = f"eng avg {statistics.fmean(values):.1f} · σ {statistics.pstdev(values):.1f}"
+    return f"{tooltip} · lower is better" if lower_is_better else tooltip
 
 
 def metric_stdevs_for_person(
@@ -74,8 +83,11 @@ def metric_stdevs_for_person(
         z = z_score(float(person_value), values)
         if z is None:
             continue
+        lower_is_better = key in LOWER_IS_BETTER_METRIC_KEYS
+        if lower_is_better:
+            z = -z
         result[key] = {
             "label": format_stdev_label(z),
-            "tooltip": format_stdev_tooltip(values),
+            "tooltip": format_stdev_tooltip(values, lower_is_better=lower_is_better),
         }
     return result

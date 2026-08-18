@@ -26,6 +26,33 @@ class PersonStatsTest(unittest.TestCase):
         self.assertEqual(person_stats.z_score(10, [10, 2]), 1.0)
         self.assertEqual(person_stats.format_stdev_tooltip([10, 2]), "eng avg 6.0 · σ 4.0")
 
+    def test_time_metric_stdevs_reward_shorter_times(self):
+        person_metrics = {
+            "prs_merged": 10,
+            "priority_bug_avg_time_to_fix": 2,
+            "avg_all_time_to_fix": 10,
+            "lead_completed_projects_avg_early_late": -3,
+        }
+        team_metrics = [
+            person_metrics,
+            {
+                "prs_merged": 2,
+                "priority_bug_avg_time_to_fix": 10,
+                "avg_all_time_to_fix": 2,
+                "lead_completed_projects_avg_early_late": 5,
+            },
+        ]
+
+        stdevs = person_stats.metric_stdevs_for_person(person_metrics, team_metrics)
+
+        self.assertEqual(stdevs["prs_merged"]["label"], "+1.0σ")
+        self.assertEqual(stdevs["priority_bug_avg_time_to_fix"]["label"], "+1.0σ")
+        self.assertEqual(stdevs["avg_all_time_to_fix"]["label"], "−1.0σ")
+        self.assertEqual(stdevs["lead_completed_projects_avg_early_late"]["label"], "+1.0σ")
+        self.assertTrue(
+            stdevs["priority_bug_avg_time_to_fix"]["tooltip"].endswith("lower is better")
+        )
+
     def test_person_cards_include_on_page_stdev_badges(self):
         app_module._build_person_context.cache_clear()
         self.addCleanup(app_module._build_person_context.cache_clear)
