@@ -93,8 +93,15 @@ class GetCompletedProjectIssueAssigneesTest(unittest.TestCase):
                         "endCursor": "issue-cursor-1",
                     },
                     "nodes": [
-                        {"assignee": {"displayName": "Austin Witherow"}},
-                        {"assignee": None},
+                        {
+                            "project": {"id": "project-2"},
+                            "assignee": {"displayName": "Austin Witherow"},
+                        },
+                        {
+                            "project": {"id": "project-1"},
+                            "assignee": {"displayName": "Nick"},
+                        },
+                        {"project": {"id": "project-2"}, "assignee": None},
                     ],
                 }
             },
@@ -102,8 +109,14 @@ class GetCompletedProjectIssueAssigneesTest(unittest.TestCase):
                 "issues": {
                     "pageInfo": {"hasNextPage": False, "endCursor": None},
                     "nodes": [
-                        {"assignee": {"displayName": "Later Page Contributor"}},
-                        {"assignee": {"displayName": "Austin Witherow"}},
+                        {
+                            "project": {"id": "project-2"},
+                            "assignee": {"displayName": "Later Page Contributor"},
+                        },
+                        {
+                            "project": {"id": "project-2"},
+                            "assignee": {"displayName": "Austin Witherow"},
+                        },
                     ],
                 }
             },
@@ -117,17 +130,20 @@ class GetCompletedProjectIssueAssigneesTest(unittest.TestCase):
             return responses[len(calls) - 1]
 
         with patch.object(project_module, "_execute", side_effect=fake_execute):
-            assignees = project_module.get_completed_project_issue_assignees("project-2")
+            assignees = project_module.get_completed_issue_assignees_by_project(
+                ["project-1", "project-2"]
+            )
 
         self.assertEqual(
             calls,
             [
-                {"project_id": "project-2", "after": None},
-                {"project_id": "project-2", "after": "issue-cursor-1"},
+                {"project_ids": ["project-1", "project-2"], "after": None},
+                {"project_ids": ["project-1", "project-2"], "after": "issue-cursor-1"},
             ],
         )
-        self.assertIn("$project_id: ID!", queries[0])
-        self.assertEqual(assignees, ["Austin Witherow", "Later Page Contributor"])
+        self.assertIn("$project_ids: [ID!]", queries[0])
+        self.assertEqual(assignees["project-1"], ["Nick"])
+        self.assertEqual(assignees["project-2"], ["Austin Witherow", "Later Page Contributor"])
 
 
 if __name__ == "__main__":

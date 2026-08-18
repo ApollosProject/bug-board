@@ -42,6 +42,27 @@ class GraphQLClientRequestTests(unittest.TestCase):
         self.assertIn("author:bkraeling", variables["authored"])
         self.assertIn("reviewed-by:bkraeling", variables["reviewed"])
 
+    def test_merged_pr_activity_fetches_once_and_groups_authors_and_reviewers(self):
+        prs = [
+            {
+                "author": {"login": "alice"},
+                "reviews": {"nodes": [{"author": {"login": "bob"}, "state": "APPROVED"}]},
+            },
+            {
+                "author": {"login": "bob"},
+                "reviews": {"nodes": [{"author": {"login": "alice"}, "state": "APPROVED"}]},
+            },
+        ]
+
+        with patch.object(github, "_get_merged_prs", return_value=prs) as fetch:
+            authored, reviewed = github.get_merged_pr_activity(30)
+
+        fetch.assert_called_once_with(30)
+        self.assertEqual(list(authored), ["alice", "bob"])
+        self.assertEqual(list(reviewed), ["bob", "alice"])
+        self.assertEqual(len(authored["alice"]), 1)
+        self.assertEqual(len(reviewed["bob"]), 1)
+
     def test_github_client_allows_slow_repository_queries(self):
         previous_client = getattr(github._thread_local, "client", None)
         if hasattr(github._thread_local, "client"):

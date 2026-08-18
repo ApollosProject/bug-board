@@ -230,22 +230,26 @@ def get_completed_issues(priority, label, days=30):
 
 
 def get_completed_issues_summary(priority, label, days=30):
+    return get_completed_issues_summary_for_labels(priority, [label], days)
+
+
+def get_completed_issues_summary_for_labels(priority, labels, days=30):
     team_key = get_linear_team_key()
     query = gql(
         """
         query CompletedIssuesSummary (
             $priority: Float,
-            $label: String,
+            $labels: [String!],
             $team_key: String!,
             $days: DateTimeOrDuration,
             $cursor: String
         ) {
           issues(
-            first: 50
+            first: 100
             after: $cursor
             filter: {
               team: { key: { eq: $team_key } }
-              labels: { name: { eq: $label } }
+              labels: { name: { in: $labels } }
               priority: { lte: $priority, gte: 1 }
               state: { type: { in: ["completed"] } }
               completedAt: { gt: $days }
@@ -281,7 +285,7 @@ def get_completed_issues_summary(priority, label, days=30):
     while True:
         params = {
             "priority": priority,
-            "label": label,
+            "labels": list(labels),
             "team_key": team_key,
             "days": f"-P{days}D",
             "cursor": cursor,

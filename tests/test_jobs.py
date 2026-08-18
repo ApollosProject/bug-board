@@ -46,13 +46,11 @@ def _install_import_shims() -> None:
     github_module.GitHubDataError = type("GitHubDataError", (RuntimeError,), {})
     github_module.get_pr_diff = lambda *args, **kwargs: ""
     github_module.get_prs_waiting_for_review_by_reviewer = lambda *args, **kwargs: {}
-    github_module.merged_prs_by_author = lambda *args, **kwargs: {}
-    github_module.merged_prs_by_reviewer = lambda *args, **kwargs: {}
+    github_module.get_merged_pr_activity = lambda *args, **kwargs: ({}, {})
     sys.modules.setdefault("github", github_module)
 
     leaderboard_module = cast(Any, types.ModuleType("leaderboard"))
-    leaderboard_module.calculate_cycle_project_lead_points = lambda *args, **kwargs: 0
-    leaderboard_module.calculate_cycle_project_member_points = lambda *args, **kwargs: 0
+    leaderboard_module.calculate_cycle_project_points = lambda *args, **kwargs: ({}, {})
     sys.modules.setdefault("leaderboard", leaderboard_module)
 
     linear_package = cast(Any, types.ModuleType("linear"))

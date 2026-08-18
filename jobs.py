@@ -15,16 +15,12 @@ from constants import ENGINEERING_TEAM_SLUG, PRIORITY_TO_SCORE
 from fleet_health_cache import refresh_fleet_health_cache, should_use_redis_cache
 from github import (
     GitHubDataError,
+    get_merged_pr_activity,
     get_pr_diff,
     get_prs_waiting_for_review_by_reviewer,
-    merged_prs_by_author,
-    merged_prs_by_reviewer,
 )
 from issue_timing import format_issue_sla_text, parse_linear_dt
-from leaderboard import (
-    calculate_cycle_project_lead_points,
-    calculate_cycle_project_member_points,
-)
+from leaderboard import calculate_cycle_project_points
 from linear.issues import (
     get_completed_issues,
     get_completed_issues_for_person,
@@ -550,25 +546,25 @@ def post_leaderboard():
         score = priority_to_score.get(item["priority"], 0)
         leaderboard[slack_markdown] += score
 
-    for reviewer, prs in merged_prs_by_reviewer(days).items():
+    merged_authored_prs, merged_reviews = get_merged_pr_activity(days)
+    for reviewer, prs in merged_reviews.items():
         slack_markdown = get_slack_markdown_by_github_username(reviewer)
         if slack_markdown not in leaderboard:
             leaderboard[slack_markdown] = 0
         leaderboard[slack_markdown] += len(prs)
 
-    for author, prs in merged_prs_by_author(days).items():
+    for author, prs in merged_authored_prs.items():
         slack_markdown = get_slack_markdown_by_github_username(author)
         if slack_markdown not in leaderboard:
             leaderboard[slack_markdown] = 0
         leaderboard[slack_markdown] += len(prs)
 
-    cycle_points = calculate_cycle_project_lead_points(days)
+    cycle_points, member_points = calculate_cycle_project_points(days)
     for lead_name, points in cycle_points.items():
         slack_markdown = get_slack_markdown_by_linear_username(lead_name)
         key = slack_markdown if slack_markdown != "No Assignee" else lead_name
         leaderboard[key] = leaderboard.get(key, 0) + points
 
-    member_points = calculate_cycle_project_member_points(days)
     for member_name, points in member_points.items():
         slack_markdown = get_slack_markdown_by_linear_username(member_name)
         key = slack_markdown if slack_markdown != "No Assignee" else member_name

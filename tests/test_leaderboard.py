@@ -15,12 +15,12 @@ def _import_leaderboard_with_stub():
     def _get_projects():
         return []
 
-    def _get_completed_project_issue_assignees(_project_id):
-        return []
+    def _get_completed_issue_assignees_by_project(project_ids):
+        return {project_id: [] for project_id in project_ids}
 
     linear_projects_module.get_projects = _get_projects
-    linear_projects_module.get_completed_project_issue_assignees = (
-        _get_completed_project_issue_assignees
+    linear_projects_module.get_completed_issue_assignees_by_project = (
+        _get_completed_issue_assignees_by_project
     )
 
     original_leaderboard = sys.modules.pop("leaderboard", None)
@@ -58,13 +58,14 @@ class CycleProjectPointsTest(TestCase):
         with patch.object(leaderboard_module, "get_projects", return_value=projects):
             with patch.object(
                 leaderboard_module,
-                "get_completed_project_issue_assignees",
-                return_value=["Austin"],
+                "get_completed_issue_assignees_by_project",
+                return_value={"project-1": ["Austin"]},
             ) as assignees_mock:
-                lead_points = leaderboard_module.calculate_cycle_project_lead_points(30, now)
-                member_points = leaderboard_module.calculate_cycle_project_member_points(30, now)
+                lead_points, member_points = leaderboard_module.calculate_cycle_project_points(
+                    30, now
+                )
 
-        assignees_mock.assert_called_with("project-1")
+        assignees_mock.assert_called_once_with(["project-1"])
         self.assertEqual(lead_points, {"nick": 120})
         self.assertEqual(member_points, {"Austin": 60})
 
@@ -85,8 +86,7 @@ class CycleProjectPointsTest(TestCase):
         now = datetime(2026, 4, 7, tzinfo=timezone.utc)
 
         with patch.object(leaderboard_module, "get_projects", return_value=projects):
-            lead_points = leaderboard_module.calculate_cycle_project_lead_points(30, now)
-            member_points = leaderboard_module.calculate_cycle_project_member_points(30, now)
+            lead_points, member_points = leaderboard_module.calculate_cycle_project_points(30, now)
 
         self.assertEqual(lead_points, {})
         self.assertEqual(member_points, {})
@@ -110,10 +110,10 @@ class CycleProjectPointsTest(TestCase):
         with patch.object(leaderboard_module, "get_projects", return_value=projects):
             with patch.object(
                 leaderboard_module,
-                "get_completed_project_issue_assignees",
-                return_value=["Contributor"],
+                "get_completed_issue_assignees_by_project",
+                return_value={"project-1": ["Contributor"]},
             ):
-                member_points = leaderboard_module.calculate_cycle_project_member_points(30, now)
+                _, member_points = leaderboard_module.calculate_cycle_project_points(30, now)
 
         self.assertEqual(member_points, {"Contributor": 15})
 
@@ -136,11 +136,12 @@ class CycleProjectPointsTest(TestCase):
         with patch.object(leaderboard_module, "get_projects", return_value=projects):
             with patch.object(
                 leaderboard_module,
-                "get_completed_project_issue_assignees",
-                return_value=["Austin"],
+                "get_completed_issue_assignees_by_project",
+                return_value={"old-project": ["Austin"]},
             ) as assignees_mock:
-                lead_points = leaderboard_module.calculate_cycle_project_lead_points(30, now)
-                member_points = leaderboard_module.calculate_cycle_project_member_points(30, now)
+                lead_points, member_points = leaderboard_module.calculate_cycle_project_points(
+                    30, now
+                )
 
         assignees_mock.assert_not_called()
         self.assertEqual(lead_points, {})

@@ -20,19 +20,16 @@ from fleet_health_cache import (
     should_use_redis_cache,
 )
 from github import (
+    get_merged_pr_activity,
     get_merged_pr_counts_for_user,
-    merged_prs_by_author,
-    merged_prs_by_reviewer,
 )
-from leaderboard import (
-    calculate_cycle_project_lead_points,
-    calculate_cycle_project_member_points,
-)
+from leaderboard import calculate_cycle_project_points
 from linear.issues import (
     by_platform,
     by_project,
     get_completed_issues_for_person,
     get_completed_issues_summary,
+    get_completed_issues_summary_for_labels,
     get_created_issues,
     get_open_issues,
     get_open_issues_for_person,
@@ -520,12 +517,11 @@ def get_future_result_with_timeout(
 
 
 def _build_leaderboard_entries(
-    days: int,
-    completed_bugs: list,
-    completed_feature_requests: list,
-    completed_technical_changes: list,
+    completed_work: list,
     merged_reviews: dict,
     merged_authored_prs: dict,
+    cycle_lead_points: dict[str, int],
+    cycle_member_points: dict[str, int],
 ) -> list[LeaderboardEntry]:
     config_data = load_config()
     people_config = config_data.get("people", {})
@@ -567,8 +563,6 @@ def _build_leaderboard_entries(
     points_breakdown_by_external: dict[str, dict[str, int]] = {}
     count_breakdown_by_slug: dict[str, dict[str, int]] = {}
     count_breakdown_by_external: dict[str, dict[str, int]] = {}
-
-    completed_work = completed_bugs + completed_feature_requests + completed_technical_changes
 
     for issue in completed_work:
         assignee = issue.get("assignee")
@@ -677,7 +671,6 @@ def _build_leaderboard_entries(
                 pr_points,
             )
 
-    cycle_lead_points = calculate_cycle_project_lead_points(days)
     for lead_name, points in cycle_lead_points.items():
         slug = resolve_slug(lead_name, format_display_name(lead_name))
         if slug:
@@ -706,7 +699,6 @@ def _build_leaderboard_entries(
                 points,
             )
 
-    cycle_member_points = calculate_cycle_project_member_points(days)
     for member_name, points in cycle_member_points.items():
         slug = resolve_slug(member_name, format_display_name(member_name))
         if slug:
@@ -875,41 +867,30 @@ def _build_open_items_context(days: int, _cache_epoch: int) -> dict:
 @lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
 def _build_leaderboard_context(days: int, _cache_epoch: int) -> dict:
     with ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS) as executor:
-        completed_bugs_future = executor.submit(get_completed_issues_summary, 5, "Bug", days)
-        completed_feature_requests_future = executor.submit(
-            get_completed_issues_summary, 5, "Feature Request", days
+        completed_work_future = executor.submit(
+            get_completed_issues_summary_for_labels,
+            5,
+            ["Bug", "Feature Request", "Technical Change"],
+            days,
         )
-        completed_technical_changes_future = executor.submit(
-            get_completed_issues_summary, 5, "Technical Change", days
-        )
-        reviews_future = executor.submit(merged_prs_by_reviewer, days)
-        authored_prs_future = executor.submit(merged_prs_by_author, days)
+        merged_prs_future = executor.submit(get_merged_pr_activity, days)
+        cycle_points_future = executor.submit(calculate_cycle_project_points, days)
 
-    completed_bugs_result = get_future_result_with_timeout(completed_bugs_future, [])
-    completed_bugs = [issue for issue in completed_bugs_result if not issue.get("project")]
-    completed_feature_requests_result = get_future_result_with_timeout(
-        completed_feature_requests_future, []
+    completed_work_result = get_future_result_with_timeout(completed_work_future, [])
+    completed_work = [issue for issue in completed_work_result if not issue.get("project")]
+    merged_authored_prs, merged_reviews = get_future_result_with_timeout(
+        merged_prs_future, ({}, {})
     )
-    completed_feature_requests = [
-        issue for issue in completed_feature_requests_result if not issue.get("project")
-    ]
-    completed_technical_changes_result = get_future_result_with_timeout(
-        completed_technical_changes_future, []
+    cycle_lead_points, cycle_member_points = get_future_result_with_timeout(
+        cycle_points_future, ({}, {})
     )
-    completed_technical_changes = [
-        issue for issue in completed_technical_changes_result if not issue.get("project")
-    ]
-
-    merged_reviews = get_future_result_with_timeout(reviews_future, {})
-    merged_authored_prs = get_future_result_with_timeout(authored_prs_future, {})
 
     leaderboard_entries = _build_leaderboard_entries(
-        days=days,
-        completed_bugs=completed_bugs,
-        completed_feature_requests=completed_feature_requests,
-        completed_technical_changes=completed_technical_changes,
+        completed_work=completed_work,
         merged_reviews=merged_reviews,
         merged_authored_prs=merged_authored_prs,
+        cycle_lead_points=cycle_lead_points,
+        cycle_member_points=cycle_member_points,
     )
 
     return {
