@@ -7,6 +7,7 @@ from constants import (
     CYCLE_PROJECT_MEMBER_POINTS_PER_WEEK,
 )
 from linear.projects import get_completed_issue_assignees_by_project, get_projects
+from time_window import TimeWindow
 
 
 def _parse_date(value: str | None) -> datetime | None:
@@ -43,13 +44,19 @@ def _build_week_segments(
 
 
 def calculate_cycle_project_points(
-    days: int, now: datetime | None = None
+    days: int, now: datetime | None = None, window: TimeWindow | None = None
 ) -> tuple[dict[str, int], dict[str, int]]:
-    if days <= 0:
-        return {}, {}
-    now = now or datetime.now(timezone.utc)
+    if window is not None:
+        now = window.end
+        timeframe_start = window.start
+        if now <= timeframe_start:
+            return {}, {}
+    else:
+        if days <= 0:
+            return {}, {}
+        now = now or datetime.now(timezone.utc)
+        timeframe_start = now - timedelta(days=days)
     projects = get_projects()
-    timeframe_start = now - timedelta(days=days)
     week_segments = _build_week_segments(timeframe_start, now)
     scoring_projects: list[tuple[str, str, int]] = []
     for project in projects:

@@ -17,15 +17,10 @@
 {% block header_nav %}{% endblock %}
 
 {% block content %}
+    {% set presets = [7, 30, 90] %}
+    {% include "partials/time_window_controls.html" %}
     {#
     <h2>Priority Bug Stats</h2>
-    <form method="get" style="display:inline-block; margin-bottom: 0.5em;">
-      <select name="days" onchange="this.form.submit()">
-        <option value="7"  {{ 'selected' if days == 7 else '' }}>7d</option>
-        <option value="30" {{ 'selected' if days == 30 else '' }}>30d</option>
-        <option value="90" {{ 'selected' if days == 90 else '' }}>90d</option>
-      </select>
-    </form>
     <div id="priority-stats" aria-busy="true"></div>
     #}
     <section id="resolution-by-priority" aria-busy="true"></section>
@@ -35,7 +30,8 @@
 
 {% block extra_scripts %}
 <script>
-  const days = {{ days }};
+  const windowQuery = {{ window_query | tojson }};
+  const windowQs = new URLSearchParams(windowQuery).toString();
   let chartLibraryPromise;
 
   function ensureChartLibrary() {
@@ -114,14 +110,14 @@
   // Priority bug stats section intentionally disabled while we evaluate alternatives.
   // loadSection(
   //   'priority-stats',
-  //   `/partials/index/priority-stats?days=${days}`,
+  //   `/partials/index/priority-stats?${windowQs}`,
   //   renderPlatformChart
   // );
   loadSection(
     'resolution-by-priority',
-    `/partials/index/resolution-by-priority?days=${days}`
+    `/partials/index/resolution-by-priority?${windowQs}`
   );
-  loadSection('open-items', `/partials/index/open-items?days=${days}`);
-  loadSection('leaderboard', `/partials/index/leaderboard?days=${days}`);
+  loadSection('open-items', `/partials/index/open-items?${windowQs}`);
+  loadSection('leaderboard', `/partials/index/leaderboard?${windowQs}`);
 </script>
 {% endblock %}

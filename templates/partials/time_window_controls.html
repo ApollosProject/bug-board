@@ -1,0 +1,27 @@
+{% set presets = presets if presets is defined else [7, 30, 90] %}
+<div class="time-window-controls">
+  <form method="get" class="time-window-presets">
+    <label>
+      <span>Period</span>
+      <select name="days" onchange="this.form.submit()" aria-label="Lookback period">
+        {% if preset_days is none %}
+        <option value="" selected disabled>Custom</option>
+        {% endif %}
+        {% for n in presets %}
+        <option value="{{ n }}" {{ 'selected' if preset_days == n else '' }}>{{ n }}d</option>
+        {% endfor %}
+      </select>
+    </label>
+  </form>
+  <form method="get" class="time-window-range">
+    <label>
+      <span>From</span>
+      <input type="date" name="start" value="{{ start or '' }}" required aria-label="Start date">
+    </label>
+    <label>
+      <span>To</span>
+      <input type="date" name="end" value="{{ end or '' }}" required aria-label="End date">
+    </label>
+    <button type="submit">Apply</button>
+  </form>
+</div>

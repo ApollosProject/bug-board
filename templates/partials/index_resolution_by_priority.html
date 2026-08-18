@@ -1,8 +1,12 @@
 <h2>Average Resolution Time by Priority</h2>
 <p>
-  <small
-    >Non-project items completed in the last {{ days }} day{{ '' if days == 1 else 's' }}.</small
-  >
+  <small>
+    {% if preset_days is not none %}
+      Non-project items completed in the last {{ days }} day{{ '' if days == 1 else 's' }}.
+    {% else %}
+      Non-project items completed {{ window_label }}.
+    {% endif %}
+  </small>
 </p>
 {% if resolution_stats %}
   <div class="grid">

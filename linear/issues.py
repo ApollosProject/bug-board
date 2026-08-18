@@ -4,8 +4,14 @@ from gql import gql
 
 from config import get_linear_team_key, get_platforms
 from issue_timing import format_issue_sla_text
+from time_window import TimeWindow
 
 from .client import _compute_assignee_time_to_fix, _execute
+
+
+def _datetime_bounds(days: int = 30, window: TimeWindow | None = None) -> dict[str, str]:
+    resolved = window if window is not None else TimeWindow.from_days(days)
+    return {"after": resolved.linear_after(), "before": resolved.linear_before()}
 
 
 def get_open_issues(priority, label):
@@ -130,7 +136,7 @@ def get_open_stale_issues():
     return issues
 
 
-def get_completed_issues(priority, label, days=30):
+def get_completed_issues(priority, label, days=30, window: TimeWindow | None = None):
     team_key = get_linear_team_key()
     query = gql(
         """
@@ -138,7 +144,8 @@ def get_completed_issues(priority, label, days=30):
             $priority: Float,
             $label: String,
             $team_key: String!,
-            $days: DateTimeOrDuration,
+            $after: DateTimeOrDuration,
+            $before: DateTimeOrDuration,
             $cursor: String
         ) {
           issues(
@@ -149,7 +156,7 @@ def get_completed_issues(priority, label, days=30):
               labels: { name: { eq: $label } }
               priority: { lte: $priority, gte: 1 }
               state: { type: { in: ["completed"] } }
-              completedAt: { gt: $days }
+              completedAt: { gte: $after, lt: $before }
             }
             orderBy: updatedAt
           ) {
@@ -212,8 +219,8 @@ def get_completed_issues(priority, label, days=30):
             "priority": priority,
             "label": label,
             "team_key": team_key,
-            "days": f"-P{days}D",
             "cursor": cursor,
+            **_datetime_bounds(days, window),
         }
         data = _execute(query, variable_values=params)
         issues += data["issues"]["nodes"]
@@ -229,11 +236,13 @@ def get_completed_issues(priority, label, days=30):
     return issues
 
 
-def get_completed_issues_summary(priority, label, days=30):
-    return get_completed_issues_summary_for_labels(priority, [label], days)
+def get_completed_issues_summary(priority, label, days=30, window: TimeWindow | None = None):
+    return get_completed_issues_summary_for_labels(priority, [label], days, window)
 
 
-def get_completed_issues_summary_for_labels(priority, labels, days=30):
+def get_completed_issues_summary_for_labels(
+    priority, labels, days=30, window: TimeWindow | None = None
+):
     team_key = get_linear_team_key()
     query = gql(
         """
@@ -241,7 +250,8 @@ def get_completed_issues_summary_for_labels(priority, labels, days=30):
             $priority: Float,
             $labels: [String!],
             $team_key: String!,
-            $days: DateTimeOrDuration,
+            $after: DateTimeOrDuration,
+            $before: DateTimeOrDuration,
             $cursor: String
         ) {
           issues(
@@ -252,7 +262,7 @@ def get_completed_issues_summary_for_labels(priority, labels, days=30):
               labels: { name: { in: $labels } }
               priority: { lte: $priority, gte: 1 }
               state: { type: { in: ["completed"] } }
-              completedAt: { gt: $days }
+              completedAt: { gte: $after, lt: $before }
             }
             orderBy: updatedAt
           ) {
@@ -287,8 +297,8 @@ def get_completed_issues_summary_for_labels(priority, labels, days=30):
             "priority": priority,
             "labels": list(labels),
             "team_key": team_key,
-            "days": f"-P{days}D",
             "cursor": cursor,
+            **_datetime_bounds(days, window),
         }
         data = _execute(query, variable_values=params)
         issues += data["issues"]["nodes"]
@@ -304,7 +314,7 @@ def get_completed_issues_summary_for_labels(priority, labels, days=30):
     return issues
 
 
-def get_created_issues(priority, label, days=30):
+def get_created_issues(priority, label, days=30, window: TimeWindow | None = None):
     team_key = get_linear_team_key()
     query = gql(
         """
@@ -312,7 +322,8 @@ def get_created_issues(priority, label, days=30):
             $priority: Float,
             $label: String,
             $team_key: String!,
-            $days: DateTimeOrDuration,
+            $after: DateTimeOrDuration,
+            $before: DateTimeOrDuration,
             $cursor: String
         ) {
             issues(
@@ -322,7 +333,7 @@ def get_created_issues(priority, label, days=30):
                     team: { key: { eq: $team_key } }
                     labels: { name: { eq: $label } }
                     priority: { lte: $priority, gte: 1 }
-                    createdAt:{gt: $days}
+                    createdAt:{gte: $after, lt: $before}
                     project: { null: true }
                 }
                 orderBy: createdAt
@@ -354,8 +365,8 @@ def get_created_issues(priority, label, days=30):
             "priority": priority,
             "label": label,
             "team_key": team_key,
-            "days": f"-P{days}D",
             "cursor": cursor,
+            **_datetime_bounds(days, window),
         }
         data = _execute(query, variable_values=params)
         issues += data["issues"]["nodes"]
@@ -584,7 +595,7 @@ def get_open_issues_for_person(login: str):
     return issues
 
 
-def get_completed_issues_for_person(login: str, days=30):
+def get_completed_issues_for_person(login: str, days=30, window: TimeWindow | None = None):
     """Return completed issues for a user over the last `days` days, filtered by Linear username."""
     team_key = get_linear_team_key()
     query = gql(
@@ -592,7 +603,8 @@ def get_completed_issues_for_person(login: str, days=30):
         query CompletedIssues(
           $login: String!,
           $team_key: String!,
-          $days: DateTimeOrDuration,
+          $after: DateTimeOrDuration,
+          $before: DateTimeOrDuration,
           $cursor: String
         ) {
           issues(
@@ -602,7 +614,7 @@ def get_completed_issues_for_person(login: str, days=30):
               team: { key: { eq: $team_key } }
               assignee: { displayName: { eq: $login } }
               state: { type: { in: ["completed"] } }
-              completedAt: { gt: $days }
+              completedAt: { gte: $after, lt: $before }
             }
             orderBy: updatedAt
           ) {
@@ -644,8 +656,8 @@ def get_completed_issues_for_person(login: str, days=30):
         params = {
             "login": login,
             "team_key": team_key,
-            "days": f"-P{days}D",
             "cursor": cursor,
+            **_datetime_bounds(days, window),
         }
         data = _execute(query, variable_values=params)
         issues += data["issues"]["nodes"]

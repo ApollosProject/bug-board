@@ -180,7 +180,7 @@ class LinearIssueStateFiltersTest(unittest.TestCase):
         self.assertIn('state:{type:{in:["completed"]}}', query_text)
         self.assertIn("labels:{name:{in:$labels}}", query_text)
         self.assertNotIn('state:{name:{in:["Done"]}}', query_text)
-        self.assertEqual(execute_calls[0][1]["days"], "-P30D")
+        self.assertEqual(execute_calls[0][1]["after"], "-P30D")
         self.assertEqual(execute_calls[0][1]["labels"], ["Bug"])
 
     def test_get_open_issues_for_person_uses_state_type_for_open_filter(self):

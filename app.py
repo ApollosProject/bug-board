@@ -45,6 +45,7 @@ from project_dates import (
 )
 from rippling_pto import get_rippling_pto_calendar
 from support import get_support_slugs
+from time_window import TimeWindow, parse_time_window
 
 
 def normalize_identity(value: str | None) -> str:
@@ -57,10 +58,22 @@ def format_display_name(linear_username: str) -> str:
     return re.sub(r"[._-]+", " ", linear_username).title()
 
 
-def github_merged_prs_url(username: str, days: int) -> str:
-    cutoff_date = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
-    query = f"is:closed is:pr author:{username} archived:false merged:>={cutoff_date}"
+def github_merged_prs_url(username: str, days: int, window: TimeWindow | None = None) -> str:
+    qualifier = (
+        window or TimeWindow.from_days(days, now=datetime.now(timezone.utc))
+    ).github_merged_qualifier()
+    query = f"is:closed is:pr author:{username} archived:false {qualifier}"
     return f"https://github.com/pulls?q={quote(query, safe='')}"
+
+
+def _request_time_window() -> TimeWindow:
+    return parse_time_window(request.args, now=datetime.now(timezone.utc))
+
+
+def _window_from_parts(
+    days: int | None, start: str | None = None, end: str | None = None
+) -> TimeWindow:
+    return TimeWindow.from_parts(days, start, end, now=datetime.now(timezone.utc))
 
 
 INACTIVE_PROJECT_STATUS_NAMES = {
@@ -769,16 +782,24 @@ def _build_leaderboard_entries(
 
 
 @lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
-def _build_priority_stats_context(days: int, _cache_epoch: int) -> dict:
+def _build_priority_stats_context(
+    days: int | None, _cache_epoch: int, start: str | None = None, end: str | None = None
+) -> dict:
+    window = _window_from_parts(days, start, end)
+    days = window.duration_days
     with ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS) as executor:
-        created_priority_future = executor.submit(get_created_issues, 2, "Bug", days)
-        completed_priority_future = executor.submit(get_completed_issues_summary, 2, "Bug", days)
-        completed_bugs_future = executor.submit(get_completed_issues_summary, 5, "Bug", days)
+        created_priority_future = executor.submit(get_created_issues, 2, "Bug", days, window)
+        completed_priority_future = executor.submit(
+            get_completed_issues_summary, 2, "Bug", days, window
+        )
+        completed_bugs_future = executor.submit(
+            get_completed_issues_summary, 5, "Bug", days, window
+        )
         completed_feature_requests_future = executor.submit(
-            get_completed_issues_summary, 5, "Feature Request", days
+            get_completed_issues_summary, 5, "Feature Request", days, window
         )
         completed_technical_changes_future = executor.submit(
-            get_completed_issues_summary, 5, "Technical Change", days
+            get_completed_issues_summary, 5, "Technical Change", days, window
         )
 
     created_priority_bugs = get_future_result_with_timeout(created_priority_future, [])
@@ -823,7 +844,7 @@ def _build_priority_stats_context(days: int, _cache_epoch: int) -> dict:
     platform_values = [len(issues_by_platform[label]) for label in platform_labels]
 
     return {
-        "days": days,
+        **window.template_vars(),
         "issue_count": len(created_priority_bugs),
         "fixes_per_day": fixes_per_day,
         "priority_percentage": priority_percentage,
@@ -835,7 +856,10 @@ def _build_priority_stats_context(days: int, _cache_epoch: int) -> dict:
 
 
 @lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
-def _build_open_items_context(days: int, _cache_epoch: int) -> dict:
+def _build_open_items_context(
+    days: int | None, _cache_epoch: int, start: str | None = None, end: str | None = None
+) -> dict:
+    window = _window_from_parts(days, start, end)
     with ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS) as executor:
         open_priority_future = executor.submit(get_open_issues, 2, "Bug")
         open_bugs_future = executor.submit(get_open_issues, 5, "Bug")
@@ -851,7 +875,7 @@ def _build_open_items_context(days: int, _cache_epoch: int) -> dict:
     open_work = open_bugs_result + open_feature_requests_result + open_technical_changes_result
 
     return {
-        "days": days,
+        **window.template_vars(),
         "priority_issues": sorted(open_priority_bugs, key=lambda x: x["createdAt"]),
         "open_assigned_work": sorted(
             [
@@ -865,16 +889,23 @@ def _build_open_items_context(days: int, _cache_epoch: int) -> dict:
     }
 
 
-def compute_leaderboard_context(days: int) -> dict:
+def compute_leaderboard_context(
+    days: int = DEFAULT_LEADERBOARD_DAYS, window: TimeWindow | None = None
+) -> dict:
+    window = (
+        window if window is not None else TimeWindow.from_days(days, now=datetime.now(timezone.utc))
+    )
+    days = window.duration_days
     with ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS) as executor:
         completed_work_future = executor.submit(
             get_completed_issues_summary_for_labels,
             5,
             ["Bug", "Feature Request", "Technical Change"],
             days,
+            window,
         )
-        merged_prs_future = executor.submit(get_merged_pr_activity, days)
-        cycle_points_future = executor.submit(calculate_cycle_project_points, days)
+        merged_prs_future = executor.submit(get_merged_pr_activity, days, window)
+        cycle_points_future = executor.submit(calculate_cycle_project_points, days, None, window)
 
     completed_work_result = get_future_result_with_timeout(completed_work_future, [])
     completed_work = [issue for issue in completed_work_result if not issue.get("project")]
@@ -894,22 +925,31 @@ def compute_leaderboard_context(days: int) -> dict:
     )
 
     return {
-        "days": days,
+        **window.template_vars(),
         "leaderboard_entries": leaderboard_entries,
     }
 
 
 @lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
-def _build_leaderboard_context(days: int, _cache_epoch: int) -> dict:
-    return compute_leaderboard_context(days)
+def _build_leaderboard_context(
+    days: int | None, _cache_epoch: int, start: str | None = None, end: str | None = None
+) -> dict:
+    window = _window_from_parts(days, start, end)
+    return compute_leaderboard_context(window.duration_days, window)
 
 
 @lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
-def _build_resolution_by_priority_context(days: int, _cache_epoch: int) -> dict:
+def _build_resolution_by_priority_context(
+    days: int | None, _cache_epoch: int, start: str | None = None, end: str | None = None
+) -> dict:
+    window = _window_from_parts(days, start, end)
+    days = window.duration_days
     with ThreadPoolExecutor(max_workers=INDEX_THREADPOOL_MAX_WORKERS) as executor:
-        completed_bugs_future = executor.submit(get_completed_issues_summary, 5, "Bug", days)
+        completed_bugs_future = executor.submit(
+            get_completed_issues_summary, 5, "Bug", days, window
+        )
         completed_feature_requests_future = executor.submit(
-            get_completed_issues_summary, 5, "Feature Request", days
+            get_completed_issues_summary, 5, "Feature Request", days, window
         )
 
     completed_bugs_result = get_future_result_with_timeout(completed_bugs_future, [])
@@ -926,65 +966,70 @@ def _build_resolution_by_priority_context(days: int, _cache_epoch: int) -> dict:
     resolution_stats = get_resolution_time_by_priority(completed_non_project_issues)
 
     return {
-        "days": days,
+        **window.template_vars(),
         "resolution_stats": resolution_stats,
     }
+
+
+def _cached_window_context(builder, window: TimeWindow) -> dict:
+    days, start, end = window.cache_parts()
+    cache_epoch = int(time.time() / INDEX_CACHE_TTL_SECONDS)
+    return builder(days, cache_epoch, start, end)
 
 
 # use a query string parameter for days on the index route
 @app.route("/")
 def index():
-    days = request.args.get("days", default=30, type=int)
-    return render_template("index.html", days=days)
+    window = _request_time_window()
+    return render_template("index.html", **window.template_vars())
 
 
 @app.route("/partials/index/priority-stats")
 def index_priority_stats_partial():
-    days = request.args.get("days", default=30, type=int)
-    cache_epoch = int(time.time() / INDEX_CACHE_TTL_SECONDS)
-    context = _build_priority_stats_context(days, cache_epoch)
+    context = _cached_window_context(_build_priority_stats_context, _request_time_window())
     return render_template("partials/index_priority_stats.html", **context)
 
 
 @app.route("/partials/index/resolution-by-priority")
 def index_resolution_by_priority_partial():
-    days = request.args.get("days", default=30, type=int)
-    cache_epoch = int(time.time() / INDEX_CACHE_TTL_SECONDS)
-    context = _build_resolution_by_priority_context(days, cache_epoch)
+    context = _cached_window_context(_build_resolution_by_priority_context, _request_time_window())
     return render_template("partials/index_resolution_by_priority.html", **context)
 
 
 @app.route("/partials/index/open-items")
 def index_open_items_partial():
-    days = request.args.get("days", default=30, type=int)
-    cache_epoch = int(time.time() / INDEX_CACHE_TTL_SECONDS)
-    context = _build_open_items_context(days, cache_epoch)
+    context = _cached_window_context(_build_open_items_context, _request_time_window())
     return render_template("partials/index_open_items.html", **context)
 
 
 @app.route("/partials/index/leaderboard")
 def index_leaderboard_partial():
-    days = request.args.get("days", default=30, type=int)
-    if should_use_redis_cache() and days == DEFAULT_LEADERBOARD_DAYS:
-        cached = get_cached_leaderboard(days)
+    window = _request_time_window()
+    if should_use_redis_cache() and window.preset_days == DEFAULT_LEADERBOARD_DAYS:
+        cached = get_cached_leaderboard(window.preset_days)
         if cached is not None:
-            return render_template("partials/index_leaderboard.html", **cached)
-        logging.info("Leaderboard cache miss while REDIS_URL is configured (days=%s)", days)
+            return render_template(
+                "partials/index_leaderboard.html",
+                **{**window.template_vars(), **cached},
+            )
+        logging.info(
+            "Leaderboard cache miss while REDIS_URL is configured (days=%s)",
+            window.preset_days,
+        )
         return render_template(
             "partials/index_leaderboard.html",
-            days=days,
+            **window.template_vars(),
             leaderboard_entries=[],
             leaderboard_unavailable=True,
         )
-    cache_epoch = int(time.time() / INDEX_CACHE_TTL_SECONDS)
-    context = _build_leaderboard_context(days, cache_epoch)
+    context = _cached_window_context(_build_leaderboard_context, window)
     return render_template("partials/index_leaderboard.html", **context)
 
 
 @app.route("/team/<slug>")
 def team_slug(slug):
     """Display open and completed work for a team member."""
-    days = request.args.get("days", default=30, type=int)
+    window = _request_time_window()
     config = load_config()
     person_cfg = config.get("people", {}).get(slug)
     if not person_cfg:
@@ -995,7 +1040,7 @@ def team_slug(slug):
         "person.html",
         person_slug=slug,
         person_name=person_name,
-        days=days,
+        **window.template_vars(),
     )
 
 
@@ -1015,13 +1060,14 @@ def projects_content_partial():
 
 @app.route("/partials/team/<slug>/content")
 def team_person_content_partial(slug):
-    days = request.args.get("days", default=30, type=int)
+    window = _request_time_window()
     config = load_config()
     person_cfg = config.get("people", {}).get(slug)
     if not person_cfg:
         abort(404)
+    days, start, end = window.cache_parts()
     cache_epoch = int(time.time() / INDEX_CACHE_TTL_SECONDS)
-    context = _build_person_context(slug, days, cache_epoch)
+    context = _build_person_context(slug, days or window.duration_days, cache_epoch, start, end)
     return render_template("partials/person_content.html", **context)
 
 
@@ -1278,7 +1324,15 @@ def _build_team_context(_cache_epoch: int) -> dict:
 
 
 @lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
-def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
+def _build_person_context(
+    slug: str,
+    days: int,
+    _cache_epoch: int,
+    start: str | None = None,
+    end: str | None = None,
+) -> dict:
+    window = _window_from_parts(days, start, end)
+    days = window.duration_days
     config = load_config()
     person_cfg = config.get("people", {}).get(slug) or {}
     login = person_cfg.get("linear_username", slug)
@@ -1291,7 +1345,7 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
     )
     with ThreadPoolExecutor(max_workers=TEAM_THREADPOOL_MAX_WORKERS) as executor:
         open_future = executor.submit(get_open_issues_for_person, login)
-        completed_future = executor.submit(get_completed_issues_for_person, login, days)
+        completed_future = executor.submit(get_completed_issues_for_person, login, days, window)
         projects_future = executor.submit(get_projects)
         github_future = None
         if github_username:
@@ -1299,6 +1353,7 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
                 get_merged_pr_counts_for_user,
                 github_username,
                 days,
+                window,
             )
         open_items = sorted(
             open_future.result(timeout=EXECUTOR_TIMEOUT_SECONDS),
@@ -1427,9 +1482,9 @@ def _build_person_context(slug: str, days: int, _cache_epoch: int) -> dict:
         "linear_username": login,
         "github_username": github_username,
         "github_merged_prs_url": (
-            github_merged_prs_url(github_username, days) if github_username else None
+            github_merged_prs_url(github_username, days, window) if github_username else None
         ),
-        "days": days,
+        **window.template_vars(),
         "open_current_cycle": open_current_cycle,
         "open_other": open_other,
         "completed_by_project": completed_by_project,
