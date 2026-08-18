@@ -1,7 +1,7 @@
 import importlib
 import sys
 import types
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -148,8 +148,6 @@ class CycleProjectPointsTest(TestCase):
         self.assertEqual(member_points, {})
 
     def test_date_range_scores_projects_inside_the_selected_window(self):
-        from datetime import date
-
         from time_window import TimeWindow
 
         leaderboard_module = _import_leaderboard_with_stub()

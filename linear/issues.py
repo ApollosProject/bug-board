@@ -10,8 +10,7 @@ from .client import _compute_assignee_time_to_fix, _execute
 
 
 def _datetime_bounds(days: int = 30, window: TimeWindow | None = None) -> dict[str, str]:
-    resolved = window if window is not None else TimeWindow.from_days(days)
-    return {"after": resolved.linear_after(), "before": resolved.linear_before()}
+    return TimeWindow.resolve(days, window=window).linear_bounds()
 
 
 def get_open_issues(priority, label):

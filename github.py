@@ -337,8 +337,7 @@ def prs_by_approver():
 
 
 def _merged_search_qualifier(days: int = 30, window: TimeWindow | None = None) -> str:
-    resolved = window if window is not None else TimeWindow.from_days(days)
-    return resolved.github_merged_qualifier()
+    return TimeWindow.resolve(days, window=window).github_merged_qualifier()
 
 
 def _get_merged_prs(days: int = 30, window: TimeWindow | None = None):

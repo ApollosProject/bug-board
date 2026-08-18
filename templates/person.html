@@ -24,8 +24,7 @@
 
 {% block extra_scripts %}
 <script>
-  const windowQuery = {{ window_query | tojson }};
-  const windowQs = new URLSearchParams(windowQuery).toString();
+  const days = {{ days }};
   const slug = "{{ person_slug }}";
   let chartLibraryPromise;
 
@@ -107,6 +106,6 @@
     }
   }
 
-  loadSection('person-content', `/partials/team/${slug}/content?${windowQs}`, renderPlatformChart);
+  loadSection('person-content', `/partials/team/${slug}/content?days=${days}`, renderPlatformChart);
 </script>
 {% endblock %}

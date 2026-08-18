@@ -48,6 +48,5 @@ class LeaderboardCacheTest(unittest.TestCase):
 
         self.assertIn("Michael", hit.get_data(as_text=True))
         self.assertIn("Leaderboard is refreshing.", miss.get_data(as_text=True))
-        compute.assert_called_once()
-        self.assertEqual(compute.call_args.args[0], 7)
+        compute.assert_called_once_with(7)
         self.assertEqual(other.status_code, 200)

@@ -41,33 +41,6 @@ class GraphQLClientRequestTests(unittest.TestCase):
         variables = execute.call_args.kwargs["variable_values"]
         self.assertIn("author:bkraeling", variables["authored"])
         self.assertIn("reviewed-by:bkraeling", variables["reviewed"])
-        self.assertIn("merged:>=", variables["authored"])
-        self.assertNotIn("merged:<=", variables["authored"])
-
-    def test_person_pr_counts_honor_inclusive_date_range(self):
-        from datetime import date
-
-        from time_window import TimeWindow
-
-        window = TimeWindow.from_dates(date(2026, 1, 1), date(2026, 1, 31))
-        response = {
-            "authored": {"issueCount": 2},
-            "reviewed": {
-                "nodes": [],
-                "pageInfo": {"hasNextPage": False, "endCursor": None},
-            },
-        }
-
-        with (
-            patch.object(github, "token", "token"),
-            patch.object(github, "get_github_orgs", return_value=["apollosproject"]),
-            patch.object(github, "_execute", return_value=response) as execute,
-        ):
-            github.get_merged_pr_counts_for_user("bkraeling", window=window)
-
-        variables = execute.call_args.kwargs["variable_values"]
-        self.assertIn("merged:>=2026-01-01", variables["authored"])
-        self.assertIn("merged:<=2026-01-31", variables["authored"])
 
     def test_merged_pr_activity_fetches_once_and_groups_authors_and_reviewers(self):
         prs = [

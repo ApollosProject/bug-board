@@ -8,7 +8,7 @@
   "Completed project lead: 30 pts/week",
   "Completed project member: 15 pts/week"
 ] | join('\n') %}
-<h2>Leaderboard ({{ window_label or (days ~ 'd') }})</h2>
+<h2>Leaderboard ({{ days }}d)</h2>
 <h4>
   Scores
   <small
@@ -34,7 +34,7 @@
       <tr>
         <td>
           {% if entry.slug %}
-            <a href="{{ url_for('team_slug', slug=entry.slug, **(window_query or {'days': days})) }}">
+            <a href="{{ url_for('team_slug', slug=entry.slug, days=days) }}">
               {{ entry.display_name|first_name }}
             </a>
           {% else %}
