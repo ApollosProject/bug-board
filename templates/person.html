@@ -7,6 +7,16 @@
   #work-done-tooltip[data-tooltip]::before {
     font-size: 0.7em;
   }
+  #time-to-completion-tooltip {
+    cursor: help;
+    font-size: 0.8em;
+    opacity: 0.6;
+  }
+  #time-to-completion-tooltip[data-tooltip]::before {
+    font-size: 0.7em;
+    max-width: min(22rem, calc(100vw - 2rem));
+    white-space: normal;
+  }
   h1.low {
     color: #b33;
   }

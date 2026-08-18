@@ -102,7 +102,17 @@
   </div>
   <div>
     <article>
-      <header>Time to Completion</header>
+      {% set time_to_completion_tooltip = "Average days from the most recent assignment to this person until the issue was completed. Only issues completed in the selected time window with assignment history are included." %}
+      <header>
+        Time to Completion
+        <small
+          id="time-to-completion-tooltip"
+          data-tooltip="{{ time_to_completion_tooltip }}"
+          data-placement="bottom"
+          tabindex="0"
+          aria-label="{{ time_to_completion_tooltip }}"
+        >ⓘ</small>
+      </header>
       {% if avg_all_time_to_fix is not none %}
       <h1>{{ avg_all_time_to_fix }}d</h1>
       {% else %}

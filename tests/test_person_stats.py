@@ -98,6 +98,18 @@ class PersonStatsTest(unittest.TestCase):
         with app_module.app.test_request_context():
             body = app_module.render_template("partials/person_content.html", **context)
         self.assertIn('data-placement="bottom"', body)
+        self.assertIn('id="time-to-completion-tooltip"', body)
+        self.assertIn(
+            "Average days from the most recent assignment to this person until the issue was "
+            "completed. Only issues completed in the selected time window with assignment history "
+            "are included.",
+            body,
+        )
+        self.assertIn('tabindex="0"', body)
         styles = Path(__file__).resolve().parents[1].joinpath("static/styles.css").read_text()
         self.assertIn("max-width: min(12rem, calc(100vw - 2rem));", styles)
         self.assertIn("white-space: normal;", styles)
+        person_template = (
+            Path(__file__).resolve().parents[1].joinpath("templates/person.html").read_text()
+        )
+        self.assertIn("max-width: min(22rem, calc(100vw - 2rem));", person_template)
