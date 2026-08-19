@@ -7,7 +7,12 @@ from unittest.mock import patch
 
 import github_regressions
 from github_regressions import deleted_line_numbers, parse_pull_request_url
-from regressions import extract_fixing_pr_urls, load_regression_overrides
+from regressions import (
+    apply_regression_overrides,
+    extract_fixing_pr_urls,
+    load_regression_overrides,
+    merge_issue_attributions,
+)
 
 
 class RegressionAttributionTest(unittest.TestCase):
@@ -212,6 +217,48 @@ class RegressionAttributionTest(unittest.TestCase):
                 self.assertEqual(load_regression_overrides(), {})
             finally:
                 os.chdir(original)
+
+    def test_merges_candidates_and_applies_manual_override(self):
+        fixing_url = "https://github.com/example/repo/pull/10"
+        other_fix = "https://github.com/example/repo/pull/11"
+        winner = {
+            "url": "https://github.com/example/repo/pull/5",
+            "score": 2.5,
+            "line_count": 3,
+            "age_days": 10,
+            "author": "author",
+        }
+        later = {
+            "url": "https://github.com/example/repo/pull/5",
+            "score": 1.5,
+            "line_count": 2,
+            "age_days": 40,
+            "author": "author",
+        }
+        record = merge_issue_attributions(
+            {"identifier": "APO-123"},
+            [fixing_url, other_fix],
+            {
+                fixing_url: {"candidates": [winner]},
+                other_fix: {"candidates": [later]},
+            },
+        )
+        self.assertEqual(record["attribution"]["score"], 4.0)
+        self.assertEqual(record["attribution"]["line_count"], 5)
+        self.assertNotIn("age_days", record["attribution"])
+
+        loaded: list[str] = []
+        manual = {"url": "https://github.com/example/repo/pull/9"}
+        corrected = apply_regression_overrides(
+            [record, {"identifier": "APO-ignored"}],
+            {
+                "APO-123": {"inducing_pr": f"{manual['url']}/"},
+                "APO-ignored": {"ignored": True},
+            },
+            metadata_loader=lambda url: loaded.append(url) or manual,
+        )
+        self.assertEqual(loaded, [manual["url"]])
+        self.assertEqual(corrected, [{**record, "attribution": manual}])
 
 
 if __name__ == "__main__":
