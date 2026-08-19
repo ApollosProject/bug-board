@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import threading
 import time
 from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlsplit, urlunsplit
@@ -32,6 +33,7 @@ from linear.issues import (
 from linear.projects import get_projects
 from openai_client import get_chat_function_call
 from project_dates import format_project_target_status, parse_iso_date
+from regression_cache import refresh_regression_summary_cache
 from support import get_support_slugs
 
 load_dotenv()
@@ -42,6 +44,7 @@ RETRY_SLEEP_SECONDS = 5
 MAX_DIFF_CHARS = 12000
 MAX_DIFF_FILES = 20
 FLEET_HEALTH_REFRESH_DEFAULT_SECONDS = 60
+REGRESSION_CACHE_REFRESH_HOURS = 6
 AIRFLOW_FLEET_HEARTBEAT_TIMEOUT_SECONDS = 10
 AIRFLOW_FLEET_UNKNOWN_HEARTBEAT_FAILURE_THRESHOLD = 3
 STALE_LINEAR_ISSUE_DAYS = 21
@@ -55,6 +58,7 @@ INACTIVE_PROJECT_STATUS_NAMES = {
 PROJECT_UPDATE_DUE_WEEKDAY = 4
 PROJECT_UPDATE_EARLY_WINDOW_DAYS = 2
 _airflow_fleet_unknown_heartbeat_failures = 0
+_regression_cache_refresh_lock = threading.Lock()
 
 
 def _read_positive_int_env(name: str, default: int) -> int:
@@ -178,6 +182,45 @@ def refresh_leaderboard_cache_job():
     context = refresh_leaderboard_cache(DEFAULT_LEADERBOARD_DAYS)
     n = len(context.get("leaderboard_entries") or [])
     logging.info("Refreshed leaderboard cache (days=%s, entries=%s)", context.get("days"), n)
+
+
+def _refresh_and_log_regression_summary_cache() -> None:
+    summary = refresh_regression_summary_cache() or {}
+    logging.info(
+        "Refreshed regression summary (days=%s, regressions=%s, attributed=%s, complete=%s)",
+        summary.get("days"),
+        summary.get("regression_count"),
+        summary.get("attributed_count"),
+        summary.get("complete"),
+    )
+
+
+def _refresh_regression_summary_cache_in_background() -> None:
+    try:
+        _refresh_and_log_regression_summary_cache()
+    finally:
+        _regression_cache_refresh_lock.release()
+
+
+def refresh_regression_summary_cache_job():
+    if not _regression_cache_refresh_lock.acquire(blocking=False):
+        logging.info("Regression summary refresh is already running")
+        return
+    try:
+        _refresh_and_log_regression_summary_cache()
+    finally:
+        _regression_cache_refresh_lock.release()
+
+
+def start_regression_summary_cache_refresh_job():
+    if not _regression_cache_refresh_lock.acquire(blocking=False):
+        logging.info("Regression summary refresh is already running")
+        return
+    threading.Thread(
+        target=_refresh_regression_summary_cache_in_background,
+        name="regression-summary-cache-refresh",
+        daemon=True,
+    ).start()
 
 
 def report_airflow_fleet_health_heartbeat(payload: dict, status: int) -> None:
@@ -942,6 +985,7 @@ def run_debug_jobs() -> None:
     if should_use_redis_cache():
         refresh_airflow_fleet_health_cache_job()
         refresh_leaderboard_cache_job()
+        refresh_regression_summary_cache_job()
     post_inactive_engineers()
     post_priority_bugs()
     post_leaderboard()
@@ -960,9 +1004,17 @@ def configure_scheduled_jobs() -> None:
         refresh_airflow_fleet_health_cache_job()
         schedule.every(refresh_interval_seconds).seconds.do(refresh_leaderboard_cache_job)
         refresh_leaderboard_cache_job()
+        schedule.every(REGRESSION_CACHE_REFRESH_HOURS).hours.do(
+            start_regression_summary_cache_refresh_job
+        )
+        start_regression_summary_cache_refresh_job()
         logging.info(
             "Scheduled airflow fleet health and leaderboard cache refresh every %s seconds",
             refresh_interval_seconds,
+        )
+        logging.info(
+            "Scheduled regression dashboard cache refresh every %s hours",
+            REGRESSION_CACHE_REFRESH_HOURS,
         )
     else:
         logging.info("REDIS_URL not set; cache refresh is disabled")

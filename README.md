@@ -48,6 +48,7 @@ python -m unittest discover -s tests -p 'test_*.py'
 - `AIRFLOW_FLEET_HEALTH_MAX_STALE_SECONDS` – Optional max age accepted by the web endpoint when reading cached data (default: `180`)
 - `AIRFLOW_FLEET_HEALTH_REDIS_TTL_SECONDS` – Optional Redis TTL for cached fleet health record (default: `900`)
 - `LEADERBOARD_REDIS_TTL_SECONDS` – Optional Redis TTL for the cached homepage leaderboard (default: `900`)
+- `REGRESSION_REDIS_TTL_SECONDS` – Optional Redis TTL for cached regression metrics (default: `86400`)
 - `BIGQUERY_ANALYTICS_PROJECT_ID` – Optional Google Cloud project that contains the Segment BigQuery export (default: `apollos-project`)
 - `BIGQUERY_ANALYTICS_DATASETS` – Optional comma-separated BigQuery datasets containing Segment export tables (default: `apollos,apollos_tv,apollos_roku`)
 - `BIGQUERY_ANALYTICS_TABLES` – Optional comma-separated Segment tables to inspect for app runtime versions (default: `identifies,screens,app_became_active,app_became_backgrounded,app_became_inactive`)
