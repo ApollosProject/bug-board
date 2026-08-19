@@ -25,7 +25,7 @@ LOWER_IS_BETTER_METRIC_KEYS = frozenset(
 )
 
 STDEV_COLOR_THRESHOLD = 1.5
-STDEV_COLOR_METRIC_KEYS = frozenset({"prs_merged", "prs_reviewed"})
+STDEV_COLOR_METRIC_KEYS = frozenset({"prs_merged", "prs_reviewed", "all_work_done"})
 
 MetricValue = float | int | None
 

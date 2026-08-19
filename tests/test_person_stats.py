@@ -74,9 +74,10 @@ class PersonStatsTest(unittest.TestCase):
 
         self.assertEqual(high_stdevs["prs_merged"]["tone"], "high")
         self.assertEqual(high_stdevs["prs_reviewed"]["tone"], "high")
-        self.assertNotIn("tone", high_stdevs["all_work_done"])
+        self.assertEqual(high_stdevs["all_work_done"]["tone"], "high")
         self.assertEqual(low_stdevs["prs_merged"]["tone"], "low")
         self.assertEqual(low_stdevs["prs_reviewed"]["tone"], "low")
+        self.assertEqual(low_stdevs["all_work_done"]["tone"], "low")
 
     def test_person_cards_color_pr_headings_beyond_stdev_threshold(self):
         app_module._build_person_context.cache_clear()
@@ -92,10 +93,13 @@ class PersonStatsTest(unittest.TestCase):
             }
         }
 
+        def fake_completed(login, days=30, window=None):
+            return [_issue() for _ in range(10)] if login == "alice" else []
+
         with (
             patch.object(app_module, "load_config", return_value=config),
             patch.object(app_module, "get_open_issues_for_person", return_value=[]),
-            patch.object(app_module, "get_completed_issues_for_person", return_value=[]),
+            patch.object(app_module, "get_completed_issues_for_person", side_effect=fake_completed),
             patch.object(app_module, "get_projects", return_value=[]),
             patch.object(
                 app_module,
@@ -110,11 +114,13 @@ class PersonStatsTest(unittest.TestCase):
 
         self.assertEqual(context["metric_stdevs"]["prs_merged"]["tone"], "high")
         self.assertEqual(context["metric_stdevs"]["prs_reviewed"]["tone"], "high")
-        self.assertNotIn("tone", context["metric_stdevs"].get("all_work_done", {}))
+        self.assertEqual(context["metric_stdevs"]["all_work_done"]["tone"], "high")
         with app_module.app.test_request_context():
             body = app_module.render_template("partials/person_content.html", **context)
-        self.assertEqual(body.count('<h1 class="high">10</h1>'), 2)
+        self.assertEqual(body.count('<h1 class="high">10</h1>'), 3)
         self.assertNotIn('<h1 class="high">0</h1>', body)
+        self.assertNotIn("2/week", body)
+        self.assertNotIn("5/week", body)
 
     def test_person_cards_include_on_page_stdev_badges(self):
         app_module._build_person_context.cache_clear()
@@ -162,7 +168,10 @@ class PersonStatsTest(unittest.TestCase):
         with app_module.app.test_request_context():
             body = app_module.render_template("partials/person_content.html", **context)
         self.assertIn("<h1>10</h1>", body)
+        self.assertIn("<h1>8</h1>", body)
         self.assertNotIn('<h1 class="high">10</h1>', body)
+        self.assertNotIn('class="low"', body)
+        self.assertNotIn("2/week", body)
         self.assertIn('data-placement="bottom"', body)
         styles = Path(__file__).resolve().parents[1].joinpath("static/styles.css").read_text()
         self.assertIn("max-width: min(12rem, calc(100vw - 2rem));", styles)
