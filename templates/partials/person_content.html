@@ -4,6 +4,10 @@
   <small class="metric-stdev" data-tooltip="{{ stat.tooltip }}" data-placement="bottom">{{ stat.label }}</small>
   {%- endif -%}
 {%- endmacro %}
+{% macro metric_heading(key, value) -%}
+  {%- set tone = (metric_stdevs or {}).get(key, {}).get('tone') -%}
+  <h1{% if tone %} class="{{ tone }}"{% endif %}>{{ value }}</h1>
+{%- endmacro %}
 <h2>{{ 'Current Support Work' if on_call_support else 'Current Project Work' }}</h2>
 {% if open_current_cycle %}
 {% for project, issues in open_current_cycle.items() %}
@@ -51,14 +55,14 @@
         PRs Merged
         {% endif %}
       </header>
-      <h1>{{ prs_merged }}</h1>
+      {{ metric_heading('prs_merged', prs_merged) }}
       {{ stdev_badge('prs_merged') }}
     </article>
   </div>
   <div>
     <article>
       <header>PRs Reviewed</header>
-      <h1>{{ prs_reviewed }}</h1>
+      {{ metric_heading('prs_reviewed', prs_reviewed) }}
       {{ stdev_badge('prs_reviewed') }}
     </article>
   </div>
