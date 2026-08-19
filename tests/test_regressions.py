@@ -1,9 +1,13 @@
+import os
+import tempfile
 import unittest
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import patch
 
 import github_regressions
 from github_regressions import deleted_line_numbers, parse_pull_request_url
+from regressions import extract_fixing_pr_urls, load_regression_overrides
 
 
 class RegressionAttributionTest(unittest.TestCase):
@@ -149,6 +153,65 @@ class RegressionAttributionTest(unittest.TestCase):
         with patch.object(github_regressions, "_rest_get", side_effect=fake_rest):
             with self.assertRaises(github_regressions.GitHubRegressionDataError):
                 github_regressions.get_pull_request_attribution_metadata(url)
+
+    def test_extracts_merged_fixing_pr_links(self):
+        issue = {
+            "attachments": {
+                "nodes": [
+                    {
+                        "metadata": {
+                            "url": "https://github.com/example/repo/pull/2",
+                            "status": "merged",
+                            "linkKind": "closes",
+                        }
+                    },
+                    {
+                        "metadata": {
+                            "url": "https://github.com/example/repo/pull/3",
+                            "status": "merged",
+                            "linkKind": "links",
+                        }
+                    },
+                ]
+            }
+        }
+        self.assertEqual(
+            extract_fixing_pr_urls(issue),
+            ["https://github.com/example/repo/pull/2"],
+        )
+
+    def test_loads_override_mappings_and_ignores_invalid_entries(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wrapped = Path(tmp) / "wrapped.yml"
+            wrapped.write_text(
+                "overrides:\n  APO-1:\n    ignored: true\n  APO-2: skip\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(load_regression_overrides(wrapped), {"APO-1": {"ignored": True}})
+
+            direct = Path(tmp) / "direct.yml"
+            direct.write_text(
+                "APO-3:\n  inducing_pr: https://github.com/example/repo/pull/9\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                load_regression_overrides(direct),
+                {"APO-3": {"inducing_pr": "https://github.com/example/repo/pull/9"}},
+            )
+
+            self.assertEqual(load_regression_overrides(Path(tmp) / "missing.yml"), {})
+            invalid = Path(tmp) / "invalid.yml"
+            invalid.write_text("- just a list\n", encoding="utf-8")
+            self.assertEqual(load_regression_overrides(invalid), {})
+
+    def test_loads_committed_overrides_independent_of_cwd(self):
+        original = os.getcwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                os.chdir(tmp)
+                self.assertEqual(load_regression_overrides(), {})
+            finally:
+                os.chdir(original)
 
 
 if __name__ == "__main__":
