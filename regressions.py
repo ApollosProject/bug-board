@@ -8,7 +8,7 @@ import yaml
 
 from github_regressions import parse_pull_request_url
 
-REGRESSION_OVERRIDES_PATH = "regression_overrides.yml"
+REGRESSION_OVERRIDES_PATH = Path(__file__).with_name("regression_overrides.yml")
 FIXING_LINK_KINDS = {"closes", "contributes"}
 
 
