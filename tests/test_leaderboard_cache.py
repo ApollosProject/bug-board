@@ -36,18 +36,46 @@ class LeaderboardCacheTest(unittest.TestCase):
         }
         live = {"days": 7, "leaderboard_entries": []}
         client = app_module.app.test_client()
-        with patch.object(app_module, "should_use_redis_cache", return_value=True):
-            with patch.object(
-                app_module, "compute_leaderboard_context", return_value=live
-            ) as compute:
-                with patch.object(app_module, "get_cached_leaderboard", return_value=payload):
-                    hit = client.get("/partials/index/leaderboard?days=30")
-                with patch.object(app_module, "get_cached_leaderboard", return_value=None):
-                    miss = client.get("/partials/index/leaderboard?days=30")
-                    other = client.get("/partials/index/leaderboard?days=7")
+        app_module._build_leaderboard_context.cache_clear()
+        self.addCleanup(app_module._build_leaderboard_context.cache_clear)
+        with (
+            patch.object(app_module, "should_use_redis_cache", return_value=True),
+            patch.object(app_module, "_is_development_mode", return_value=False),
+            patch.object(app_module, "compute_leaderboard_context", return_value=live) as compute,
+        ):
+            with patch.object(app_module, "get_cached_leaderboard", return_value=payload):
+                hit = client.get("/partials/index/leaderboard?days=30")
+            with patch.object(app_module, "get_cached_leaderboard", return_value=None):
+                miss = client.get("/partials/index/leaderboard?days=30")
+                other = client.get("/partials/index/leaderboard?days=7")
 
         self.assertIn("Michael", hit.get_data(as_text=True))
         self.assertIn("Leaderboard is refreshing.", miss.get_data(as_text=True))
         compute.assert_called_once()
         self.assertEqual(compute.call_args.args[0], 7)
         self.assertEqual(other.status_code, 200)
+
+    def test_debug_mode_computes_live_leaderboard_on_redis_cache_miss(self):
+        live = {
+            "days": 30,
+            "leaderboard_entries": [
+                {"slug": "michael", "display_name": "Michael", "score": 42, "breakdown": None}
+            ],
+        }
+        client = app_module.app.test_client()
+        app_module._build_leaderboard_context.cache_clear()
+        self.addCleanup(app_module._build_leaderboard_context.cache_clear)
+        with (
+            patch.object(app_module, "should_use_redis_cache", return_value=True),
+            patch.object(app_module, "_is_development_mode", return_value=True),
+            patch.object(app_module, "get_cached_leaderboard", return_value=None),
+            patch.object(app_module, "compute_leaderboard_context", return_value=live) as compute,
+        ):
+            response = client.get("/partials/index/leaderboard?days=30")
+
+        body = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Michael", body)
+        self.assertNotIn("Leaderboard is refreshing.", body)
+        compute.assert_called_once()
+        self.assertEqual(compute.call_args.args[0], 30)
