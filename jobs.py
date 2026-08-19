@@ -184,29 +184,40 @@ def refresh_leaderboard_cache_job():
     logging.info("Refreshed leaderboard cache (days=%s, entries=%s)", context.get("days"), n)
 
 
+def _refresh_and_log_regression_summary_cache() -> None:
+    summary = refresh_regression_summary_cache() or {}
+    logging.info(
+        "Refreshed regression summary (days=%s, regressions=%s, attributed=%s, complete=%s)",
+        summary.get("days"),
+        summary.get("regression_count"),
+        summary.get("attributed_count"),
+        summary.get("complete"),
+    )
+
+
+def _refresh_regression_summary_cache_in_background() -> None:
+    try:
+        _refresh_and_log_regression_summary_cache()
+    finally:
+        _regression_cache_refresh_lock.release()
+
+
 def refresh_regression_summary_cache_job():
     if not _regression_cache_refresh_lock.acquire(blocking=False):
         logging.info("Regression summary refresh is already running")
         return
     try:
-        summary = refresh_regression_summary_cache() or {}
-        logging.info(
-            "Refreshed regression summary (days=%s, regressions=%s, attributed=%s, complete=%s)",
-            summary.get("days"),
-            summary.get("regression_count"),
-            summary.get("attributed_count"),
-            summary.get("complete"),
-        )
+        _refresh_and_log_regression_summary_cache()
     finally:
         _regression_cache_refresh_lock.release()
 
 
 def start_regression_summary_cache_refresh_job():
-    if _regression_cache_refresh_lock.locked():
+    if not _regression_cache_refresh_lock.acquire(blocking=False):
         logging.info("Regression summary refresh is already running")
         return
     threading.Thread(
-        target=refresh_regression_summary_cache_job,
+        target=_refresh_regression_summary_cache_in_background,
         name="regression-summary-cache-refresh",
         daemon=True,
     ).start()

@@ -250,18 +250,34 @@ class ConfigureScheduledJobsTest(unittest.TestCase):
                             start_regression_refresh.assert_called_once_with()
 
 
-class RunDebugJobsTest(unittest.TestCase):
-    def test_regression_refresh_starts_in_daemon_thread(self):
+class RegressionSummaryCacheRefreshTest(unittest.TestCase):
+    def tearDown(self):
+        lock = jobs_module._regression_cache_refresh_lock
+        if lock.locked():
+            lock.release()
+
+    def test_starts_refresh_in_daemon_thread(self):
         with patch.object(jobs_module.threading, "Thread") as thread:
             jobs_module.start_regression_summary_cache_refresh_job()
 
         thread.assert_called_once_with(
-            target=jobs_module.refresh_regression_summary_cache_job,
+            target=jobs_module._refresh_regression_summary_cache_in_background,
             name="regression-summary-cache-refresh",
             daemon=True,
         )
         thread.return_value.start.assert_called_once_with()
 
+    def test_start_skips_when_refresh_is_already_running(self):
+        self.assertTrue(jobs_module._regression_cache_refresh_lock.acquire(blocking=False))
+        with patch.object(jobs_module.threading, "Thread") as thread:
+            with patch.object(jobs_module.logging, "info") as info:
+                jobs_module.start_regression_summary_cache_refresh_job()
+
+        thread.assert_not_called()
+        info.assert_called_once_with("Regression summary refresh is already running")
+
+
+class RunDebugJobsTest(unittest.TestCase):
     def test_runs_leaderboard_stale_and_project_updates(self):
         with patch.object(jobs_module, "should_use_redis_cache", return_value=False):
             with patch.object(jobs_module, "post_inactive_engineers"):
