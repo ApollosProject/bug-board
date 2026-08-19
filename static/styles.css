@@ -122,7 +122,6 @@ details.dropdown.site-menu > summary + ul {
   --pico-background-color: var(--pico-muted-border-color);
   --pico-border-color: transparent;
   --pico-box-shadow: none;
-  --pico-color: var(--pico-color);
 }
 
 .time-window-presets button:not(:last-child) {
