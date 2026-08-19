@@ -70,6 +70,10 @@ Start the web server with:
 gunicorn app:app
 ```
 
+When `REDIS_URL` is set, production web requests serve the 30-day homepage leaderboard from
+Redis. In local debug mode (`DEBUG=true`), a cache miss falls back to a live computation so the
+page still works without `python jobs.py`.
+
 To run the scheduled jobs locally, start the worker:
 
 ```bash

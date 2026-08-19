@@ -1020,16 +1020,17 @@ def index_leaderboard_partial():
                 "partials/index_leaderboard.html",
                 **{**window.template_vars(), **cached},
             )
-        logging.info(
-            "Leaderboard cache miss while REDIS_URL is configured (days=%s)",
-            window.preset_days,
-        )
-        return render_template(
-            "partials/index_leaderboard.html",
-            **window.template_vars(),
-            leaderboard_entries=[],
-            leaderboard_unavailable=True,
-        )
+        if not _is_development_mode():
+            logging.info(
+                "Leaderboard cache miss while REDIS_URL is configured (days=%s)",
+                window.preset_days,
+            )
+            return render_template(
+                "partials/index_leaderboard.html",
+                **window.template_vars(),
+                leaderboard_entries=[],
+                leaderboard_unavailable=True,
+            )
     context = _cached_window_context(_build_leaderboard_context, window)
     return render_template("partials/index_leaderboard.html", **context)
 
