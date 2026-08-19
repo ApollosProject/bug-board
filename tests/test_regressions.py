@@ -1,18 +1,21 @@
 import os
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
 import github_regressions
 from github_regressions import deleted_line_numbers, parse_pull_request_url
 from regressions import (
+    _person_metrics,
     apply_regression_overrides,
+    build_regression_summary,
     extract_fixing_pr_urls,
     load_regression_overrides,
     merge_issue_attributions,
 )
+from time_window import TimeWindow
 
 
 class RegressionAttributionTest(unittest.TestCase):
@@ -259,6 +262,44 @@ class RegressionAttributionTest(unittest.TestCase):
         )
         self.assertEqual(loaded, [manual["url"]])
         self.assertEqual(corrected, [{**record, "attribution": manual}])
+
+    def test_person_metrics_use_the_inducing_pr_cohort(self):
+        window = TimeWindow.from_dates(date(2026, 8, 1), date(2026, 8, 31))
+        people = {
+            "alice": {"slug": "alice", "github_username": "alice"},
+            "bob": {"slug": "bob", "github_username": "bob"},
+        }
+        records = [
+            {
+                "attribution": {
+                    "merged_at": "2026-08-10T00:00:00Z",
+                    "author": "alice",
+                    "reviewers": ["bob"],
+                }
+            },
+            {
+                "attribution": {
+                    "merged_at": "2025-08-10T00:00:00Z",
+                    "author": "alice",
+                    "reviewers": ["bob"],
+                }
+            },
+        ]
+        authors, reviewers = _person_metrics(
+            records,
+            people,
+            {"alice": 20, "bob": 5},
+            {"alice": 10, "bob": 25},
+            window,
+        )
+        self.assertEqual(authors[0]["rate"], 5.0)
+        self.assertEqual(reviewers[1]["rate"], 4.0)
+
+    def test_unconfigured_summary_skips_external_work(self):
+        with patch.dict("os.environ", {}, clear=True):
+            summary = build_regression_summary()
+        self.assertFalse(summary["configured"])
+        self.assertEqual(summary["author_metrics"], [])
 
 
 if __name__ == "__main__":

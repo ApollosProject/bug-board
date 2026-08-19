@@ -3,11 +3,15 @@ from __future__ import annotations
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
 import yaml
 
+from config import load_config
+from constants import ENGINEERING_TEAM_SLUG
+from github import get_merged_pr_counts_for_user
 from github_regressions import (
     GitHubRegressionDataError,
     get_fixing_pr_attribution,
@@ -17,6 +21,7 @@ from github_regressions import (
 from linear.issues import get_completed_regression_candidates
 from time_window import TimeWindow
 
+REGRESSION_DAYS = 30
 REGRESSION_OVERRIDES_PATH = Path(__file__).with_name("regression_overrides.yml")
 FIXING_LINK_KINDS = {"closes", "contributes"}
 MAX_ATTRIBUTION_WORKERS = 2
@@ -165,3 +170,130 @@ def collect_regression_attributions(
         ),
         len(failed_urls),
     )
+
+
+def _engineering_people() -> dict[str, dict[str, str]]:
+    return {
+        username.casefold(): {"slug": slug, "github_username": username}
+        for slug, info in load_config().get("people", {}).items()
+        for username in [info.get("github_username")]
+        if info.get("team") == ENGINEERING_TEAM_SLUG and isinstance(username, str) and username
+    }
+
+
+def _team_pr_counts(
+    people: dict[str, dict[str, str]],
+    window: TimeWindow,
+) -> tuple[dict[str, int], dict[str, int]]:
+    authored: dict[str, int] = {}
+    reviewed: dict[str, int] = {}
+    with ThreadPoolExecutor(max_workers=min(4, max(len(people), 1))) as executor:
+        futures = {
+            executor.submit(
+                get_merged_pr_counts_for_user,
+                person["github_username"],
+                window.duration_days,
+                window,
+            ): username
+            for username, person in people.items()
+        }
+        for future in as_completed(futures):
+            username = futures[future]
+            authored[username], reviewed[username] = future.result()
+    return authored, reviewed
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def _rate(numerator: int, denominator: int) -> float | None:
+    return round(numerator / denominator * 100, 1) if denominator else None
+
+
+def _person_metrics(
+    records: list[dict[str, Any]],
+    people: dict[str, dict[str, str]],
+    authored_counts: dict[str, int],
+    reviewed_counts: dict[str, int],
+    window: TimeWindow,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    authored_regressions = {username: 0 for username in people}
+    approved_regressions = {username: 0 for username in people}
+    for record in records:
+        attribution = record.get("attribution")
+        if not isinstance(attribution, dict):
+            continue
+        merged_at = _parse_datetime(attribution.get("merged_at"))
+        if merged_at is None or not window.start <= merged_at < window.end:
+            continue
+        author = attribution.get("author")
+        if isinstance(author, str) and author.casefold() in authored_regressions:
+            authored_regressions[author.casefold()] += 1
+        for reviewer in attribution.get("reviewers") or []:
+            if isinstance(reviewer, str) and reviewer.casefold() in approved_regressions:
+                approved_regressions[reviewer.casefold()] += 1
+
+    author_rows, reviewer_rows = [], []
+    for username, person in people.items():
+        authored_count = authored_counts.get(username, 0)
+        reviewed_count = reviewed_counts.get(username, 0)
+        author_rows.append(
+            {
+                **person,
+                "regression_count": authored_regressions[username],
+                "pr_count": authored_count,
+                "rate": _rate(authored_regressions[username], authored_count),
+            }
+        )
+        reviewer_rows.append(
+            {
+                **person,
+                "regression_count": approved_regressions[username],
+                "pr_count": reviewed_count,
+                "rate": _rate(approved_regressions[username], reviewed_count),
+            }
+        )
+    return author_rows, reviewer_rows
+
+
+def build_regression_summary() -> dict[str, Any]:
+    if not os.getenv("LINEAR_API_KEY") or not os.getenv("GITHUB_TOKEN"):
+        return {
+            "days": REGRESSION_DAYS,
+            "configured": False,
+            "complete": False,
+            "author_metrics": [],
+            "reviewer_metrics": [],
+        }
+    window = TimeWindow.from_days(REGRESSION_DAYS)
+    people = _engineering_people()
+    authored_counts, reviewed_counts = _team_pr_counts(people, window)
+    records, failed_count = collect_regression_attributions(window)
+    author_metrics, reviewer_metrics = _person_metrics(
+        records, people, authored_counts, reviewed_counts, window
+    )
+    authored_regressions = sum(row["regression_count"] for row in author_metrics)
+    approved_regressions = sum(row["regression_count"] for row in reviewer_metrics)
+    authored_prs = sum(row["pr_count"] for row in author_metrics)
+    reviewed_prs = sum(row["pr_count"] for row in reviewer_metrics)
+    return {
+        "days": REGRESSION_DAYS,
+        "configured": True,
+        "complete": failed_count == 0,
+        "regression_count": len(records),
+        "attributed_count": sum(record.get("attribution") is not None for record in records),
+        "authored_regression_count": authored_regressions,
+        "authored_pr_count": authored_prs,
+        "author_regression_rate": _rate(authored_regressions, authored_prs),
+        "approved_regression_count": approved_regressions,
+        "reviewed_pr_count": reviewed_prs,
+        "reviewer_escape_rate": _rate(approved_regressions, reviewed_prs),
+        "author_metrics": author_metrics,
+        "reviewer_metrics": reviewer_metrics,
+    }
