@@ -25,8 +25,13 @@ ignore_decorators = ["@app.route", "@app.template_filter"]
 ignore_names = [
     "breakdown",
     "deleted_line_numbers",
+    "_candidate_score",
+    "_get_blame_ranges",
     "_get_pull_request_files",
+    "_line_overlap_count",
+    "_original_merged_pull_request",
     "parse_pull_request_url",
     "post_weekly_changelog",
+    "_reviewer_logins",
 ]
 min_confidence = 60

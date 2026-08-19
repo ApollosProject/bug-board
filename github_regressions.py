@@ -3,10 +3,15 @@ from __future__ import annotations
 import os
 import re
 import time
+from bisect import bisect_left, bisect_right
+from datetime import datetime, timezone
 from typing import Any
 
 import requests
 from dotenv import load_dotenv
+from gql import gql
+
+from github import _execute
 
 load_dotenv()
 
@@ -113,3 +118,122 @@ def _get_pull_request_files(owner: str, repo: str, number: int) -> list[dict[str
             break
         page += 1
     return files[:MAX_FIX_FILES]
+
+
+BLAME_QUERY = gql(
+    """
+    query RegressionBlame(
+      $owner: String!,
+      $repo: String!,
+      $oid: GitObjectID!,
+      $path: String!
+    ) {
+      repository(owner: $owner, name: $repo) {
+        object(oid: $oid) {
+          ... on Commit {
+            blame(path: $path) {
+              ranges {
+                startingLine
+                endingLine
+                commit {
+                  committedDate
+                  associatedPullRequests(first: 10) {
+                    nodes {
+                      url
+                      mergedAt
+                      author { login }
+                      reviews(first: 100, states: [APPROVED]) {
+                        nodes { author { login } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    """
+)
+
+
+def _get_blame_ranges(owner: str, repo: str, oid: str, path: str) -> list[dict[str, Any]]:
+    data = None
+    last_error: Exception | None = None
+    for attempt in range(3):
+        try:
+            data = _execute(
+                BLAME_QUERY,
+                variable_values={"owner": owner, "repo": repo, "oid": oid, "path": path},
+            )
+            break
+        except Exception as exc:
+            last_error = exc
+            if attempt < 2:
+                time.sleep(2**attempt)
+    if data is None:
+        raise GitHubRegressionDataError(
+            f"GitHub blame failed for {owner}/{repo}:{path}"
+        ) from last_error
+
+    repository = data.get("repository") if data else None
+    commit = repository.get("object") if repository else None
+    blame = commit.get("blame") if commit else None
+    ranges = blame.get("ranges") if blame else None
+    return [item for item in ranges or [] if isinstance(item, dict)]
+
+
+def _parse_github_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def _is_bot(login: str | None) -> bool:
+    return bool(login and (login.casefold().endswith("[bot]") or login.casefold() == "dependabot"))
+
+
+def _reviewer_logins(pull_request: dict[str, Any]) -> list[str]:
+    author = ((pull_request.get("author") or {}).get("login") or "").casefold()
+    reviewers = {
+        login
+        for review in (pull_request.get("reviews") or {}).get("nodes", []) or []
+        if isinstance(review, dict)
+        for login in [((review.get("author") or {}).get("login") or "")]
+        if login and login.casefold() != author and not _is_bot(login)
+    }
+    return sorted(reviewers, key=str.casefold)
+
+
+def _original_merged_pull_request(
+    commit: dict[str, Any], fixing_merged_at: datetime
+) -> dict[str, Any] | None:
+    committed_at = _parse_github_datetime(commit.get("committedDate"))
+    pull_requests = []
+    for pull_request in (commit.get("associatedPullRequests") or {}).get("nodes", []) or []:
+        if not isinstance(pull_request, dict):
+            continue
+        merged_at = _parse_github_datetime(pull_request.get("mergedAt"))
+        if merged_at and merged_at <= fixing_merged_at:
+            pull_requests.append((pull_request, merged_at))
+    if not pull_requests:
+        return None
+    after_commit = (
+        [item for item in pull_requests if item[1] >= committed_at] if committed_at else []
+    )
+    return min(after_commit or pull_requests, key=lambda item: item[1])[0]
+
+
+def _line_overlap_count(deleted_lines: list[int], start: int, end: int) -> int:
+    return bisect_right(deleted_lines, end) - bisect_left(deleted_lines, start)
+
+
+def _candidate_score(
+    line_count: int, candidate_merged_at: datetime, fixing_merged_at: datetime
+) -> tuple[float, int]:
+    age_days = max(int((fixing_merged_at - candidate_merged_at).total_seconds() / 86400), 0)
+    return line_count / (1 + age_days / 30), age_days
