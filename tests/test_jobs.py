@@ -47,6 +47,10 @@ def _install_import_shims() -> None:
     leaderboard_cache_module.refresh_leaderboard_cache = lambda *args, **kwargs: {}
     sys.modules.setdefault("leaderboard_cache", leaderboard_cache_module)
 
+    regression_cache_module = cast(Any, types.ModuleType("regression_cache"))
+    regression_cache_module.refresh_regression_summary_cache = lambda *args, **kwargs: {}
+    sys.modules.setdefault("regression_cache", regression_cache_module)
+
     github_module = cast(Any, types.ModuleType("github"))
     github_module.GitHubDataError = type("GitHubDataError", (RuntimeError,), {})
     github_module.get_pr_diff = lambda *args, **kwargs: ""
@@ -95,6 +99,7 @@ for module_name in [
     "github",
     "leaderboard",
     "leaderboard_cache",
+    "regression_cache",
     "linear",
     "linear.issues",
     "linear.projects",
@@ -135,6 +140,11 @@ class _FakeScheduledJob:
     @property
     def seconds(self):
         self.unit = "seconds"
+        return self
+
+    @property
+    def hours(self):
+        self.unit = "hours"
         return self
 
     def at(self, at_time, timezone=None):
@@ -216,17 +226,42 @@ class ConfigureScheduledJobsTest(unittest.TestCase):
         with patch.object(jobs_module, "should_use_redis_cache", return_value=True):
             with patch.object(jobs_module, "refresh_airflow_fleet_health_cache_job"):
                 with patch.object(jobs_module, "refresh_leaderboard_cache_job"):
-                    with patch.object(jobs_module.schedule, "every", side_effect=fake_every):
-                        jobs_module.configure_scheduled_jobs()
-                        self.assertTrue(
-                            any(
-                                job["func"] is jobs_module.refresh_leaderboard_cache_job
-                                for job in recorded_jobs
+                    with patch.object(
+                        jobs_module, "start_regression_summary_cache_refresh_job"
+                    ) as start_regression_refresh:
+                        with patch.object(jobs_module.schedule, "every", side_effect=fake_every):
+                            jobs_module.configure_scheduled_jobs()
+                            self.assertTrue(
+                                any(
+                                    job["func"] is jobs_module.refresh_leaderboard_cache_job
+                                    for job in recorded_jobs
+                                )
                             )
-                        )
+                            self.assertIn(
+                                {
+                                    "interval": jobs_module.REGRESSION_CACHE_REFRESH_HOURS,
+                                    "unit": "hours",
+                                    "at_time": None,
+                                    "timezone": None,
+                                    "func": jobs_module.start_regression_summary_cache_refresh_job,
+                                },
+                                recorded_jobs,
+                            )
+                            start_regression_refresh.assert_called_once_with()
 
 
 class RunDebugJobsTest(unittest.TestCase):
+    def test_regression_refresh_starts_in_daemon_thread(self):
+        with patch.object(jobs_module.threading, "Thread") as thread:
+            jobs_module.start_regression_summary_cache_refresh_job()
+
+        thread.assert_called_once_with(
+            target=jobs_module.refresh_regression_summary_cache_job,
+            name="regression-summary-cache-refresh",
+            daemon=True,
+        )
+        thread.return_value.start.assert_called_once_with()
+
     def test_runs_leaderboard_stale_and_project_updates(self):
         with patch.object(jobs_module, "should_use_redis_cache", return_value=False):
             with patch.object(jobs_module, "post_inactive_engineers"):
