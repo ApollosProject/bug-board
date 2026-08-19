@@ -7,7 +7,12 @@ from unittest.mock import patch
 
 import github_regressions
 from github_regressions import deleted_line_numbers, parse_pull_request_url
-from regressions import extract_fixing_pr_urls, load_regression_overrides
+from regressions import (
+    apply_regression_overrides,
+    extract_fixing_pr_urls,
+    load_regression_overrides,
+    merge_issue_attributions,
+)
 
 
 class RegressionAttributionTest(unittest.TestCase):
@@ -212,6 +217,31 @@ class RegressionAttributionTest(unittest.TestCase):
                 self.assertEqual(load_regression_overrides(), {})
             finally:
                 os.chdir(original)
+
+    def test_merges_candidates_and_applies_manual_override(self):
+        fixing_url = "https://github.com/example/repo/pull/10"
+        winner = {
+            "url": "https://github.com/example/repo/pull/5",
+            "score": 2.5,
+            "line_count": 3,
+        }
+        record = merge_issue_attributions(
+            {"identifier": "APO-123"},
+            [fixing_url],
+            {fixing_url: {"candidates": [winner]}},
+        )
+        self.assertEqual(record["attribution"], winner)
+
+        manual = {"url": "https://github.com/example/repo/pull/9"}
+        corrected = apply_regression_overrides(
+            [record, {"identifier": "APO-ignored"}],
+            {
+                "APO-123": {"inducing_pr": manual["url"]},
+                "APO-ignored": {"ignored": True},
+            },
+            metadata_loader=lambda url: manual,
+        )
+        self.assertEqual(corrected, [{**record, "attribution": manual}])
 
 
 if __name__ == "__main__":
