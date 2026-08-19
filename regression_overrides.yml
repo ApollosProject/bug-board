@@ -1,0 +1,8 @@
+# Version-controlled corrections to automated SZZ attribution.
+#
+# APO-123:
+#   inducing_pr: https://github.com/ApollosProject/example/pull/456
+#
+# APO-789:
+#   ignored: true
+overrides: {}

@@ -235,6 +235,70 @@ def get_completed_issues(priority, label, days=30, window: TimeWindow | None = N
     return issues
 
 
+def get_completed_regression_candidates(
+    days: int = 30, window: TimeWindow | None = None
+) -> list[dict]:
+    """Return completed priority bugs and their linked GitHub pull requests."""
+
+    team_key = get_linear_team_key()
+    query = gql(
+        """
+        query CompletedRegressionCandidates(
+          $team_key: String!,
+          $after: DateTimeOrDuration,
+          $before: DateTimeOrDuration,
+          $cursor: String
+        ) {
+          issues(
+            first: 100
+            after: $cursor
+            filter: {
+              team: { key: { eq: $team_key } }
+              labels: { name: { eq: "Bug" } }
+              priority: { lte: 2, gte: 1 }
+              state: { type: { in: ["completed"] } }
+              completedAt: { gte: $after, lt: $before }
+            }
+            orderBy: updatedAt
+          ) {
+            nodes {
+              id
+              identifier
+              attachments {
+                nodes {
+                  metadata
+                }
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+        """
+    )
+
+    issues: list[dict] = []
+    cursor = None
+    while True:
+        data = _execute(
+            query,
+            variable_values={
+                "team_key": team_key,
+                "cursor": cursor,
+                **_datetime_bounds(days, window),
+            },
+        )
+        payload = data["issues"]
+        issues.extend(payload["nodes"])
+        page_info = payload["pageInfo"]
+        if not page_info["hasNextPage"]:
+            break
+        cursor = page_info["endCursor"]
+    return issues
+
+
 def get_completed_issues_summary(priority, label, days=30, window: TimeWindow | None = None):
     return get_completed_issues_summary_for_labels(priority, [label], days, window)
 

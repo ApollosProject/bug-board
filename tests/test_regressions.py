@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import github_regressions
 from github_regressions import deleted_line_numbers, parse_pull_request_url
+from regressions import extract_fixing_pr_urls
 
 
 class RegressionAttributionTest(unittest.TestCase):
@@ -149,6 +150,32 @@ class RegressionAttributionTest(unittest.TestCase):
         with patch.object(github_regressions, "_rest_get", side_effect=fake_rest):
             with self.assertRaises(github_regressions.GitHubRegressionDataError):
                 github_regressions.get_pull_request_attribution_metadata(url)
+
+    def test_extracts_merged_fixing_pr_links(self):
+        issue = {
+            "attachments": {
+                "nodes": [
+                    {
+                        "metadata": {
+                            "url": "https://github.com/example/repo/pull/2",
+                            "status": "merged",
+                            "linkKind": "closes",
+                        }
+                    },
+                    {
+                        "metadata": {
+                            "url": "https://github.com/example/repo/pull/3",
+                            "status": "merged",
+                            "linkKind": "links",
+                        }
+                    },
+                ]
+            }
+        }
+        self.assertEqual(
+            extract_fixing_pr_urls(issue),
+            ["https://github.com/example/repo/pull/2"],
+        )
 
 
 if __name__ == "__main__":

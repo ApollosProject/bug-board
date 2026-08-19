@@ -24,16 +24,11 @@ exclude = ["venv", ".venv", "env", ".env", "__pycache__", ".git", "static", "tem
 ignore_decorators = ["@app.route", "@app.template_filter"]
 ignore_names = [
     "breakdown",
-    "deleted_line_numbers",
+    "extract_fixing_pr_urls",
     "get_fixing_pr_attribution",
+    "get_completed_regression_candidates",
     "get_pull_request_attribution_metadata",
-    "_candidate_score",
-    "_get_blame_ranges",
-    "_get_pull_request_files",
-    "_line_overlap_count",
-    "_original_merged_pull_request",
-    "parse_pull_request_url",
+    "load_regression_overrides",
     "post_weekly_changelog",
-    "_reviewer_logins",
 ]
 min_confidence = 60
