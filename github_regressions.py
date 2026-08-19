@@ -255,22 +255,23 @@ def get_pull_request_attribution_metadata(url: str) -> dict[str, Any] | None:
         f"/repos/{owner}/{repo}/pulls/{number}/reviews",
         params={"per_page": 100},
     )
+    if not isinstance(reviews, list):
+        raise GitHubRegressionDataError(
+            f"GitHub returned invalid review data for {owner}/{repo}#{number}"
+        )
     author = (pull_request.get("user") or {}).get("login") or ""
-    reviewers = {
-        login
-        for review in reviews
-        if isinstance(reviews, list) and isinstance(review, dict)
-        for login in [((review.get("user") or {}).get("login") or "")]
-        if review.get("state") == "APPROVED"
-        and login
-        and login.casefold() != author.casefold()
-        and not _is_bot(login)
-    }
+    reviewers: dict[str, str] = {}
+    for review in reviews:
+        if not isinstance(review, dict) or review.get("state") != "APPROVED":
+            continue
+        login = (review.get("user") or {}).get("login") or ""
+        if login and login.casefold() != author.casefold() and not _is_bot(login):
+            reviewers.setdefault(login.casefold(), login)
     return {
         "url": url,
         "merged_at": pull_request.get("merged_at"),
         "author": author or None,
-        "reviewers": sorted(reviewers, key=str.casefold),
+        "reviewers": sorted(reviewers.values(), key=str.casefold),
     }
 
 
