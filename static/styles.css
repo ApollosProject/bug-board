@@ -98,6 +98,8 @@ details.dropdown.site-menu > summary + ul {
 .time-window-presets {
   border: 1px solid var(--pico-muted-border-color);
   border-radius: 0.35rem;
+  flex-wrap: nowrap;
+  gap: 0;
   overflow: hidden;
 }
 
@@ -106,18 +108,31 @@ details.dropdown.site-menu > summary + ul {
   --pico-border-color: transparent;
   --pico-box-shadow: none;
   --pico-color: var(--pico-muted-color);
+  background-color: var(--pico-background-color);
+  border: 0;
   border-radius: 0;
+  box-shadow: none;
+  color: var(--pico-color);
   font-size: 0.8rem;
   font-weight: 600;
   padding: 0 0.75rem;
+}
+
+.time-window-presets button:is(:hover, :active, :focus) {
+  --pico-background-color: var(--pico-muted-border-color);
+  --pico-border-color: transparent;
+  --pico-box-shadow: none;
+  --pico-color: var(--pico-color);
 }
 
 .time-window-presets button:not(:last-child) {
   border-right: 1px solid var(--pico-muted-border-color);
 }
 
-.time-window-presets button[aria-pressed="true"] {
+.time-window-presets button[aria-pressed="true"],
+.time-window-presets button[aria-pressed="true"]:is(:hover, :active, :focus) {
   --pico-background-color: var(--pico-primary-background);
+  --pico-border-color: var(--pico-primary-background);
   --pico-color: var(--pico-primary-inverse);
 }
 

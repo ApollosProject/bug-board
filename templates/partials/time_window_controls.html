@@ -10,7 +10,11 @@
     >{{ n }}d</button>
     {% endfor %}
   </form>
-  <form method="get" class="time-window-custom">
+  <form
+    method="get"
+    class="time-window-custom"
+    oninput="this.closest('.time-window').querySelectorAll('.time-window-presets [aria-pressed]').forEach((button) => button.setAttribute('aria-pressed', 'false'))"
+  >
     <label>
       <span>From</span>
       <input type="date" name="start" value="{{ start or '' }}" required aria-label="Start date">
