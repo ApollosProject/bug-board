@@ -44,6 +44,8 @@ from project_dates import (
     format_project_target_status,
     parse_iso_date,
 )
+from regression_cache import get_cached_regression_summary
+from regressions import REGRESSION_DAYS
 from rippling_pto import get_rippling_pto_calendar
 from support import get_support_slugs
 from time_window import TimeWindow
@@ -1032,6 +1034,16 @@ def index_leaderboard_partial():
     return render_template("partials/index_leaderboard.html", **context)
 
 
+@app.route("/partials/index/regressions")
+def index_regressions_partial():
+    summary = get_cached_regression_summary()
+    return render_template(
+        "partials/index_regressions.html",
+        regression_unavailable=summary is None,
+        **(summary or {"days": REGRESSION_DAYS}),
+    )
+
+
 @app.route("/team/<slug>")
 def team_slug(slug):
     """Display open and completed work for a team member."""
@@ -1575,6 +1587,23 @@ def _build_person_context(
     work_by_platform = by_platform(open_items + completed_items)
     platform_labels = list(work_by_platform.keys())
     platform_values = [len(work_by_platform[label]) for label in platform_labels]
+    regression_summary = get_cached_regression_summary()
+    author_regression_metric: dict[str, Any] = next(
+        (
+            metric
+            for metric in (regression_summary or {}).get("author_metrics", [])
+            if metric.get("slug") == slug
+        ),
+        {},
+    )
+    reviewer_regression_metric: dict[str, Any] = next(
+        (
+            metric
+            for metric in (regression_summary or {}).get("reviewer_metrics", [])
+            if metric.get("slug") == slug
+        ),
+        {},
+    )
 
     return {
         "person_slug": slug,
@@ -1603,6 +1632,18 @@ def _build_person_context(
             average_completed_project_variance
         ),
         "metric_stdevs": metric_stdevs,
+        "regression_days": (regression_summary or {}).get("days", REGRESSION_DAYS),
+        "regression_metrics_status": (
+            "refreshing"
+            if regression_summary is None
+            else "ready"
+            if regression_summary.get("configured")
+            else "unconfigured"
+        ),
+        "regressions_authored": author_regression_metric.get("regression_count", 0),
+        "author_regression_rate": author_regression_metric.get("rate"),
+        "regressions_approved": reviewer_regression_metric.get("regression_count", 0),
+        "reviewer_escape_rate": reviewer_regression_metric.get("rate"),
         "platform_labels": platform_labels,
         "platform_values": platform_values,
     }

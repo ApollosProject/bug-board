@@ -63,6 +63,41 @@
     </article>
   </div>
 </div>
+<h2>Regression Responsibility ({{ regression_days }}d)</h2>
+{% if regression_metrics_status == 'refreshing' %}
+<article>Regression metrics are refreshing.</article>
+{% elif regression_metrics_status == 'unconfigured' %}
+<article>Regression metrics require Linear and GitHub credentials.</article>
+{% else %}
+<div class="grid">
+  <div>
+    <article>
+      <header>Authored Regressions</header>
+      <h1>{{ regressions_authored }}</h1>
+      <small>
+        {% if author_regression_rate is not none %}
+          {{ author_regression_rate }}% of merged PRs
+        {% else %}
+          No merged PRs in this window
+        {% endif %}
+      </small>
+    </article>
+  </div>
+  <div>
+    <article>
+      <header>Approved Regressions</header>
+      <h1>{{ regressions_approved }}</h1>
+      <small>
+        {% if reviewer_escape_rate is not none %}
+          {{ reviewer_escape_rate }}% of approved PRs
+        {% else %}
+          No approved PRs in this window
+        {% endif %}
+      </small>
+    </article>
+  </div>
+</div>
+{% endif %}
 <div class="grid">
   <div>
     <article>

@@ -48,7 +48,7 @@ python -m unittest discover -s tests -p 'test_*.py'
 - `AIRFLOW_FLEET_HEALTH_MAX_STALE_SECONDS` – Optional max age accepted by the web endpoint when reading cached data (default: `180`)
 - `AIRFLOW_FLEET_HEALTH_REDIS_TTL_SECONDS` – Optional Redis TTL for cached fleet health record (default: `900`)
 - `LEADERBOARD_REDIS_TTL_SECONDS` – Optional Redis TTL for the cached homepage leaderboard (default: `900`)
-- `REGRESSION_REDIS_TTL_SECONDS` – Optional Redis TTL for cached regression metrics (default: `86400`)
+- `REGRESSION_REDIS_TTL_SECONDS` – Optional Redis TTL for cached regression reports (default: `86400`)
 - `BIGQUERY_ANALYTICS_PROJECT_ID` – Optional Google Cloud project that contains the Segment BigQuery export (default: `apollos-project`)
 - `BIGQUERY_ANALYTICS_DATASETS` – Optional comma-separated BigQuery datasets containing Segment export tables (default: `apollos,apollos_tv,apollos_roku`)
 - `BIGQUERY_ANALYTICS_TABLES` – Optional comma-separated Segment tables to inspect for app runtime versions (default: `identifies,screens,app_became_active,app_became_backgrounded,app_became_inactive`)
@@ -150,3 +150,15 @@ account JSON with BigQuery read access to `apollos-project`. Application Default
 not used by this dashboard.
 
 The legacy `/app-versions` URL renders the same dashboard for compatibility with existing links.
+
+## Regression metrics
+
+The worker analyzes completed urgent/high-priority Linear bugs, blames lines removed by
+their fixing PRs, and maps those commits back to likely inducing PR authors and approvers.
+It refreshes one 30-day Redis summary every six hours.
+
+The homepage shows team-level regression cards. Person pages show authored and approved
+regression counts and rates. Web requests only read the cached summary and never run the
+attribution pipeline. Automated blame is directional rather than proof of causality;
+version-controlled corrections and exclusions can be added to
+`regression_overrides.yml`.
