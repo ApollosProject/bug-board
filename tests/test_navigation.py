@@ -60,6 +60,14 @@ class NavigationTest(unittest.TestCase):
         self.assertIn("width: auto;", inputs)
         self.assertIn("min-height: 2.25rem;", inputs)
 
+        presets = styles.split(".time-window-presets {", 1)[1].split("}", 1)[0]
+        self.assertIn("gap: 0;", presets)
+        self.assertIn("flex-wrap: nowrap;", presets)
+        self.assertIn(
+            '.time-window-presets button[aria-pressed="true"]:is(:hover, :active, :focus)',
+            styles,
+        )
+
     def test_busy_indicators_use_a_css_rotation_animation(self):
         with open("static/styles.css") as styles_file:
             styles = styles_file.read()
@@ -125,6 +133,16 @@ class NavigationTest(unittest.TestCase):
         support.assert_called_once_with(config=config, projects=projects)
 
     def test_index_and_person_pages_accept_date_ranges(self):
+        with patch.object(app_module, "datetime", FixedDateTime):
+            preset_index = self.client.get("/?days=30")
+        preset_body = preset_index.get_data(as_text=True)
+        self.assertEqual(preset_index.status_code, 200)
+        self.assertIn('value="30"\n      aria-pressed="true"', preset_body)
+        self.assertIn('value="7"\n      aria-pressed="false"', preset_body)
+        self.assertIn('name="start" value="2026-07-01"', preset_body)
+        self.assertIn('name="end" value="2026-07-31"', preset_body)
+        self.assertIn("aria-pressed', 'false'", preset_body)
+
         index = self.client.get("/?start=2026-01-01&end=2026-01-31&days=7")
         index_body = index.get_data(as_text=True)
         self.assertEqual(index.status_code, 200)
@@ -134,6 +152,8 @@ class NavigationTest(unittest.TestCase):
         self.assertIn('name="start"', index_body)
         self.assertIn('value="2026-01-01"', index_body)
         self.assertIn('value="2026-01-31"', index_body)
+        self.assertIn('value="7"\n      aria-pressed="false"', index_body)
+        self.assertIn('value="30"\n      aria-pressed="false"', index_body)
 
         config = {
             "people": {

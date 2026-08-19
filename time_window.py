@@ -94,7 +94,8 @@ class TimeWindow:
 
     def template_vars(self) -> dict[str, object]:
         query = self.query_args()
-        start, end = query.get("start"), query.get("end")
+        start = self.start.date().isoformat()
+        end = self.inclusive_end_date.isoformat()
         label = f"{self.preset_days}d" if self.preset_days is not None else f"{start} – {end}"
         return {
             "days": self.duration_days,
