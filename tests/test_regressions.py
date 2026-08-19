@@ -83,6 +83,43 @@ class RegressionAttributionTest(unittest.TestCase):
             ranges = github_regressions._get_blame_ranges("example", "repo", "abc", "src.py")
         self.assertEqual(ranges, [{"startingLine": 11, "endingLine": 13, "commit": {}}])
 
+    def test_missing_blame_marks_analysis_incomplete(self):
+        pull_request = {
+            "merged": True,
+            "merged_at": "2026-08-10T00:00:00Z",
+            "merge_commit_sha": "fix",
+            "changed_files": 1,
+        }
+
+        def fake_rest(path, params=None):
+            if path.endswith("/pulls/10"):
+                return pull_request
+            if path.endswith("/commits/fix"):
+                return {"parents": [{"sha": "parent"}]}
+            raise AssertionError(path)
+
+        with (
+            patch.object(github_regressions, "_rest_get", side_effect=fake_rest),
+            patch.object(
+                github_regressions,
+                "_get_pull_request_files",
+                return_value=[
+                    {
+                        "filename": "src/example.py",
+                        "status": "modified",
+                        "patch": "@@ -1 +1 @@\n-old\n+new",
+                    }
+                ],
+            ),
+            patch.object(github_regressions, "_get_blame_ranges", return_value=[]),
+        ):
+            result = github_regressions.get_fixing_pr_attribution(
+                "https://github.com/example/repo/pull/10"
+            )
+
+        self.assertIsNotNone(result)
+        self.assertFalse(result["complete"])  # type: ignore[index]
+
 
 if __name__ == "__main__":
     unittest.main()

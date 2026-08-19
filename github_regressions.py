@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 import time
@@ -18,6 +19,7 @@ load_dotenv()
 GITHUB_API_URL = "https://api.github.com"
 GITHUB_REQUEST_TIMEOUT_SECONDS = 30
 MAX_FIX_FILES = 50
+MAX_DELETED_LINES_PER_FILE = 500
 PR_URL_RE = re.compile(
     r"^https://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+)/pull/(?P<number>\d+)/?$",
     re.IGNORECASE,
@@ -237,3 +239,130 @@ def _candidate_score(
 ) -> tuple[float, int]:
     age_days = max(int((fixing_merged_at - candidate_merged_at).total_seconds() / 86400), 0)
     return line_count / (1 + age_days / 30), age_days
+
+
+def get_pull_request_attribution_metadata(url: str) -> dict[str, Any] | None:
+    """Return the author and human approvers for a merged pull request."""
+
+    parsed = parse_pull_request_url(url)
+    if parsed is None:
+        return None
+    owner, repo, number = parsed
+    pull_request = _rest_get(f"/repos/{owner}/{repo}/pulls/{number}")
+    if not isinstance(pull_request, dict) or not pull_request.get("merged"):
+        return None
+    reviews = _rest_get(
+        f"/repos/{owner}/{repo}/pulls/{number}/reviews",
+        params={"per_page": 100},
+    )
+    author = (pull_request.get("user") or {}).get("login") or ""
+    reviewers = {
+        login
+        for review in reviews
+        if isinstance(reviews, list) and isinstance(review, dict)
+        for login in [((review.get("user") or {}).get("login") or "")]
+        if review.get("state") == "APPROVED"
+        and login
+        and login.casefold() != author.casefold()
+        and not _is_bot(login)
+    }
+    return {
+        "url": url,
+        "merged_at": pull_request.get("merged_at"),
+        "author": author or None,
+        "reviewers": sorted(reviewers, key=str.casefold),
+    }
+
+
+def get_fixing_pr_attribution(url: str) -> dict[str, Any] | None:
+    """Run a recency-weighted SZZ analysis for one fixing PR."""
+
+    parsed = parse_pull_request_url(url)
+    if parsed is None:
+        return None
+    owner, repo, number = parsed
+    pull_request = _rest_get(f"/repos/{owner}/{repo}/pulls/{number}")
+    merged_at = _parse_github_datetime(
+        pull_request.get("merged_at") if isinstance(pull_request, dict) else None
+    )
+    merge_sha = pull_request.get("merge_commit_sha") if isinstance(pull_request, dict) else None
+    if (
+        not isinstance(pull_request, dict)
+        or not pull_request.get("merged")
+        or merged_at is None
+        or not isinstance(merge_sha, str)
+    ):
+        return None
+    merge_commit = _rest_get(f"/repos/{owner}/{repo}/commits/{merge_sha}")
+    parents = merge_commit.get("parents") if isinstance(merge_commit, dict) else None
+    parent_oid = (parents[0] or {}).get("sha") if isinstance(parents, list) and parents else None
+    if not isinstance(parent_oid, str):
+        return None
+
+    candidates: dict[str, dict[str, Any]] = {}
+    files = _get_pull_request_files(owner, repo, number)
+    failed = int(pull_request.get("changed_files") or len(files)) > len(files)
+    for file in files:
+        deleted_lines = deleted_line_numbers(file.get("patch"))
+        if not deleted_lines:
+            continue
+        if len(deleted_lines) > MAX_DELETED_LINES_PER_FILE:
+            failed = True
+        deleted_lines = deleted_lines[:MAX_DELETED_LINES_PER_FILE]
+        path = (
+            file.get("previous_filename")
+            if file.get("status") == "renamed"
+            else file.get("filename")
+        )
+        if not isinstance(path, str):
+            continue
+        try:
+            ranges = _get_blame_ranges(owner, repo, parent_oid, path)
+        except GitHubRegressionDataError as exc:
+            logging.warning("Unable to blame fixing PR file %s: %s", path, exc)
+            failed = True
+            continue
+        if not ranges:
+            failed = True
+        for blame_range in ranges:
+            start, end, commit = (
+                blame_range.get("startingLine"),
+                blame_range.get("endingLine"),
+                blame_range.get("commit"),
+            )
+            if (
+                not isinstance(start, int)
+                or not isinstance(end, int)
+                or not isinstance(commit, dict)
+            ):
+                continue
+            line_count = _line_overlap_count(deleted_lines, start, end)
+            inducing_pr = _original_merged_pull_request(commit, merged_at)
+            if not line_count or inducing_pr is None or inducing_pr.get("url") == url:
+                continue
+            candidate_url = inducing_pr.get("url")
+            candidate_merged_at = _parse_github_datetime(inducing_pr.get("mergedAt"))
+            if not isinstance(candidate_url, str) or candidate_merged_at is None:
+                continue
+            candidate = candidates.setdefault(
+                candidate_url,
+                {
+                    "url": candidate_url,
+                    "merged_at": inducing_pr.get("mergedAt"),
+                    "author": (inducing_pr.get("author") or {}).get("login"),
+                    "reviewers": _reviewer_logins(inducing_pr),
+                    "line_count": 0,
+                },
+            )
+            candidate["line_count"] += line_count
+
+    ranked = []
+    for candidate in candidates.values():
+        candidate_merged_at = _parse_github_datetime(candidate["merged_at"])
+        if candidate_merged_at:
+            score, age_days = _candidate_score(
+                int(candidate["line_count"]), candidate_merged_at, merged_at
+            )
+            ranked.append({**candidate, "score": round(score, 6), "age_days": age_days})
+    ranked.sort(key=lambda item: (item["score"], item["line_count"]), reverse=True)
+    return {"complete": not failed, "candidates": ranked}
