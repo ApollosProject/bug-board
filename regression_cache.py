@@ -16,6 +16,18 @@ REQUIRED_SUMMARY_KEYS = {
 }
 
 
+def _is_cacheable_summary(payload: Any) -> bool:
+    return (
+        isinstance(payload, dict)
+        and payload.get("days") == REGRESSION_DAYS
+        and payload.get("configured") is True
+        and REQUIRED_SUMMARY_KEYS <= payload.keys()
+        and all(
+            isinstance(payload.get(key), list) for key in ("author_metrics", "reviewer_metrics")
+        )
+    )
+
+
 def get_cached_regression_summary() -> dict[str, Any] | None:
     client = _get_redis_client()
     if client is None:
@@ -26,19 +38,14 @@ def get_cached_regression_summary() -> dict[str, Any] | None:
     except Exception:
         logging.exception("Failed to read regression summary from Redis")
         return None
-    if (
-        not isinstance(payload, dict)
-        or payload.get("days") != REGRESSION_DAYS
-        or not REQUIRED_SUMMARY_KEYS <= payload.keys()
-        or not all(
-            isinstance(payload.get(key), list) for key in ("author_metrics", "reviewer_metrics")
-        )
-    ):
+    if not _is_cacheable_summary(payload):
         return None
     return payload
 
 
 def store_cached_regression_summary(payload: dict[str, Any]) -> bool:
+    if not _is_cacheable_summary(payload):
+        return False
     client = _get_redis_client()
     if client is None:
         return False
