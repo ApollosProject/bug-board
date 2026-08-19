@@ -24,7 +24,7 @@ exclude = ["venv", ".venv", "env", ".env", "__pycache__", ".git", "static", "tem
 ignore_decorators = ["@app.route", "@app.template_filter"]
 ignore_names = [
     "breakdown",
-    "build_regression_summary",
     "post_weekly_changelog",
+    "refresh_regression_summary_cache",
 ]
 min_confidence = 60
