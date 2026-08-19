@@ -1632,7 +1632,6 @@ def _build_person_context(
             average_completed_project_variance
         ),
         "metric_stdevs": metric_stdevs,
-        "regression_days": (regression_summary or {}).get("days", REGRESSION_DAYS),
         "regression_metrics_status": (
             "refreshing"
             if regression_summary is None
