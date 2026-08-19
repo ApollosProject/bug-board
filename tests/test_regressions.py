@@ -220,27 +220,44 @@ class RegressionAttributionTest(unittest.TestCase):
 
     def test_merges_candidates_and_applies_manual_override(self):
         fixing_url = "https://github.com/example/repo/pull/10"
+        other_fix = "https://github.com/example/repo/pull/11"
         winner = {
             "url": "https://github.com/example/repo/pull/5",
             "score": 2.5,
             "line_count": 3,
+            "age_days": 10,
+            "author": "author",
+        }
+        later = {
+            "url": "https://github.com/example/repo/pull/5",
+            "score": 1.5,
+            "line_count": 2,
+            "age_days": 40,
+            "author": "author",
         }
         record = merge_issue_attributions(
             {"identifier": "APO-123"},
-            [fixing_url],
-            {fixing_url: {"candidates": [winner]}},
+            [fixing_url, other_fix],
+            {
+                fixing_url: {"candidates": [winner]},
+                other_fix: {"candidates": [later]},
+            },
         )
-        self.assertEqual(record["attribution"], winner)
+        self.assertEqual(record["attribution"]["score"], 4.0)
+        self.assertEqual(record["attribution"]["line_count"], 5)
+        self.assertNotIn("age_days", record["attribution"])
 
+        loaded: list[str] = []
         manual = {"url": "https://github.com/example/repo/pull/9"}
         corrected = apply_regression_overrides(
             [record, {"identifier": "APO-ignored"}],
             {
-                "APO-123": {"inducing_pr": manual["url"]},
+                "APO-123": {"inducing_pr": f"{manual['url']}/"},
                 "APO-ignored": {"ignored": True},
             },
-            metadata_loader=lambda url: manual,
+            metadata_loader=lambda url: loaded.append(url) or manual,
         )
+        self.assertEqual(loaded, [manual["url"]])
         self.assertEqual(corrected, [{**record, "attribution": manual}])
 
 

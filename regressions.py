@@ -65,10 +65,11 @@ def merge_issue_attributions(
             candidate_url = incoming.get("url")
             if not isinstance(candidate_url, str) or candidate_url in fixing_urls:
                 continue
-            candidate = candidates_by_url.setdefault(
-                candidate_url,
-                {**incoming, "line_count": 0, "score": 0.0},
-            )
+            candidate = candidates_by_url.get(candidate_url)
+            if candidate is None:
+                candidate = {**incoming, "line_count": 0, "score": 0.0}
+                candidate.pop("age_days", None)
+                candidates_by_url[candidate_url] = candidate
             candidate["line_count"] += int(incoming.get("line_count") or 0)
             candidate["score"] += float(incoming.get("score") or 0)
     candidates = sorted(
@@ -101,11 +102,12 @@ def apply_regression_overrides(
             continue
         inducing_url = override.get("inducing_pr")
         if isinstance(inducing_url, str):
+            inducing_url = inducing_url.rstrip("/")
             candidate = next(
                 (
                     item
                     for item in record.get("candidates") or []
-                    if item.get("url") == inducing_url.rstrip("/")
+                    if item.get("url") == inducing_url
                 ),
                 None,
             )
