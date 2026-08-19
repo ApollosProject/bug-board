@@ -24,6 +24,9 @@ LOWER_IS_BETTER_METRIC_KEYS = frozenset(
     }
 )
 
+STDEV_COLOR_THRESHOLD = 1.5
+STDEV_COLOR_METRIC_KEYS = frozenset({"prs_merged", "prs_reviewed", "all_work_done"})
+
 MetricValue = float | int | None
 
 
@@ -64,6 +67,14 @@ def format_stdev_label(z: float) -> str:
     return f"{sign}{abs(z):.1f}σ"
 
 
+def stdev_tone(z: float, *, threshold: float = STDEV_COLOR_THRESHOLD) -> str | None:
+    if z >= threshold:
+        return "high"
+    if z <= -threshold:
+        return "low"
+    return None
+
+
 def format_stdev_tooltip(values: list[float], *, lower_is_better: bool = False) -> str:
     tooltip = f"eng avg {statistics.fmean(values):.1f} · σ {statistics.pstdev(values):.1f}"
     return f"{tooltip} · lower is better" if lower_is_better else tooltip
@@ -86,8 +97,13 @@ def metric_stdevs_for_person(
         lower_is_better = key in LOWER_IS_BETTER_METRIC_KEYS
         if lower_is_better:
             z = -z
-        result[key] = {
+        entry: dict[str, str] = {
             "label": format_stdev_label(z),
             "tooltip": format_stdev_tooltip(values, lower_is_better=lower_is_better),
         }
+        if key in STDEV_COLOR_METRIC_KEYS:
+            tone = stdev_tone(z)
+            if tone is not None:
+                entry["tone"] = tone
+        result[key] = entry
     return result
