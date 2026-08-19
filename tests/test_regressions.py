@@ -36,6 +36,7 @@ class RegressionAttributionTest(unittest.TestCase):
                 "nodes": [
                     {"author": {"login": "author"}},
                     {"author": {"login": "reviewer"}},
+                    {"author": {"login": "Reviewer"}},
                     {"author": {"login": "copilot[bot]"}},
                 ]
             },

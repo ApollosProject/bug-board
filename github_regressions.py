@@ -199,14 +199,14 @@ def _is_bot(login: str | None) -> bool:
 
 def _reviewer_logins(pull_request: dict[str, Any]) -> list[str]:
     author = ((pull_request.get("author") or {}).get("login") or "").casefold()
-    reviewers = {
-        login
-        for review in (pull_request.get("reviews") or {}).get("nodes", []) or []
-        if isinstance(review, dict)
-        for login in [((review.get("author") or {}).get("login") or "")]
-        if login and login.casefold() != author and not _is_bot(login)
-    }
-    return sorted(reviewers, key=str.casefold)
+    reviewers: dict[str, str] = {}
+    for review in (pull_request.get("reviews") or {}).get("nodes", []) or []:
+        if not isinstance(review, dict):
+            continue
+        login = (review.get("author") or {}).get("login") or ""
+        if login and login.casefold() != author and not _is_bot(login):
+            reviewers.setdefault(login.casefold(), login)
+    return sorted(reviewers.values(), key=str.casefold)
 
 
 def _original_merged_pull_request(
