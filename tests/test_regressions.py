@@ -83,6 +83,73 @@ class RegressionAttributionTest(unittest.TestCase):
             ranges = github_regressions._get_blame_ranges("example", "repo", "abc", "src.py")
         self.assertEqual(ranges, [{"startingLine": 11, "endingLine": 13, "commit": {}}])
 
+    def test_missing_blame_marks_analysis_incomplete(self):
+        pull_request = {
+            "merged": True,
+            "merged_at": "2026-08-10T00:00:00Z",
+            "merge_commit_sha": "fix",
+            "changed_files": 1,
+        }
+
+        def fake_rest(path, params=None):
+            if path.endswith("/pulls/10"):
+                return pull_request
+            if path.endswith("/commits/fix"):
+                return {"parents": [{"sha": "parent"}]}
+            raise AssertionError(path)
+
+        with (
+            patch.object(github_regressions, "_rest_get", side_effect=fake_rest),
+            patch.object(
+                github_regressions,
+                "_get_pull_request_files",
+                return_value=[
+                    {
+                        "filename": "src/example.py",
+                        "status": "modified",
+                        "patch": "@@ -1 +1 @@\n-old\n+new",
+                    }
+                ],
+            ),
+            patch.object(github_regressions, "_get_blame_ranges", return_value=[]),
+        ):
+            result = github_regressions.get_fixing_pr_attribution(
+                "https://github.com/example/repo/pull/10"
+            )
+
+        self.assertIsNotNone(result)
+        self.assertFalse(result["complete"])  # type: ignore[index]
+
+    def test_attribution_metadata_filters_human_reviewers(self):
+        url = "https://github.com/example/repo/pull/10"
+        pull_request = {
+            "merged": True,
+            "merged_at": "2026-08-10T00:00:00Z",
+            "user": {"login": "author"},
+        }
+        reviews: object = [
+            {"state": "APPROVED", "user": {"login": "author"}},
+            {"state": "APPROVED", "user": {"login": "Reviewer"}},
+            {"state": "APPROVED", "user": {"login": "reviewer"}},
+            {"state": "APPROVED", "user": {"login": "copilot[bot]"}},
+        ]
+
+        def fake_rest(path, params=None):
+            if path.endswith("/pulls/10"):
+                return pull_request
+            if path.endswith("/reviews"):
+                return reviews
+            raise AssertionError(path)
+
+        with patch.object(github_regressions, "_rest_get", side_effect=fake_rest):
+            result = github_regressions.get_pull_request_attribution_metadata(url)
+        self.assertEqual(result["reviewers"], ["Reviewer"])  # type: ignore[index]
+
+        reviews = {"message": "error"}
+        with patch.object(github_regressions, "_rest_get", side_effect=fake_rest):
+            with self.assertRaises(github_regressions.GitHubRegressionDataError):
+                github_regressions.get_pull_request_attribution_metadata(url)
+
 
 if __name__ == "__main__":
     unittest.main()

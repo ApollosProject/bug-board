@@ -25,6 +25,8 @@ ignore_decorators = ["@app.route", "@app.template_filter"]
 ignore_names = [
     "breakdown",
     "deleted_line_numbers",
+    "get_fixing_pr_attribution",
+    "get_pull_request_attribution_metadata",
     "_candidate_score",
     "_get_blame_ranges",
     "_get_pull_request_files",
