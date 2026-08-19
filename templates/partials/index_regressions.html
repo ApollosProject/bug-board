@@ -1,0 +1,27 @@
+<h2>Regression Signals ({{ days }}d)</h2>
+{% if regression_unavailable %}
+<article>Regression metrics are refreshing.</article>
+{% elif not configured %}
+<article>Regression metrics require Linear and GitHub credentials.</article>
+{% else %}
+  {% if not complete %}
+  <small>Some fixes could not be attributed; these metrics are partial.</small>
+  {% endif %}
+  <div class="grid">
+    <article>
+      <header>Priority Bug Fixes Analyzed</header>
+      <h1>{{ regression_count }}</h1>
+      <small>{{ attributed_count }} linked to a likely inducing PR</small>
+    </article>
+    <article>
+      <header>Observed Author Regression Rate</header>
+      <h1>{{ (author_regression_rate ~ '%') if author_regression_rate is not none else 'n/a' }}</h1>
+      <small>{{ authored_regression_count }} regressions / {{ authored_pr_count }} merged PRs</small>
+    </article>
+    <article>
+      <header>Observed Reviewer Escape Rate</header>
+      <h1>{{ (reviewer_escape_rate ~ '%') if reviewer_escape_rate is not none else 'n/a' }}</h1>
+      <small>{{ approved_regression_count }} escapes / {{ reviewed_pr_count }} approved PRs</small>
+    </article>
+  </div>
+{% endif %}

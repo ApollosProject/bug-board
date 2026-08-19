@@ -90,6 +90,16 @@ class NavigationTest(unittest.TestCase):
         with (
             patch.object(app_module, "datetime", FixedDateTime),
             patch.object(app_module, "load_config", return_value=config),
+            patch.object(
+                app_module,
+                "get_cached_regression_summary",
+                return_value={
+                    "days": 30,
+                    "configured": True,
+                    "author_metrics": [{"slug": "brandon", "regression_count": 2, "rate": 3.3}],
+                    "reviewer_metrics": [{"slug": "brandon", "regression_count": 1, "rate": 1.9}],
+                },
+            ),
             patch.object(app_module, "get_open_issues_for_person", return_value=[]),
             patch.object(app_module, "get_completed_issues_for_person", return_value=[]),
             patch.object(app_module, "get_projects", return_value=projects) as fetch,
@@ -101,12 +111,15 @@ class NavigationTest(unittest.TestCase):
             context = app_module._build_person_context("brandon", 30, 1)
 
         self.assertEqual((context["prs_merged"], context["prs_reviewed"]), (60, 53))
+        self.assertEqual((context["regressions_authored"], context["regressions_approved"]), (2, 1))
         merged_pr_query = parse_qs(urlparse(context["github_merged_prs_url"]).query)["q"][0]
         self.assertIn("author:bkraeling", merged_pr_query)
         self.assertIn("merged:>=2026-07-01", merged_pr_query)
         with app_module.app.test_request_context():
             body = app_module.render_template("partials/person_content.html", **context)
         self.assertIn("merged%3A%3E%3D2026-07-01", body)
+        self.assertIn("Authored Regressions", body)
+        self.assertIn("3.3% of merged PRs", body)
         fetch.assert_called_once_with()
         counts.assert_called_once_with("bkraeling", 30, counts.call_args.args[2])
         support.assert_called_once_with(config=config, projects=projects)

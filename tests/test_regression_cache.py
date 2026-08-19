@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+import app as app_module
 import regression_cache
 
 
@@ -107,6 +108,37 @@ class RegressionCacheTest(unittest.TestCase):
             self.assertTrue(regression_cache.store_cached_regression_summary(_summary()))
             self.assertEqual(regression_cache.refresh_regression_summary_cache(), _summary())
             self.assertEqual(regression_cache.get_cached_regression_summary(), _summary())
+
+    def test_homepage_partial_only_reads_cached_summary(self):
+        client = app_module.app.test_client()
+        with patch.object(
+            app_module,
+            "get_cached_regression_summary",
+            return_value=_summary(),
+        ):
+            response = client.get("/partials/index/regressions")
+
+        body = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Regression Signals (30d)", body)
+        self.assertIn("2.5%", body)
+        self.assertIn("1.2%", body)
+
+        index = client.get("/").get_data(as_text=True)
+        self.assertIn('id="regressions"', index)
+        self.assertIn("'/partials/index/regressions'", index)
+
+    def test_homepage_partial_handles_cache_miss_without_live_work(self):
+        client = app_module.app.test_client()
+        with patch.object(
+            app_module,
+            "get_cached_regression_summary",
+            return_value=None,
+        ):
+            response = client.get("/partials/index/regressions")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Regression metrics are refreshing.", response.get_data(as_text=True))
 
 
 if __name__ == "__main__":
