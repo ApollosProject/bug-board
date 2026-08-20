@@ -364,7 +364,7 @@ def register_github_oauth(app: Flask) -> None:
             return response
         if request.endpoint == "healthz":
             return response
-        if _public_static_filename() is not None:
+        if _public_static_filename() is not None and response.status_code in {200, 304}:
             response.headers["Cache-Control"] = "public, max-age=86400"
             return response
         response.headers["Cache-Control"] = "private, no-store"
