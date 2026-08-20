@@ -504,9 +504,11 @@ class DagsDashboardTest(unittest.TestCase):
         self.assertIn("list-style: none;", body)
         self.assertIn(".dag-list-item::marker {", body)
         self.assertIn('content: "";', body)
-        self.assertIn("3 shown", body)
+        self.assertIn("2 shown", body)
         self.assertIn('id="dag-search"', body)
-        self.assertIn('data-dag="gamma_dag success"', body)
+        self.assertIn('<input id="show-all-dags" type="checkbox" role="switch" />', body)
+        self.assertIn('data-state="success" hidden', body)
+        self.assertIn('item.dataset.state === "failed"', body)
         self.assertIn("success", body)
         self.assertIn("The underlying fleet check is currently returning HTTP 503.", body)
 
@@ -543,6 +545,7 @@ class DagsDashboardTest(unittest.TestCase):
         self.assertIn('/dags/alpha_dag"', body)
         self.assertNotIn("/dags/alpha_dag/grid?dag_run_id=", body)
         self.assertIn("This cached snapshot only includes failing DAGs.", body)
+        self.assertNotIn('id="show-all-dags"', body)
 
     def test_dashboard_explains_missing_airflow_credentials_without_live_eval(self):
         with patch.dict(app_module.os.environ, {}, clear=False):
@@ -590,7 +593,12 @@ class DagsDashboardTest(unittest.TestCase):
                     with patch.object(app_module, "evaluate_fleet_health") as evaluate_mock:
                         response = self.client.get("/failing-dags")
 
+        body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
+        self.assertIn("0 shown", body)
+        self.assertIn("No failed DAGs in the latest snapshot.", body)
+        self.assertIn("This cached snapshot only includes failing DAGs.", body)
+        self.assertNotIn("DAG data is currently unavailable.", body)
         evaluate_mock.assert_not_called()
 
     def test_dashboard_explains_missing_airflow_credentials_from_cached_payload(self):

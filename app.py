@@ -395,9 +395,15 @@ def dags_dashboard():
     )
     dags, has_full_dag_list = _get_dag_entries(payload)
     failed_runs = payload.get("failed_runs")
-    failed_dag_count = sum(dag["state"] == "failed" for dag in dags)
+    default_visible_dag_count = sum(dag["state"] == "failed" for dag in dags)
+    failed_dag_count = default_visible_dag_count
     if not has_full_dag_list and isinstance(failed_runs, int):
         failed_dag_count = failed_runs
+    has_dag_data = (
+        has_full_dag_list
+        or isinstance(failed_runs, int)
+        or any(isinstance(payload.get(key), list) for key in ("failed_dags", "top_failed_dags"))
+    )
     missing_airflow_env_vars = [
         env_name
         for env_name in payload.get("missing_airflow_env_vars", [])
@@ -418,7 +424,9 @@ def dags_dashboard():
         astro_dags_url=_build_astro_dags_url(),
         checked_at=_format_checked_at(payload.get("checked_at")),
         dags=dags,
+        default_visible_dag_count=default_visible_dag_count,
         failed_dag_count=failed_dag_count,
+        has_dag_data=has_dag_data,
         has_missing_airflow_credentials=has_missing_airflow_credentials,
         has_full_dag_list=has_full_dag_list,
         http_status=status,

@@ -71,9 +71,26 @@
     gap: 0.85rem;
   }
 
-  .dag-search {
-    max-width: 32rem;
+  .dag-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
     margin: 1rem 0;
+  }
+
+  .dag-search {
+    flex: 1 1 20rem;
+    max-width: 32rem;
+    margin: 0;
+  }
+
+  .dag-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    white-space: nowrap;
   }
 
   .dag-list-item {
@@ -364,11 +381,11 @@
     </div>
   {% endif %}
 
-  {% if dags %}
+  {% if has_dag_data %}
     <article>
       <header class="dag-list-header">
         <strong>Active DAGs</strong>
-        <span class="dag-count" id="dag-count">{{ dags|length }} shown</span>
+        <span class="dag-count" id="dag-count">{{ default_visible_dag_count }} shown</span>
       </header>
       {% if not has_full_dag_list %}
         <p>
@@ -376,10 +393,18 @@
           populate the full inventory.
         </p>
       {% endif %}
-      <input class="dag-search" id="dag-search" type="search" placeholder="Search by name or state" aria-label="Search DAGs" />
+      <div class="dag-controls">
+        <input class="dag-search" id="dag-search" type="search" placeholder="Search by name or state" aria-label="Search DAGs" />
+        {% if has_full_dag_list %}
+          <label class="dag-toggle" for="show-all-dags">
+            <input id="show-all-dags" type="checkbox" role="switch" />
+            Show all DAGs
+          </label>
+        {% endif %}
+      </div>
       <ul class="dag-list" id="dag-list">
         {% for dag in dags %}
-          <li class="dag-list-item" data-dag="{{ dag.dag_id|lower }} {{ dag.state|lower }}">
+          <li class="dag-list-item" data-dag="{{ dag.dag_id|lower }} {{ dag.state|lower }}" data-state="{{ dag.state|lower }}"{% if dag.state != "failed" %} hidden{% endif %}>
             <div class="dag-entry">
               {% if dag.astro_dag_url %}
                 <a
@@ -396,7 +421,9 @@
           </li>
         {% endfor %}
       </ul>
-      <p id="no-dag-results" hidden>No DAGs match that search.</p>
+      <p id="no-dag-results"{% if default_visible_dag_count %} hidden{% endif %}>
+        No failed DAGs in the latest snapshot.
+      </p>
     </article>
   {% elif not has_missing_airflow_credentials %}
     <article class="empty-state">
@@ -409,19 +436,34 @@
 {% block extra_scripts %}
 <script>
   const search = document.querySelector("#dag-search");
+  const showAll = document.querySelector("#show-all-dags");
   const items = [...document.querySelectorAll("#dag-list [data-dag]")];
   const count = document.querySelector("#dag-count");
   const empty = document.querySelector("#no-dag-results");
 
-  search?.addEventListener("input", () => {
+  const applyFilters = () => {
+    if (!count || !empty) return;
+
     const query = search.value.trim().toLowerCase();
+    const showAllDags = showAll?.checked ?? false;
     let visible = 0;
     items.forEach((item) => {
-      item.hidden = !item.dataset.dag.includes(query);
+      const matchesMode = showAllDags || item.dataset.state === "failed";
+      const matchesSearch = item.dataset.dag.includes(query);
+      item.hidden = !(matchesMode && matchesSearch);
       visible += item.hidden ? 0 : 1;
     });
     count.textContent = `${visible} shown`;
     empty.hidden = visible > 0;
-  });
+    empty.textContent = query
+      ? "No DAGs match that search."
+      : showAllDags
+        ? "No DAGs are available in this snapshot."
+        : "No failed DAGs in the latest snapshot.";
+  };
+
+  search?.addEventListener("input", applyFilters);
+  showAll?.addEventListener("change", applyFilters);
+  applyFilters();
 </script>
 {% endblock %}
