@@ -57,6 +57,8 @@ class NavigationTest(unittest.TestCase):
         self.assertIn('viewBox="0 0 32 32"', header)
         self.assertIn('clip-path="url(#apollos-a-clip)"', header)
         self.assertIn('class="site-brand-traces"', header)
+        self.assertIn('stroke-linecap="butt"', header)
+        self.assertIn('stroke-linejoin="miter"', header)
         self.assertIn('class="site-brand-nodes"', header)
         self.assertIn('class="site-brand-vias"', header)
         self.assertIn('class="site-brand-name">Apollos</strong>', header)
@@ -73,6 +75,8 @@ class NavigationTest(unittest.TestCase):
             favicon = favicon_file.read()
         self.assertIn('viewBox="0 0 32 32"', favicon)
         self.assertIn('clip-path="url(#apollos-a-clip)"', favicon)
+        self.assertIn('stroke-linecap="butt"', favicon)
+        self.assertIn('stroke-linejoin="miter"', favicon)
         self.assertIn('class="vias"', favicon)
 
     def test_header_menu_overrides_pico_left_aligned_dropdown(self):
