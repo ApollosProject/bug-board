@@ -47,6 +47,11 @@ class NavigationTest(unittest.TestCase):
         header = body.split("</header>", 1)[0]
         self.assertIn('rel="icon"', head)
         self.assertIn("brand-mark.svg", head)
+        self.assertIn('property="og:title"', head)
+        self.assertIn("Apollos Engineering", head)
+        self.assertIn("Bug Board", head)
+        self.assertIn('property="og:image"', head)
+        self.assertIn("og-image.png", head)
         self.assertIn('aria-label="Apollos Engineering Bug Board home"', header)
         self.assertIn('class="site-brand-mark"', header)
         self.assertIn('viewBox="0 0 32 32"', header)
