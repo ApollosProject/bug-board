@@ -102,6 +102,15 @@ class NavigationTest(unittest.TestCase):
             styles,
         )
 
+    def test_metric_grids_wrap_to_two_columns_instead_of_shrinking(self):
+        with open("static/styles.css") as styles_file:
+            styles = styles_file.read()
+
+        self.assertIn("@media (min-width: 768px)", styles)
+        grid_override = styles.split("@media (min-width: 768px)", 1)[1]
+        grid_rule = grid_override.split(".grid {", 1)[1].split("}", 1)[0]
+        self.assertIn("grid-template-columns: repeat(2, minmax(0, 1fr));", grid_rule)
+
     def test_busy_indicators_use_a_css_rotation_animation(self):
         with open("static/styles.css") as styles_file:
             styles = styles_file.read()
