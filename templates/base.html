@@ -4,6 +4,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#13171f" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="{{ url_for('static', filename='brand-mark.svg') }}"
+    />
     <link
       rel="stylesheet"
       href="{{ url_for('static', filename='pico.min.css') }}"
@@ -16,10 +23,14 @@
     {% block extra_head %}{% endblock %}
   </head>
   <body>
-    <header class="container">
-      <nav>
+    <header class="site-header">
+      <nav class="container">
         <ul>
-          <li><a href="{{ url_for('index') }}">Bug Board</a></li>
+          <li>
+            {% with brand_href=url_for('index') %}
+              {% include "partials/brand_lockup.html" %}
+            {% endwith %}
+          </li>
         </ul>
         <ul>
           {% if session.get('github_login') %}
@@ -52,7 +63,7 @@
       </nav>
     </header>
     <main class="container">{% block content %}{% endblock %}</main>
-    <footer class="container">
+    <footer class="container site-footer">
       <div class="grid">
         <div>
           <h6>SRE</h6>

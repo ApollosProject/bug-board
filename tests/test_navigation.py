@@ -37,6 +37,39 @@ class NavigationTest(unittest.TestCase):
         self.assertNotIn('href="/projects"', footer)
         self.assertNotIn('href="/dags"', footer)
 
+    def test_apollos_engineering_brand_renders_in_the_site_chrome(self):
+        response = self.client.get("/projects")
+
+        body = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+
+        head = body.split("</head>", 1)[0]
+        header = body.split("</header>", 1)[0]
+        self.assertIn('rel="icon"', head)
+        self.assertIn("brand-mark.svg", head)
+        self.assertIn('aria-label="Apollos Engineering Bug Board home"', header)
+        self.assertIn('class="site-brand-mark"', header)
+        self.assertIn('viewBox="0 0 32 32"', header)
+        self.assertIn('clip-path="url(#apollos-a-clip)"', header)
+        self.assertIn('class="site-brand-traces"', header)
+        self.assertIn('class="site-brand-nodes"', header)
+        self.assertIn('class="site-brand-vias"', header)
+        self.assertIn('class="site-brand-name">Apollos</strong>', header)
+        self.assertIn("Engineering", header)
+        self.assertIn("Bug Board", header)
+
+        with open("static/styles.css") as styles_file:
+            styles = styles_file.read()
+        self.assertIn("--apollos-brand: #00676d;", styles)
+        self.assertIn("--apollos-action: #17b582;", styles)
+        self.assertIn("--apollos-accent: #6ec5b8;", styles)
+
+        with open("static/brand-mark.svg") as favicon_file:
+            favicon = favicon_file.read()
+        self.assertIn('viewBox="0 0 32 32"', favicon)
+        self.assertIn('clip-path="url(#apollos-a-clip)"', favicon)
+        self.assertIn('class="vias"', favicon)
+
     def test_header_menu_overrides_pico_left_aligned_dropdown(self):
         with open("static/styles.css") as styles_file:
             styles = styles_file.read()

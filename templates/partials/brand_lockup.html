@@ -1,0 +1,64 @@
+<a
+  class="site-brand"
+  href="{{ brand_href | default('/') }}"
+  aria-label="Apollos Engineering Bug Board home"
+>
+  <svg
+    class="site-brand-mark"
+    viewBox="0 0 32 32"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <defs>
+      <path
+        id="apollos-a-shape"
+        fill-rule="evenodd"
+        clip-rule="evenodd"
+        d="M8.848 0h4.91l8.848 24H0L8.848 0Zm-2.322 19.44h9.566L11.45 5.836h-.281L6.526 19.44Z"
+      />
+      <clipPath id="apollos-a-clip">
+        <use href="#apollos-a-shape" transform="translate(4.697 4)" />
+      </clipPath>
+    </defs>
+    <use
+      class="site-brand-board"
+      href="#apollos-a-shape"
+      transform="translate(4.697 4)"
+    />
+    <g clip-path="url(#apollos-a-clip)">
+      <g
+        class="site-brand-traces"
+        fill="none"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M14.4 5.8v2l-1.5 1.5v3.2L11.4 14v4L10 19.4v4.4H7.8" />
+        <path d="M22.5 13.1H21l-1.2 1.2V16l1 1.2" />
+        <path d="M9.2 26.6h3.1l1.3-1.3h5.5l1.4 1.4h3.3" />
+        <path d="M17 27.9v-1.5l1.1-1.1" />
+      </g>
+      <g class="site-brand-nodes">
+        <circle cx="12.9" cy="12.5" r="1.15" />
+        <circle cx="7.8" cy="23.8" r="1.3" />
+        <circle cx="20.8" cy="17.2" r="1.15" />
+        <circle cx="9.2" cy="26.6" r="1.25" />
+        <circle cx="18.1" cy="25.3" r="1.1" />
+        <circle cx="23.8" cy="26.7" r="1.25" />
+      </g>
+      <g class="site-brand-vias">
+        <circle cx="12.9" cy="12.5" r=".38" />
+        <circle cx="7.8" cy="23.8" r=".42" />
+        <circle cx="20.8" cy="17.2" r=".38" />
+        <circle cx="9.2" cy="26.6" r=".4" />
+        <circle cx="18.1" cy="25.3" r=".36" />
+        <circle cx="23.8" cy="26.7" r=".4" />
+      </g>
+    </g>
+  </svg>
+  <span class="site-brand-copy">
+    <strong class="site-brand-name">Apollos</strong>
+    <span class="site-brand-product">
+      Engineering <span class="site-brand-node" aria-hidden="true"></span> Bug Board
+    </span>
+  </span>
+</a>

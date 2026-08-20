@@ -237,6 +237,11 @@ class GitHubOAuthTest(unittest.TestCase):
         post_response = self.client.post("/logout")
         self.assertEqual(post_response.status_code, 200)
         self.assertIn("Signed out", post_response.get_data(as_text=True))
+        self.assertIn(
+            'aria-label="Apollos Engineering Bug Board home"',
+            post_response.get_data(as_text=True),
+        )
+        self.assertIn('class="auth-card"', post_response.get_data(as_text=True))
         with self.client.session_transaction() as signed_out_session:
             self.assertNotIn("github_login", signed_out_session)
             self.assertNotIn("github_user_id", signed_out_session)
