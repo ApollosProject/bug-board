@@ -1,3 +1,5 @@
+import base64
+import json
 import logging
 import os
 import re
@@ -70,6 +72,23 @@ def github_merged_prs_url(username: str, days: int, window: TimeWindow | None = 
     ).github_merged_qualifier()
     query = f"is:closed is:pr author:{username} archived:false {qualifier}"
     return f"https://github.com/pulls?q={quote(query, safe='')}"
+
+
+def linear_project_list_url(projects: list[dict[str, Any]]) -> str:
+    project_ids = list(
+        dict.fromkeys(
+            project_id
+            for project in projects
+            if isinstance((project_id := project.get("id")), str) and project_id
+        )
+    )
+    project_filter = {"and": [{"id": {"in": project_ids}}]}
+    encoded_filter = (
+        base64.urlsafe_b64encode(json.dumps(project_filter, separators=(",", ":")).encode("utf-8"))
+        .decode("ascii")
+        .rstrip("=")
+    )
+    return f"https://linear.app/differential/projects/all?filter={encoded_filter}&layout=list"
 
 
 def _request_time_window() -> TimeWindow:
@@ -1523,15 +1542,23 @@ def _build_person_context(
         if normalize_display_name((project.get("lead") or {}).get("displayName"))
         == normalized_person_name
     ]
-    lead_completed_projects = completed_project_weeks(led_projects)
-    lead_incomplete_projects = sum(1 for project in led_projects if is_incomplete_project(project))
-    lead_current_projects = sum(1 for project in led_projects if not project.get("is_inactive"))
-    lead_completed_project_variances = [
-        variance_days
+    current_led_projects = [project for project in led_projects if not project.get("is_inactive")]
+    completed_led_projects = [project for project in led_projects if is_completed_project(project)]
+    incomplete_led_projects = [
+        project for project in led_projects if is_incomplete_project(project)
+    ]
+    completed_project_variances = [
+        (project, variance_days)
         for project in led_projects
         if is_completed_project(project)
         for variance_days in [get_project_schedule_variance_days(project)]
         if variance_days is not None
+    ]
+    lead_completed_projects = completed_project_weeks(completed_led_projects)
+    lead_incomplete_projects = len(incomplete_led_projects)
+    lead_current_projects = len(current_led_projects)
+    lead_completed_project_variances = [
+        variance_days for _, variance_days in completed_project_variances
     ]
     if lead_completed_project_variances:
         average_completed_project_variance = sum(lead_completed_project_variances) / len(
@@ -1668,6 +1695,14 @@ def _build_person_context(
         "lead_completed_projects_avg_early_late": format_average_project_schedule_variance(
             average_completed_project_variance
         ),
+        "project_metric_urls": {
+            "lead_current_projects": linear_project_list_url(current_led_projects),
+            "lead_completed_projects": linear_project_list_url(completed_led_projects),
+            "lead_incomplete_projects": linear_project_list_url(incomplete_led_projects),
+            "lead_completed_projects_avg_early_late": linear_project_list_url(
+                [project for project, _ in completed_project_variances]
+            ),
+        },
         "metric_stdevs": metric_stdevs,
         "regression_metrics_status": (
             "refreshing"
