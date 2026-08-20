@@ -333,8 +333,8 @@ def _get_astro_ui_base_url() -> str:
     return re.sub(r"/api/v\d+$", "", airflow_api_base_url)
 
 
-def _build_astro_failed_dags_url() -> str:
-    return f"{_get_astro_ui_base_url()}/dags?status=failed&state=active"
+def _build_astro_dags_url() -> str:
+    return f"{_get_astro_ui_base_url()}/dags"
 
 
 def _build_astro_dag_url(dag_id: str) -> str:
@@ -357,19 +357,114 @@ def _get_failed_dag_entries(payload: dict[str, Any]) -> tuple[list[dict[str, str
     return top_failed_dags, is_partial
 
 
-def _format_checked_at(value: Any) -> str | None:
+def _coerce_dag_inventory_entries(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+
+    entries: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        dag_id = item.get("dag_id")
+        if not isinstance(dag_id, str) or not dag_id:
+            continue
+
+        state = item.get("state")
+        if state not in {"failed", "success", "no_runs", "unknown"}:
+            state = "unknown"
+        current_state = item.get("current_state")
+        if not isinstance(current_state, str):
+            current_state = ""
+
+        tags = item.get("tags")
+        normalized_tags = (
+            list(dict.fromkeys(tag for tag in tags if isinstance(tag, str) and tag))
+            if isinstance(tags, list)
+            else []
+        )
+        timetable_summary = item.get("timetable_summary")
+        if not isinstance(timetable_summary, str) or not timetable_summary:
+            timetable_summary = "Unscheduled"
+
+        latest_run_at = item.get("latest_run_at")
+        latest_terminal_run_at = item.get("latest_terminal_run_at")
+        next_run_at = item.get("next_run_at")
+        has_import_errors = bool(item.get("has_import_errors", False))
+        is_stale = bool(item.get("is_stale", False))
+        needs_attention = state in {"failed", "unknown"} or has_import_errors or is_stale
+
+        entries.append(
+            {
+                "dag_id": dag_id,
+                "astro_dag_url": _build_astro_dag_url(dag_id),
+                "state": state,
+                "state_label": {
+                    "failed": "Failed",
+                    "success": "Succeeded",
+                    "no_runs": "No runs",
+                    "unknown": "Unknown",
+                }[state],
+                "current_state": current_state,
+                "current_state_label": current_state.replace("_", " ").title(),
+                "latest_run_at": latest_run_at if isinstance(latest_run_at, str) else "",
+                "latest_run_at_display": _format_dag_timestamp(latest_run_at),
+                "latest_terminal_run_at_display": _format_dag_timestamp(latest_terminal_run_at),
+                "tags": normalized_tags,
+                "timetable_summary": timetable_summary,
+                "next_run_at": next_run_at if isinstance(next_run_at, str) else "",
+                "next_run_at_display": _format_dag_timestamp(next_run_at),
+                "has_import_errors": has_import_errors,
+                "is_stale": is_stale,
+                "needs_attention": needs_attention,
+                "is_in_progress": bool(current_state),
+                "search_text": " ".join(
+                    [dag_id, timetable_summary, current_state, *normalized_tags]
+                ).lower(),
+            }
+        )
+    return entries
+
+
+def _get_dag_inventory_entries(
+    payload: dict[str, Any],
+) -> tuple[list[dict[str, Any]], bool]:
+    raw_dags = payload.get("dags")
+    if isinstance(raw_dags, list):
+        return _coerce_dag_inventory_entries(raw_dags), True
+
+    failed_dags, _ = _get_failed_dag_entries(payload)
+    legacy_entries = [
+        {
+            "dag_id": dag["dag_id"],
+            "state": "failed",
+            "current_state": "",
+            "tags": [],
+            "timetable_summary": "Unscheduled",
+            "next_run_at": "",
+            "latest_run_at": "",
+            "latest_terminal_run_at": "",
+            "has_import_errors": False,
+            "is_stale": False,
+        }
+        for dag in failed_dags
+    ]
+    return _coerce_dag_inventory_entries(legacy_entries), False
+
+
+def _format_dag_timestamp(value: Any) -> str | None:
     if not isinstance(value, str) or not value:
         return None
 
     normalized = value.replace("Z", "+00:00")
     try:
-        checked_at = datetime.fromisoformat(normalized)
+        timestamp = datetime.fromisoformat(normalized)
     except ValueError:
         return value
 
-    if checked_at.tzinfo is None:
-        return checked_at.strftime("%Y-%m-%d %I:%M:%S %p")
-    return checked_at.astimezone().strftime("%Y-%m-%d %I:%M:%S %p %Z")
+    if timestamp.tzinfo is not None:
+        timestamp = timestamp.astimezone()
+    time_display = timestamp.strftime("%I:%M %p %Z").lstrip("0").rstrip()
+    return f"{timestamp.strftime('%b')} {timestamp.day}, {timestamp.year} · {time_display}"
 
 
 @app.route("/healthz")
@@ -380,11 +475,12 @@ def healthz():
 
 
 @app.route("/failing-dags")
-def failing_dags_dashboard():
-    payload, status = _get_airflow_fleet_health_payload(
+@app.route("/dags")
+def dags_dashboard():
+    payload, _ = _get_airflow_fleet_health_payload(
         allow_live_eval=_should_allow_live_airflow_eval_for_dashboard()
     )
-    failed_dags, is_partial_list = _get_failed_dag_entries(payload)
+    dags, has_full_dag_inventory = _get_dag_inventory_entries(payload)
     failed_runs = payload.get("failed_runs")
     missing_airflow_env_vars = [
         env_name
@@ -392,34 +488,33 @@ def failing_dags_dashboard():
         if isinstance(env_name, str) and env_name
     ]
     has_missing_airflow_credentials = bool(missing_airflow_env_vars)
-    status_variant = (
-        "setup-required" if has_missing_airflow_credentials else payload.get("status", "unknown")
-    )
-    status_label = (
-        "Setup required"
-        if has_missing_airflow_credentials
-        else str(payload.get("status", "unknown"))
+    raw_status = payload.get("status", "unknown")
+    if raw_status not in {"healthy", "degraded", "unknown"}:
+        raw_status = "unknown"
+    status_variant = "setup-required" if has_missing_airflow_credentials else raw_status
+    status_label = "Setup required" if has_missing_airflow_credentials else str(raw_status).title()
+    failed_dag_count = (
+        failed_runs
+        if isinstance(failed_runs, int)
+        else sum(dag["state"] == "failed" for dag in dags)
     )
 
     return render_template(
         "failing_dags.html",
-        astro_failed_dags_url=_build_astro_failed_dags_url(),
-        checked_at=_format_checked_at(payload.get("checked_at")),
-        dags_without_runs=payload.get("dags_without_runs"),
-        evaluated_dags=payload.get("evaluated_dags"),
-        failed_dag_count=(failed_runs if isinstance(failed_runs, int) else len(failed_dags)),
-        failed_dags=failed_dags,
-        failed_fetches=payload.get("failed_fetches"),
-        failure_ratio=payload.get("failure_ratio"),
+        astro_dags_url=_build_astro_dags_url(),
+        attention_dag_count=sum(dag["needs_attention"] for dag in dags),
+        checked_at=_format_dag_timestamp(payload.get("checked_at")),
+        dags=dags,
+        failed_dag_count=failed_dag_count,
         has_missing_airflow_credentials=has_missing_airflow_credentials,
-        http_status=status,
-        is_partial_failed_dag_list=is_partial_list,
+        has_full_dag_inventory=has_full_dag_inventory,
+        in_progress_dag_count=sum(dag["is_in_progress"] for dag in dags),
         missing_airflow_env_vars=missing_airflow_env_vars,
-        non_terminal_dags=payload.get("non_terminal_dags"),
-        status=payload.get("status", "unknown"),
+        no_run_dag_count=sum(dag["state"] == "no_runs" for dag in dags),
+        status=raw_status,
         status_label=status_label,
         status_variant=status_variant,
-        threshold_ratio=payload.get("threshold_ratio"),
+        successful_dag_count=sum(dag["state"] == "success" for dag in dags),
         total_active_dags=payload.get("active_dags_total"),
     )
 

@@ -136,13 +136,13 @@ The health calculation:
 - When `REDIS_URL` is not configured, bypasses Redis and evaluates directly per request
 - With `REDIS_URL` configured, cache miss/stale returns `{"status":"unknown"}` with `503` until worker refresh succeeds
 
-For humans, `GET /failing-dags` renders the same fleet-health data as an internal dashboard page
-and links back to the Astro filtered DAG view. The dashboard always serves cached fleet-health
-data and never performs a live full-fleet Airflow scan during a web request in deployed
-environments. In local debug mode, if `REDIS_URL` is not configured, the dashboard falls back
-to a live evaluation so the page can be validated without a worker/cache setup. Without a fresh
-Redis-backed cache value outside local debug mode, it renders the unavailable/setup-required
-state instead.
+For humans, `GET /dags` renders the fleet-health data as a searchable inventory of active DAGs,
+including latest run status, schedule, next-run time, and tags. The legacy `GET /failing-dags`
+path remains available. The dashboard always serves cached fleet-health data and never performs
+a live full-fleet Airflow scan during a web request in deployed environments. In local debug
+mode, if `REDIS_URL` is not configured, the dashboard falls back to a live evaluation so the
+page can be validated without a worker/cache setup. Without a fresh Redis-backed cache value
+outside local debug mode, it renders the unavailable/setup-required state instead.
 
 This checker is intentionally not highly configurable. It uses fixed settings:
 

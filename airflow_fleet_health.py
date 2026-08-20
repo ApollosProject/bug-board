@@ -25,9 +25,41 @@ DagRunEvaluation = TypedDict(
     "DagRunEvaluation",
     {
         "latest_state": str,
+        "latest_run_at": str,
         "latest_terminal_state": str,
+        "latest_terminal_run_at": str,
         "dag_run_id": str,
         "has_runs": bool,
+    },
+)
+
+
+ActiveDagEntry = TypedDict(
+    "ActiveDagEntry",
+    {
+        "dag_id": str,
+        "tags": list[str],
+        "timetable_summary": str,
+        "next_run_at": str,
+        "has_import_errors": bool,
+        "is_stale": bool,
+    },
+)
+
+
+DagInventoryEntry = TypedDict(
+    "DagInventoryEntry",
+    {
+        "dag_id": str,
+        "state": str,
+        "current_state": str,
+        "latest_run_at": str,
+        "latest_terminal_run_at": str,
+        "tags": list[str],
+        "timetable_summary": str,
+        "next_run_at": str,
+        "has_import_errors": bool,
+        "is_stale": bool,
     },
 )
 
@@ -54,6 +86,7 @@ class FleetStats:
     failed_fetches: int
     dags_without_runs: int
     non_terminal_dags: int
+    dags: list[DagInventoryEntry]
     failed_dags: list[FailedDagEntry]
     failed_runs: int
     failure_ratio: float
@@ -67,7 +100,9 @@ def evaluate_fleet_health() -> tuple[dict[str, Any], int]:
 
     session = _build_session(api_token)
     active_dags = _fetch_active_dags(session, base_url)
-    latest_run_by_dag, failed_fetches = _fetch_latest_runs_by_dag(base_url, api_token, active_dags)
+    latest_run_by_dag, failed_fetches = _fetch_latest_runs_by_dag(
+        base_url, api_token, set(active_dags)
+    )
     if active_dags and not latest_run_by_dag:
         raise AirflowFleetHealthError("Failed to fetch latest runs for all DAGs.")
     stats = _build_stats(active_dags, latest_run_by_dag, failed_fetches)
@@ -83,6 +118,7 @@ def evaluate_fleet_health() -> tuple[dict[str, Any], int]:
         "failed_fetches": stats.failed_fetches,
         "dags_without_runs": stats.dags_without_runs,
         "non_terminal_dags": stats.non_terminal_dags,
+        "dags": stats.dags,
         "failed_runs": stats.failed_runs,
         "failure_ratio": stats.failure_ratio,
         "threshold_ratio": FAILURE_THRESHOLD_RATIO,
@@ -92,8 +128,8 @@ def evaluate_fleet_health() -> tuple[dict[str, Any], int]:
     return payload, http_status
 
 
-def _fetch_active_dags(session: requests.Session, base_url: str) -> set[str]:
-    dags: set[str] = set()
+def _fetch_active_dags(session: requests.Session, base_url: str) -> dict[str, ActiveDagEntry]:
+    dags: dict[str, ActiveDagEntry] = {}
     offset = 0
 
     while True:
@@ -115,7 +151,18 @@ def _fetch_active_dags(session: requests.Session, base_url: str) -> set[str]:
                 continue
             if bool(dag.get("is_paused", False)):
                 continue
-            dags.add(dag_id)
+            dags[dag_id] = {
+                "dag_id": dag_id,
+                "tags": _extract_tag_names(dag.get("tags")),
+                "timetable_summary": _extract_first_string(
+                    dag, "timetable_summary", "timetable_description"
+                ),
+                "next_run_at": _extract_first_string(
+                    dag, "next_dagrun_run_after", "next_dagrun_logical_date"
+                ),
+                "has_import_errors": bool(dag.get("has_import_errors", False)),
+                "is_stale": bool(dag.get("is_stale", False)),
+            }
 
         if not _has_more(batch_size, payload, offset, DAG_PAGE_SIZE):
             break
@@ -157,6 +204,7 @@ def _fetch_last_run_for_dag(base_url: str, api_token: str, dag_id: str) -> DagRu
     dag_runs_url = f"{base_url}{DAGS_ENDPOINT}/{dag_id_encoded}/dagRuns"
     offset = 0
     latest_state = ""
+    latest_run_at = ""
     has_runs = False
 
     while True:
@@ -169,7 +217,9 @@ def _fetch_last_run_for_dag(base_url: str, api_token: str, dag_id: str) -> DagRu
         if not dag_runs:
             return {
                 "latest_state": latest_state,
+                "latest_run_at": latest_run_at,
                 "latest_terminal_state": "",
+                "latest_terminal_run_at": "",
                 "dag_run_id": "",
                 "has_runs": has_runs,
             }
@@ -177,6 +227,9 @@ def _fetch_last_run_for_dag(base_url: str, api_token: str, dag_id: str) -> DagRu
         if not has_runs:
             has_runs = True
             latest_state = _extract_state(dag_runs[0])
+            latest_run_at = _extract_first_string(
+                dag_runs[0], "logical_date", "execution_date", "start_date"
+            )
 
         latest_terminal_run = next(
             (run for run in dag_runs if _extract_state(run) in TERMINAL_STATES),
@@ -185,7 +238,14 @@ def _fetch_last_run_for_dag(base_url: str, api_token: str, dag_id: str) -> DagRu
         if latest_terminal_run is not None:
             return {
                 "latest_state": latest_state,
+                "latest_run_at": latest_run_at,
                 "latest_terminal_state": _extract_state(latest_terminal_run),
+                "latest_terminal_run_at": _extract_first_string(
+                    latest_terminal_run,
+                    "logical_date",
+                    "execution_date",
+                    "start_date",
+                ),
                 "dag_run_id": _extract_dag_run_id(latest_terminal_run),
                 "has_runs": True,
             }
@@ -194,7 +254,9 @@ def _fetch_last_run_for_dag(base_url: str, api_token: str, dag_id: str) -> DagRu
         if not _has_more(batch_size, payload, offset, DAG_RUN_PAGE_SIZE):
             return {
                 "latest_state": latest_state,
+                "latest_run_at": latest_run_at,
                 "latest_terminal_state": "",
+                "latest_terminal_run_at": "",
                 "dag_run_id": "",
                 "has_runs": True,
             }
@@ -202,7 +264,7 @@ def _fetch_last_run_for_dag(base_url: str, api_token: str, dag_id: str) -> DagRu
 
 
 def _build_stats(
-    active_dags: set[str],
+    active_dags: dict[str, ActiveDagEntry],
     latest_run_by_dag: dict[str, DagRunEvaluation],
     failed_fetches: int,
 ) -> FleetStats:
@@ -236,10 +298,63 @@ def _build_stats(
             1 for latest_run in latest_run_by_dag.values() if not latest_run["has_runs"]
         ),
         non_terminal_dags=non_terminal_dags,
+        dags=_build_dag_inventory(active_dags, latest_run_by_dag),
         failed_dags=failed_dags,
         failed_runs=failed_runs,
         failure_ratio=failure_ratio,
         insufficient_volume=insufficient_volume,
+    )
+
+
+def _build_dag_inventory(
+    active_dags: dict[str, ActiveDagEntry],
+    latest_run_by_dag: dict[str, DagRunEvaluation],
+) -> list[DagInventoryEntry]:
+    entries: list[DagInventoryEntry] = []
+    for dag_id, dag in active_dags.items():
+        latest_run = latest_run_by_dag.get(dag_id)
+        if latest_run is None:
+            state = "unknown"
+            current_state = ""
+            latest_run_at = ""
+            latest_terminal_run_at = ""
+        else:
+            latest_terminal_state = latest_run["latest_terminal_state"]
+            if latest_terminal_state in TERMINAL_STATES:
+                state = latest_terminal_state
+            elif latest_run["has_runs"]:
+                state = "unknown"
+            else:
+                state = "no_runs"
+
+            latest_state = latest_run["latest_state"]
+            current_state = latest_state if latest_state not in TERMINAL_STATES else ""
+            latest_run_at = latest_run.get("latest_run_at", "")
+            latest_terminal_run_at = latest_run.get("latest_terminal_run_at", "")
+
+        entries.append(
+            {
+                "dag_id": dag_id,
+                "state": state,
+                "current_state": current_state,
+                "latest_run_at": latest_run_at,
+                "latest_terminal_run_at": latest_terminal_run_at,
+                "tags": dag["tags"],
+                "timetable_summary": dag["timetable_summary"],
+                "next_run_at": dag["next_run_at"],
+                "has_import_errors": dag["has_import_errors"],
+                "is_stale": dag["is_stale"],
+            }
+        )
+
+    state_priority = {"failed": 0, "unknown": 1, "no_runs": 2, "success": 3}
+    return sorted(
+        entries,
+        key=lambda entry: (
+            not (entry["has_import_errors"] or entry["is_stale"]),
+            state_priority.get(entry["state"], 1),
+            entry["dag_id"],
+        ),
     )
 
 
@@ -279,6 +394,30 @@ def _extract_dag_runs(payload: dict[str, Any]) -> list[dict[str, Any]]:
     if isinstance(runs_alt, list):
         return [run for run in runs_alt if isinstance(run, dict)]
     return []
+
+
+def _extract_first_string(value: dict[str, Any], *names: str) -> str:
+    for name in names:
+        candidate = value.get(name)
+        if isinstance(candidate, str) and candidate:
+            return candidate
+    return ""
+
+
+def _extract_tag_names(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+
+    names: list[str] = []
+    for item in value:
+        if isinstance(item, str) and item:
+            names.append(item)
+            continue
+        if isinstance(item, dict):
+            name = item.get("name")
+            if isinstance(name, str) and name:
+                names.append(name)
+    return list(dict.fromkeys(names))
 
 
 def _has_more(batch_size: int, payload: dict[str, Any], offset: int, requested_limit: int) -> bool:

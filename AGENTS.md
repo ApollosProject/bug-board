@@ -13,7 +13,7 @@ source venv/bin/activate
 gunicorn app:app --bind 127.0.0.1:8000 --workers 1
 ```
 
-The app starts and serves pages without any API keys configured. Routes like `/`, `/team`, `/healthz`, and `/failing-dags` all return 200 even without `LINEAR_API_KEY` or `GITHUB_TOKEN` — the HTMX partials that fetch live data will fail gracefully. The `/healthz` endpoint always returns `{"status": "ok"}`.
+The app starts and serves pages without any API keys configured. Routes like `/`, `/team`, `/healthz`, and `/dags` all return 200 even without `LINEAR_API_KEY` or `GITHUB_TOKEN` — the HTMX partials that fetch live data will fail gracefully. The `/healthz` endpoint always returns `{"status": "ok"}`.
 
 ### Lint, type check, and test commands
 
