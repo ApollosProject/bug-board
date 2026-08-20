@@ -394,7 +394,7 @@
         </p>
       {% endif %}
       <div class="dag-controls">
-        <input class="dag-search" id="dag-search" type="search" placeholder="Search by name or state" aria-label="Search DAGs" />
+        <input class="dag-search" id="dag-search" type="search" placeholder="Search by DAG name" aria-label="Search DAGs by name" />
         {% if has_full_dag_list %}
           <label class="dag-toggle" for="show-all-dags">
             <input id="show-all-dags" type="checkbox" role="switch" />
@@ -404,7 +404,7 @@
       </div>
       <ul class="dag-list" id="dag-list">
         {% for dag in dags %}
-          <li class="dag-list-item" data-dag="{{ dag.dag_id|lower }} {{ dag.state|replace("_", " ")|lower }}" data-state="{{ dag.state|lower }}"{% if dag.state != "failed" %} hidden{% endif %}>
+          <li class="dag-list-item" data-dag="{{ dag.dag_id|lower }}" data-state="{{ dag.state|lower }}"{% if dag.state != "failed" %} hidden{% endif %}>
             <div class="dag-entry">
               {% if dag.astro_dag_url %}
                 <a
