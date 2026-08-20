@@ -34,6 +34,12 @@ python -m unittest discover -s tests -p 'test_*.py'
 
 - `LINEAR_API_KEY` – API token for Linear
 - `GITHUB_TOKEN` – GitHub token used for pull‑request data
+- `GITHUB_OAUTH_ENABLED` – Set to `true` to require GitHub sign-in; the app also enables the gate automatically when either OAuth credential is configured
+- `GITHUB_OAUTH_CLIENT_ID` – Client ID for the GitHub OAuth app that gates dashboard access
+- `GITHUB_OAUTH_CLIENT_SECRET` – Client secret for the GitHub OAuth app
+- `GITHUB_OAUTH_CALLBACK_URL` – OAuth callback URL (for example, `https://your-app.example/auth/github/callback`); when omitted, the app uses `APP_URL` plus `/auth/github/callback`
+- `GITHUB_OAUTH_ORG` – GitHub organization whose active members can sign in (default: `ApollosProject`)
+- `FLASK_SECRET_KEY` – Random value of at least 32 characters used to sign login sessions
 - `SLACK_WEBHOOK_URL` – Webhook URL used by the worker to post messages
 - `MANAGER_SLACK_WEBHOOK_URL` – Webhook URL used for manager-facing summaries
 - `APP_URL` – Public URL where the app is hosted
@@ -59,6 +65,30 @@ python -m unittest discover -s tests -p 'test_*.py'
 - `RIPPLING_PTO_TIMEZONE` – Optional IANA time zone used to place timed PTO entries on calendar days (default: `America/New_York`)
 
 These can be placed in a `.env` file or exported in your shell.
+
+### GitHub access gate
+
+Create an OAuth app owned by the `ApollosProject` GitHub organization and set its authorization
+callback URL to the same value as `GITHUB_OAUTH_CALLBACK_URL`. The application requests only the
+`read:org` scope, validates both the signed-in GitHub identity and active organization membership,
+and keeps the resulting login session for at most eight hours. The temporary GitHub access token is
+not stored in the session.
+
+Production uses `https://engineering.apollos.app` as `APP_URL` and
+`https://engineering.apollos.app/auth/github/callback` as `GITHUB_OAUTH_CALLBACK_URL`.
+
+Set `GITHUB_OAUTH_ENABLED=true`, `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`, and
+`FLASK_SECRET_KEY` in the deployed environment. Also set either `GITHUB_OAUTH_CALLBACK_URL` or
+`APP_URL`. Once OAuth is enabled or partially configured, the dashboard fails closed with `503`
+until every required value is present. `GET /healthz` remains public for platform health checks;
+all dashboard and static-resource routes require a verified session.
+
+For local OAuth testing, GitHub permits a loopback callback such as
+`http://127.0.0.1:8000/auth/github/callback`. Generate a session key without committing it:
+
+```bash
+python -c 'import secrets; print(secrets.token_hex(32))'
+```
 
 3. Edit `config.yml` to configure team members and platform ownership.
 

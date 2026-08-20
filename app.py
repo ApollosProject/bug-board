@@ -23,6 +23,7 @@ from github import (
     get_merged_pr_activity,
     get_merged_pr_counts_for_user,
 )
+from github_oauth import register_github_oauth
 from leaderboard import calculate_cycle_project_points
 from leaderboard_cache import DEFAULT_LEADERBOARD_DAYS, get_cached_leaderboard
 from leaderboard_export import build_leaderboard_export_rows, render_leaderboard_csv
@@ -198,6 +199,7 @@ def _apply_proxy_fix(flask_app: Flask) -> None:
 
 
 _apply_proxy_fix(app)
+register_github_oauth(app)
 
 INDEX_CONTEXT_CACHE_MAXSIZE = 16
 DEFAULT_ASTRO_UI_BASE_URL = "https://cloud.astronomer.io/cljsvo8d800yz01giqt70a7e7"

@@ -22,6 +22,15 @@
           <li><a href="{{ url_for('index') }}">Bug Board</a></li>
         </ul>
         <ul>
+          {% if session.get('github_login') %}
+            <li>
+              <form class="logout-form" method="post" action="{{ url_for('github_logout') }}">
+                <button type="submit" title="Sign out">
+                  @{{ session.get('github_login') }}
+                </button>
+              </form>
+            </li>
+          {% endif %}
           <li>
             <details class="dropdown site-menu">
               <summary role="button" class="outline" aria-label="Open local pages menu">
