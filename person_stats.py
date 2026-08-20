@@ -45,6 +45,7 @@ STDEV_DIRECTION_HINTS = {
 }
 
 STDEV_COLOR_THRESHOLD = 1.5
+STDEV_TRIM_PROPORTION = 0.2
 
 MetricValue = float | int | None
 
@@ -89,13 +90,26 @@ def performance_outliers(
     return outliers
 
 
+def _stdev_baseline(values: list[float]) -> tuple[list[float], bool]:
+    """Return a central cohort whose spread is not dominated by either tail."""
+    trim_count = int(len(values) * STDEV_TRIM_PROPORTION)
+    if trim_count == 0 or len(values) - (trim_count * 2) < 2:
+        return values, False
+
+    trimmed = sorted(values)[trim_count:-trim_count]
+    if statistics.pstdev(trimmed) == 0:
+        return values, False
+    return trimmed, True
+
+
 def z_score(value: float, values: list[float]) -> float | None:
     if len(values) < 2:
         return None
-    stdev = statistics.pstdev(values)
+    baseline, _trimmed = _stdev_baseline(values)
+    stdev = statistics.pstdev(baseline)
     if stdev == 0:
         return None
-    return (value - statistics.fmean(values)) / stdev
+    return (value - statistics.fmean(baseline)) / stdev
 
 
 def format_stdev_label(z: float) -> str:
@@ -114,7 +128,11 @@ def stdev_tone(z: float, *, threshold: float = STDEV_COLOR_THRESHOLD) -> str | N
 
 
 def format_stdev_tooltip(values: list[float], *, hint: str | None = None) -> str:
-    tooltip = f"eng avg {statistics.fmean(values):.1f} · σ {statistics.pstdev(values):.1f}"
+    baseline, trimmed = _stdev_baseline(values)
+    qualifier = " trimmed" if trimmed else ""
+    tooltip = (
+        f"eng{qualifier} avg {statistics.fmean(baseline):.1f} · σ {statistics.pstdev(baseline):.1f}"
+    )
     return f"{tooltip} · {hint}" if hint else tooltip
 
 

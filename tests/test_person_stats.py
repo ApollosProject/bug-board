@@ -69,6 +69,27 @@ class PersonStatsTest(unittest.TestCase):
         self.assertEqual(person_stats.z_score(10, [10, 2]), 1.0)
         self.assertEqual(person_stats.format_stdev_tooltip([10, 2]), "eng avg 6.0 · σ 4.0")
 
+    def test_z_scores_trim_extremes_without_clipping_exceptional_people(self):
+        prs_merged = [378, 77, 9, 81, 0, 99, 60, 26]
+        team_metrics = [{"prs_merged": value} for value in prs_merged]
+
+        low = person_stats.metric_stdevs_for_person({"prs_merged": 9}, team_metrics)["prs_merged"]
+        high = person_stats.metric_stdevs_for_person({"prs_merged": 378}, team_metrics)[
+            "prs_merged"
+        ]
+
+        self.assertEqual(low["label"], "−1.6σ")
+        self.assertEqual(low["tone"], "low")
+        self.assertEqual(low["tooltip"], "eng trimmed avg 58.7 · σ 31.6")
+        self.assertEqual(high["label"], "+10.1σ")
+        self.assertEqual(high["tone"], "high")
+
+    def test_z_scores_fall_back_when_trimming_removes_all_variance(self):
+        values = [20, 10, 10, 10, 0]
+
+        self.assertAlmostEqual(person_stats.z_score(20, values) or 0, 1.58, places=2)
+        self.assertEqual(person_stats.format_stdev_tooltip(values), "eng avg 10.0 · σ 6.3")
+
     def test_every_card_metric_has_an_explicit_stdev_direction(self):
         classified = person_stats.LOWER_IS_BETTER_METRIC_KEYS | frozenset(
             {
