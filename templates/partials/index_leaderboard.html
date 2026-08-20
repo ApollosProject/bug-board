@@ -8,7 +8,13 @@
   "Completed project lead: 30 pts/week",
   "Completed project member: 15 pts/week"
 ] | join('\n') %}
-<h2>Leaderboard ({{ window_label or (days ~ 'd') }})</h2>
+<div class="leaderboard-heading">
+  <h2>Leaderboard ({{ window_label or (days ~ 'd') }})</h2>
+  <a
+    class="leaderboard-export"
+    href="{{ url_for('leaderboard_csv', **(window_query or {'days': days})) }}"
+  >Export CSV</a>
+</div>
 <h4>
   Scores
   <small
