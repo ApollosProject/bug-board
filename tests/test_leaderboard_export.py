@@ -7,14 +7,15 @@ from leaderboard_export import build_leaderboard_export_rows, render_leaderboard
 
 class LeaderboardExportTest(unittest.TestCase):
     def test_csv_lists_score_parameters_and_route(self):
+        people = {"a": {}, "b": {}, "c": {}}
         rows = build_leaderboard_export_rows(
             [
                 {
                     "slug": "a",
                     "display_name": "A",
                     "score": 10,
-                    "points": {"urgent": 20, "prs": 10},
-                    "counts": {"urgent": 1, "prs": 10},
+                    "points": {"prs": 10, "urgent": 20},
+                    "counts": {"prs": 10, "urgent": 1},
                 },
                 {
                     "slug": "b",
@@ -23,22 +24,39 @@ class LeaderboardExportTest(unittest.TestCase):
                     "points": {"prs": 2},
                     "counts": {"prs": 2},
                 },
-            ]
+            ],
+            people=people,
+            regression_summary={
+                "configured": True,
+                "author_metrics": [{"slug": "c", "regression_count": 2, "rate": 4.0}],
+            },
         )
-        self.assertEqual([row["slug"] for row in rows], ["a", "b"])
-        self.assertEqual((rows[0]["urgent_issues"], rows[0]["prs_merged"]), (1, 10))
-        self.assertIn("person,slug,score,urgent_issues", render_leaderboard_csv(rows))
+        self.assertEqual([row["slug"] for row in rows], ["a", "b", "c"])
+        self.assertEqual(
+            (rows[0]["urgent_issues"], rows[0]["score_stdev"], rows[2]["regressions_authored"]),
+            (1, "1.4", 2),
+        )
+        self.assertIn("person,slug,score,score_stdev,urgent_issues", render_leaderboard_csv(rows))
+        client = app_module.app.test_client()
         ctx = {
             "days": 30,
             "preset_days": 30,
             "window_query": {"days": 30},
-            "leaderboard_entries": [{"slug": "a", "display_name": "A", "score": 10}],
+            "leaderboard_entries": [
+                {
+                    "slug": "a",
+                    "display_name": "A",
+                    "score": 10,
+                    "points": {"prs": 10},
+                    "counts": {"prs": 10},
+                }
+            ],
         }
-        client = app_module.app.test_client()
         with patch.object(app_module, "_leaderboard_page_context", return_value=ctx):
             csv_text = client.get("/leaderboard.csv").get_data(as_text=True)
             html = client.get("/partials/index/leaderboard").get_data(as_text=True)
         self.assertTrue(csv_text.startswith("person,slug,score"))
+        self.assertIn("a,10,", csv_text)
         self.assertIn("/leaderboard.csv?days=30", html)
         self.assertIn('class="leaderboard-export"', html)
         self.assertIn(">Export CSV</a>", html)
