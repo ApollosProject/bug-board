@@ -263,7 +263,7 @@ class RegressionAttributionTest(unittest.TestCase):
         self.assertEqual(loaded, [manual["url"]])
         self.assertEqual(corrected, [{**record, "attribution": manual}])
 
-    def test_person_metrics_use_the_inducing_pr_cohort(self):
+    def test_person_metrics_use_the_inducing_pr_cohort_and_stable_links(self):
         window = TimeWindow.from_dates(date(2026, 8, 1), date(2026, 8, 31))
         people = {
             "alice": {"slug": "alice", "github_username": "alice"},
@@ -272,6 +272,7 @@ class RegressionAttributionTest(unittest.TestCase):
         records = [
             {
                 "attribution": {
+                    "url": " https://github.com/example/zeta/pull/3/ ",
                     "merged_at": "2026-08-10T00:00:00Z",
                     "author": "alice",
                     "reviewers": ["bob"],
@@ -279,6 +280,15 @@ class RegressionAttributionTest(unittest.TestCase):
             },
             {
                 "attribution": {
+                    "url": "https://github.com/example/alpha/pull/12",
+                    "merged_at": "2026-08-11T00:00:00Z",
+                    "author": "alice",
+                    "reviewers": ["bob"],
+                }
+            },
+            {
+                "attribution": {
+                    "url": "https://github.com/example/repo/pull/11",
                     "merged_at": "2025-08-10T00:00:00Z",
                     "author": "alice",
                     "reviewers": ["bob"],
@@ -292,8 +302,15 @@ class RegressionAttributionTest(unittest.TestCase):
             {"alice": 10, "bob": 25},
             window,
         )
-        self.assertEqual(authors[0]["rate"], 5.0)
-        self.assertEqual(reviewers[1]["rate"], 4.0)
+        self.assertEqual(authors[0]["rate"], 10.0)
+        self.assertEqual(reviewers[1]["rate"], 8.0)
+        expected_pull_requests = [
+            {"url": "https://github.com/example/alpha/pull/12", "label": "alpha#12"},
+            {"url": "https://github.com/example/zeta/pull/3", "label": "zeta#3"},
+        ]
+        self.assertEqual(authors[0]["pull_requests"], expected_pull_requests)
+        self.assertEqual(reviewers[1]["pull_requests"], expected_pull_requests)
+        self.assertEqual(authors[1]["pull_requests"], [])
 
     def test_unconfigured_summary_skips_external_work(self):
         with patch.dict("os.environ", {}, clear=True):

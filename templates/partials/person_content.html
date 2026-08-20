@@ -8,6 +8,16 @@
   {%- set tone = (metric_stdevs or {}).get(key, {}).get('tone') -%}
   <h1{% if tone %} class="{{ tone }}"{% endif %}>{{ value }}</h1>
 {%- endmacro %}
+{% macro regression_pr_links(pull_requests) -%}
+  {%- if pull_requests -%}
+  <small class="regression-pr-links">
+    PRs:
+    {% for pull_request in pull_requests %}
+      <a href="{{ pull_request.url }}">{{ pull_request.label }}</a>{% if not loop.last %}, {% endif %}
+    {% endfor %}
+  </small>
+  {%- endif -%}
+{%- endmacro %}
 <h2>{{ 'Current Support Work' if on_call_support else 'Current Project Work' }}</h2>
 {% if open_current_cycle %}
 {% for project, issues in open_current_cycle.items() %}
@@ -77,6 +87,7 @@
     <article>
       <header>Authored Regressions</header>
       <h1>{{ regressions_authored }}</h1>
+      {{ regression_pr_links(authored_regression_pull_requests) }}
       <small>
         {% if author_regression_rate is not none %}
           {{ author_regression_rate }}% of merged PRs
@@ -90,6 +101,7 @@
     <article>
       <header>Approved Regressions</header>
       <h1>{{ regressions_approved }}</h1>
+      {{ regression_pr_links(approved_regression_pull_requests) }}
       <small>
         {% if reviewer_escape_rate is not none %}
           {{ reviewer_escape_rate }}% of approved PRs

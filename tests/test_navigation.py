@@ -152,8 +152,32 @@ class NavigationTest(unittest.TestCase):
                 return_value={
                     "days": 30,
                     "configured": True,
-                    "author_metrics": [{"slug": "brandon", "regression_count": 2, "rate": 3.3}],
-                    "reviewer_metrics": [{"slug": "brandon", "regression_count": 1, "rate": 1.9}],
+                    "author_metrics": [
+                        {
+                            "slug": "brandon",
+                            "regression_count": 2,
+                            "rate": 3.3,
+                            "pull_requests": [
+                                {
+                                    "url": "https://github.com/ApollosProject/apollos-platforms/pull/123",
+                                    "label": "apollos-platforms#123",
+                                }
+                            ],
+                        }
+                    ],
+                    "reviewer_metrics": [
+                        {
+                            "slug": "brandon",
+                            "regression_count": 1,
+                            "rate": 1.9,
+                            "pull_requests": [
+                                {
+                                    "url": "https://github.com/ApollosProject/apollos-cluster/pull/456",
+                                    "label": "apollos-cluster#456",
+                                }
+                            ],
+                        }
+                    ],
                 },
             ),
             patch.object(app_module, "get_open_issues_for_person", return_value=[]),
@@ -168,6 +192,14 @@ class NavigationTest(unittest.TestCase):
 
         self.assertEqual((context["prs_merged"], context["prs_reviewed"]), (60, 53))
         self.assertEqual((context["regressions_authored"], context["regressions_approved"]), (2, 1))
+        self.assertEqual(
+            context["authored_regression_pull_requests"][0]["label"],
+            "apollos-platforms#123",
+        )
+        self.assertEqual(
+            context["approved_regression_pull_requests"][0]["label"],
+            "apollos-cluster#456",
+        )
         merged_pr_query = parse_qs(urlparse(context["github_merged_prs_url"]).query)["q"][0]
         self.assertIn("author:bkraeling", merged_pr_query)
         self.assertIn("merged:>=2026-07-01", merged_pr_query)
@@ -176,6 +208,14 @@ class NavigationTest(unittest.TestCase):
         self.assertIn("merged%3A%3E%3D2026-07-01", body)
         self.assertIn("Authored Regressions", body)
         self.assertIn("3.3% of merged PRs", body)
+        self.assertIn(
+            '<a href="https://github.com/ApollosProject/apollos-platforms/pull/123">apollos-platforms#123</a>',
+            body,
+        )
+        self.assertIn(
+            '<a href="https://github.com/ApollosProject/apollos-cluster/pull/456">apollos-cluster#456</a>',
+            body,
+        )
         fetch.assert_called_once_with()
         counts.assert_called_once_with("bkraeling", 30, counts.call_args.args[2])
         support.assert_called_once_with(config=config, projects=projects)
