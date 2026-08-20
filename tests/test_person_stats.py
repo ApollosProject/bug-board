@@ -367,6 +367,7 @@ class PersonStatsTest(unittest.TestCase):
 
         with (
             patch.object(app_module, "load_config", return_value=config),
+            patch.object(app_module, "get_linear_team_key", return_value="APO"),
             patch.object(app_module, "get_open_issues_for_person", return_value=[]),
             patch.object(app_module, "get_completed_issues_for_person", return_value=completed),
             patch.object(app_module, "get_projects", return_value=[]),
