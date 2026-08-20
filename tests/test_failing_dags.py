@@ -86,25 +86,9 @@ class FixedDateTime(datetime):
         return datetime(2026, 3, 8, 17, 30, tzinfo=timezone.utc)
 
 
-def active_dag_entry(dag_id: str, **overrides: Any) -> dict[str, Any]:
-    entry = {
-        "dag_id": dag_id,
-        "tags": [],
-        "timetable_summary": "@once",
-        "next_run_at": "",
-        "has_import_errors": False,
-        "is_stale": False,
-    }
-    entry.update(overrides)
-    return entry
-
-
 class EvaluateFleetHealthTest(unittest.TestCase):
     def test_includes_full_failed_dag_list_and_truncated_top_list(self):
-        active_dags = {
-            dag_id: active_dag_entry(dag_id)
-            for dag_id in {f"dag-{index:02d}" for index in range(1, 22)}
-        }
+        active_dags = {f"dag-{index:02d}" for index in range(1, 22)}
         latest_runs = {
             dag_id: {
                 "latest_state": "failed" if dag_id <= "dag-11" else "success",
@@ -135,6 +119,8 @@ class EvaluateFleetHealthTest(unittest.TestCase):
                             payload, status = airflow_fleet_health.evaluate_fleet_health()
 
         self.assertEqual(status, 503)
+        self.assertEqual(len(payload["dags"]), 21)
+        self.assertEqual(payload["dags"][0]["state"], "failed")
         self.assertEqual(payload["failed_runs"], 11)
         self.assertEqual(len(payload["failed_dags"]), 11)
         self.assertEqual(len(payload["top_failed_dags"]), 10)
@@ -143,15 +129,9 @@ class EvaluateFleetHealthTest(unittest.TestCase):
         self.assertEqual(payload["failed_dags"][0]["dag_run_id"], "run-dag-01")
         self.assertEqual(payload["failed_dags"][-1]["dag_id"], "dag-11")
         self.assertEqual(payload["failed_dags"][-1]["dag_run_id"], "run-dag-11")
-        self.assertEqual(len(payload["dags"]), 21)
-        self.assertEqual(payload["dags"][0]["dag_id"], "dag-01")
-        self.assertEqual(payload["dags"][0]["state"], "failed")
 
     def test_uses_latest_terminal_run_when_newest_run_is_still_running(self):
-        active_dags = {
-            dag_id: active_dag_entry(dag_id)
-            for dag_id in {"one_church_planning_center_people_dag", "healthy_dag"}
-        }
+        active_dags = {"one_church_planning_center_people_dag", "healthy_dag"}
         latest_runs = {
             "one_church_planning_center_people_dag": {
                 "latest_state": "running",
@@ -190,6 +170,10 @@ class EvaluateFleetHealthTest(unittest.TestCase):
         self.assertEqual(payload["failed_runs"], 1)
         self.assertEqual(payload["non_terminal_dags"], 1)
         self.assertEqual(
+            {dag["dag_id"]: dag["state"] for dag in payload["dags"]},
+            {"healthy_dag": "success", "one_church_planning_center_people_dag": "running"},
+        )
+        self.assertEqual(
             payload["failed_dags"],
             [
                 {
@@ -199,9 +183,6 @@ class EvaluateFleetHealthTest(unittest.TestCase):
                 }
             ],
         )
-        failing_inventory_entry = payload["dags"][0]
-        self.assertEqual(failing_inventory_entry["state"], "failed")
-        self.assertEqual(failing_inventory_entry["current_state"], "running")
 
 
 class FetchLastRunForDagTest(unittest.TestCase):
@@ -211,12 +192,10 @@ class FetchLastRunForDagTest(unittest.TestCase):
                 {
                     "dag_run_id": "scheduled__2026-04-17T15:17:00+00:00",
                     "state": "running",
-                    "logical_date": "2026-04-17T15:17:00+00:00",
                 },
                 {
                     "dag_run_id": "scheduled__2026-04-17T14:47:00+00:00",
                     "state": "failed",
-                    "logical_date": "2026-04-17T14:47:00+00:00",
                 },
             ]
         }
@@ -237,9 +216,7 @@ class FetchLastRunForDagTest(unittest.TestCase):
             latest_run,
             {
                 "latest_state": "running",
-                "latest_run_at": "2026-04-17T15:17:00+00:00",
                 "latest_terminal_state": "failed",
-                "latest_terminal_run_at": "2026-04-17T14:47:00+00:00",
                 "dag_run_id": "scheduled__2026-04-17T14:47:00+00:00",
                 "has_runs": True,
             },
@@ -251,7 +228,6 @@ class FetchLastRunForDagTest(unittest.TestCase):
                 {
                     "dag_run_id": f"scheduled__2026-04-17T15:{index:02d}:00+00:00",
                     "state": "running",
-                    "logical_date": f"2026-04-17T15:{index:02d}:00+00:00",
                 }
                 for index in range(10)
             ],
@@ -262,7 +238,6 @@ class FetchLastRunForDagTest(unittest.TestCase):
                 {
                     "dag_run_id": "scheduled__2026-04-17T14:47:00+00:00",
                     "state": "failed",
-                    "logical_date": "2026-04-17T14:47:00+00:00",
                 }
             ],
             "total_entries": 11,
@@ -291,9 +266,7 @@ class FetchLastRunForDagTest(unittest.TestCase):
             latest_run,
             {
                 "latest_state": "running",
-                "latest_run_at": "2026-04-17T15:00:00+00:00",
                 "latest_terminal_state": "failed",
-                "latest_terminal_run_at": "2026-04-17T14:47:00+00:00",
                 "dag_run_id": "scheduled__2026-04-17T14:47:00+00:00",
                 "has_runs": True,
             },
@@ -316,9 +289,6 @@ class FetchActiveDagsPaginationTest(unittest.TestCase):
                     {
                         "dag_id": "fairhaven_wordpress_content_item_dag",
                         "is_paused": False,
-                        "tags": [{"name": "content"}, {"name": "wordpress"}],
-                        "timetable_summary": "0 * * * *",
-                        "next_dagrun_run_after": "2026-08-20T18:00:00+00:00",
                     },
                     {"dag_id": "dag-004", "is_paused": False},
                 ],
@@ -344,15 +314,6 @@ class FetchActiveDagsPaginationTest(unittest.TestCase):
         self.assertEqual(offsets_seen, [0, 2, 4])
         self.assertIn("fairhaven_wordpress_content_item_dag", dags)
         self.assertEqual(len(dags), 5)
-        self.assertEqual(
-            dags["fairhaven_wordpress_content_item_dag"],
-            active_dag_entry(
-                "fairhaven_wordpress_content_item_dag",
-                tags=["content", "wordpress"],
-                timetable_summary="0 * * * *",
-                next_run_at="2026-08-20T18:00:00+00:00",
-            ),
-        )
 
 
 class FetchActiveDagsTest(unittest.TestCase):
@@ -409,7 +370,7 @@ class FetchActiveDagsTest(unittest.TestCase):
             dag["dag_id"] for page in pages for dag in page["dags"] if not dag["is_paused"]
         }
         self.assertEqual(seen_offsets, [0, 100, 200])
-        self.assertEqual(set(active_dags), expected_dags)
+        self.assertEqual(active_dags, expected_dags)
 
 
 class DagsDashboardTest(unittest.TestCase):
@@ -417,19 +378,14 @@ class DagsDashboardTest(unittest.TestCase):
         self.client = app_module.app.test_client()
 
     def test_dashboard_honors_forwarded_prefix_for_app_links(self):
-        payload = {
-            "status": "healthy",
-            "active_dags_total": 0,
-            "failed_runs": 0,
-            "dags": [],
-        }
+        payload = {"status": "healthy", "failed_runs": 0, "failed_dags": []}
 
         with patch.object(
             app_module,
             "_get_airflow_fleet_health_payload",
             return_value=(payload, 200),
         ):
-            response = self.client.get("/dags", headers={"X-Forwarded-Prefix": "/grid"})
+            response = self.client.get("/failing-dags", headers={"X-Forwarded-Prefix": "/grid"})
 
         body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
@@ -471,10 +427,15 @@ class DagsDashboardTest(unittest.TestCase):
             "evaluated_dags": 3,
             "failed_fetches": 0,
             "dags_without_runs": 0,
-            "non_terminal_dags": 1,
+            "non_terminal_dags": 0,
             "failed_runs": 2,
             "failure_ratio": 2 / 3,
             "threshold_ratio": 0.10,
+            "dags": [
+                {"dag_id": "alpha_dag", "state": "failed", "dag_run_id": "run-alpha"},
+                {"dag_id": "beta_dag", "state": "failed", "dag_run_id": "run-beta"},
+                {"dag_id": "gamma_dag", "state": "success", "dag_run_id": "run-gamma"},
+            ],
             "failed_dags": [
                 {
                     "dag_id": "alpha_dag",
@@ -492,44 +453,6 @@ class DagsDashboardTest(unittest.TestCase):
                     "dag_id": "alpha_dag",
                     "state": "failed",
                     "dag_run_id": "run-alpha",
-                },
-            ],
-            "dags": [
-                {
-                    "dag_id": "alpha_dag",
-                    "state": "failed",
-                    "current_state": "running",
-                    "latest_run_at": "2026-08-20T17:10:00+00:00",
-                    "latest_terminal_run_at": "2026-08-20T16:10:00+00:00",
-                    "tags": ["giving", "delta"],
-                    "timetable_summary": "10 * * * *",
-                    "next_run_at": "2026-08-20T18:10:00+00:00",
-                    "has_import_errors": False,
-                    "is_stale": False,
-                },
-                {
-                    "dag_id": "beta_dag",
-                    "state": "failed",
-                    "current_state": "",
-                    "latest_run_at": "2026-08-20T16:30:00+00:00",
-                    "latest_terminal_run_at": "2026-08-20T16:30:00+00:00",
-                    "tags": ["people"],
-                    "timetable_summary": "30 * * * *",
-                    "next_run_at": "2026-08-20T17:30:00+00:00",
-                    "has_import_errors": False,
-                    "is_stale": False,
-                },
-                {
-                    "dag_id": "gamma_dag",
-                    "state": "success",
-                    "current_state": "",
-                    "latest_run_at": "2026-08-20T16:00:00+00:00",
-                    "latest_terminal_run_at": "2026-08-20T16:00:00+00:00",
-                    "tags": ["content"],
-                    "timetable_summary": "@daily",
-                    "next_run_at": "2026-08-21T00:00:00+00:00",
-                    "has_import_errors": False,
-                    "is_stale": False,
                 },
             ],
         }
@@ -552,9 +475,7 @@ class DagsDashboardTest(unittest.TestCase):
 
         body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
-        self.assertIn("<title>DAGs</title>", body)
         self.assertIn("<h1>DAGs</h1>", body)
-        self.assertNotIn("Failing DAGs", body)
         self.assertIn("alpha_dag", body)
         self.assertIn("beta_dag", body)
         self.assertIn("Open in Astro", body)
@@ -578,23 +499,16 @@ class DagsDashboardTest(unittest.TestCase):
             ),
             body,
         )
+        self.assertIn('<ul class="dag-list" id="dag-list">', body)
+        self.assertIn(".dag-list-item {", body)
+        self.assertIn("list-style: none;", body)
+        self.assertIn(".dag-list-item::marker {", body)
+        self.assertIn('content: "";', body)
+        self.assertIn("3 shown", body)
         self.assertIn('id="dag-search"', body)
-        self.assertIn('id="dag-status-filter"', body)
-        self.assertIn('class="dag-table"', body)
-        self.assertIn('scope="col">Last completed</th>', body)
-        self.assertIn('scope="col">Schedule</th>', body)
-        self.assertIn('scope="col">Next run</th>', body)
-        self.assertIn("giving", body)
-        self.assertIn("delta", body)
-        self.assertIn("10 * * * *", body)
-        self.assertIn("Running now", body)
-        self.assertIn('datetime="2026-08-20T18:10:00+00:00"', body)
-        self.assertIn("Needs attention (2)", body)
-        self.assertIn("Succeeded (1)", body)
-        self.assertNotIn("Failure Ratio", body)
-        self.assertNotIn("Failed Fetches", body)
-        self.assertNotIn("Missing Latest Run", body)
-        self.assertNotIn("HTTP 503", body)
+        self.assertIn('data-dag="gamma_dag success"', body)
+        self.assertIn("success", body)
+        self.assertIn("The underlying fleet check is currently returning HTTP 503.", body)
 
     def test_dashboard_marks_legacy_top_failed_dags_payload_as_partial(self):
         payload = {
@@ -625,10 +539,10 @@ class DagsDashboardTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("alpha_dag", body)
         self.assertIn("beta_dag", body)
-        self.assertEqual(body.count('class="dag-row"'), 2)
+        self.assertIn("2 shown", body)
         self.assertIn('/dags/alpha_dag"', body)
         self.assertNotIn("/dags/alpha_dag/grid?dag_run_id=", body)
-        self.assertIn("The inventory is refreshing", body)
+        self.assertIn("This cached snapshot only includes failing DAGs.", body)
 
     def test_dashboard_explains_missing_airflow_credentials_without_live_eval(self):
         with patch.dict(app_module.os.environ, {}, clear=False):
@@ -647,14 +561,16 @@ class DagsDashboardTest(unittest.TestCase):
         body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
         self.assertIn("Setup required", body)
+        self.assertIn("Review app setup", body)
         self.assertIn("Airflow credentials are missing for this app.", body)
         self.assertIn("AIRFLOW_API_BASE_URL", body)
         self.assertIn("AIRFLOW_API_TOKEN", body)
         self.assertIn("Add the missing", body)
-        self.assertIn("current run states, schedules, next-run", body)
-        self.assertNotIn("The DAG inventory is temporarily unavailable.", body)
-        self.assertNotIn("HTTP 503", body)
-        self.assertNotIn('class="fleet-counts"', body)
+        self.assertIn("Airflow API values below", body)
+        self.assertIn("health metrics, and DAG list automatically.", body)
+        self.assertNotIn("DAG data is currently unavailable.", body)
+        self.assertNotIn("The underlying fleet check is currently returning HTTP 503.", body)
+        self.assertNotIn("<strong>Active DAGs</strong>", body)
         evaluate_mock.assert_not_called()
 
     def test_dashboard_uses_cached_payload_without_token_when_configured(self):
@@ -704,9 +620,10 @@ class DagsDashboardTest(unittest.TestCase):
         body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
         self.assertIn("Setup required", body)
+        self.assertIn("Required before this page can load", body)
         self.assertIn("AIRFLOW_API_BASE_URL", body)
         self.assertIn("AIRFLOW_API_TOKEN", body)
-        self.assertNotIn("The DAG inventory is temporarily unavailable.", body)
+        self.assertNotIn("DAG data is currently unavailable.", body)
         evaluate_mock.assert_not_called()
 
     def test_dashboard_skips_live_eval_without_cache_when_token_is_absent(self):
@@ -728,7 +645,7 @@ class DagsDashboardTest(unittest.TestCase):
 
         body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
-        self.assertIn("The DAG inventory is temporarily unavailable.", body)
+        self.assertIn("DAG data is currently unavailable.", body)
         self.assertNotIn("Setup required", body)
         evaluate_mock.assert_not_called()
 
@@ -748,7 +665,7 @@ class DagsDashboardTest(unittest.TestCase):
 
         body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
-        self.assertIn("The DAG inventory is temporarily unavailable.", body)
+        self.assertIn("DAG data is currently unavailable.", body)
         evaluate_mock.assert_not_called()
 
     def test_dashboard_uses_live_eval_without_cache_in_debug_mode(self):
@@ -777,20 +694,6 @@ class DagsDashboardTest(unittest.TestCase):
                     "dag_run_id": "run-alpha",
                 }
             ],
-            "dags": [
-                {
-                    "dag_id": "alpha_dag",
-                    "state": "failed",
-                    "current_state": "running",
-                    "latest_run_at": "2026-08-20T17:10:00+00:00",
-                    "latest_terminal_run_at": "2026-08-20T16:10:00+00:00",
-                    "tags": ["giving"],
-                    "timetable_summary": "10 * * * *",
-                    "next_run_at": "2026-08-20T18:10:00+00:00",
-                    "has_import_errors": False,
-                    "is_stale": False,
-                }
-            ],
         }
 
         with patch.dict(
@@ -817,11 +720,8 @@ class DagsDashboardTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("alpha_dag", body)
         self.assertIn("25", body)
-        self.assertIn("giving", body)
-        self.assertIn("10 * * * *", body)
-        self.assertIn("Running now", body)
-        self.assertNotIn("Evaluated DAGs", body)
-        self.assertNotIn("Failed Fetches", body)
+        self.assertIn("4", body)
+        self.assertIn("3", body)
         evaluate_mock.assert_called_once_with()
 
     def test_dashboard_shows_setup_required_when_live_eval_is_disabled_and_creds_missing(self):
@@ -842,7 +742,7 @@ class DagsDashboardTest(unittest.TestCase):
         self.assertIn("Setup required", body)
         self.assertIn("AIRFLOW_API_BASE_URL", body)
         self.assertIn("AIRFLOW_API_TOKEN", body)
-        self.assertNotIn("The DAG inventory is temporarily unavailable.", body)
+        self.assertNotIn("DAG data is currently unavailable.", body)
         evaluate_mock.assert_not_called()
 
     def test_healthz_returns_ok_payload(self):
