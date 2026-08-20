@@ -510,6 +510,11 @@ a.leaderboard-export:is(:hover, :focus) { color: var(--pico-primary); }
   overflow-wrap: anywhere;
 }
 
+.regression-attributions { margin-top: 0.5rem; }
+.regression-attributions summary { font-size: 0.8rem; font-weight: 600; }
+.regression-attributions ol { margin-bottom: 0; padding-left: 1.25rem; }
+.regression-attributions li + li { margin-top: 0.5rem; }
+
 @media (max-width: 32rem) {
   .logout-form button {
     max-width: 32vw;

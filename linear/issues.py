@@ -264,6 +264,7 @@ def get_completed_regression_candidates(
             nodes {
               id
               identifier
+              url
               attachments {
                 nodes {
                   metadata

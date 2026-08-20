@@ -18,6 +18,42 @@
   </small>
   {%- endif -%}
 {%- endmacro %}
+{% macro regression_attribution_details(attributions) -%}
+  {%- if attributions -%}
+  <details class="regression-attributions">
+    <summary>Attribution evidence ({{ attributions|length }})</summary>
+    <small>
+      Bug Board traces lines removed by each fixing PR, then ranks the PRs that last changed them.
+    </small>
+    <ol>
+      {% for detail in attributions %}
+      <li>
+        <a href="{{ detail.inducing_pr.url }}">{{ detail.inducing_pr.label }}</a>
+        <small>
+          {% if detail.manual_override %}
+            Manual correction
+          {% else %}
+            {{ detail.line_count }} matching deleted line{{ '' if detail.line_count == 1 else 's' }};
+            ranked first of {{ detail.candidate_count }} candidate{{ '' if detail.candidate_count == 1 else 's' }}
+          {% endif %}
+          for
+          {% if detail.issue_url %}<a href="{{ detail.issue_url }}">{{ detail.identifier }}</a>{% else %}{{ detail.identifier }}{% endif %}.
+          {% if detail.fixing_prs %}
+            Fix{% if detail.fixing_prs|length > 1 %}es{% endif %}:
+            {% for fixing_pr in detail.fixing_prs %}
+              <a href="{{ fixing_pr.url }}">{{ fixing_pr.label }}</a>{% if not loop.last %}, {% else %}.{% endif %}
+            {% endfor %}
+          {% endif %}
+          {% if not detail.analysis_complete %}
+            Blame data was incomplete.
+          {% endif %}
+        </small>
+      </li>
+      {% endfor %}
+    </ol>
+  </details>
+  {%- endif -%}
+{%- endmacro %}
 <h2>{{ 'Current Support Work' if on_call_support else 'Current Project Work' }}</h2>
 {% if open_current_cycle %}
 {% for project, issues in open_current_cycle.items() %}
@@ -88,6 +124,7 @@
       <header>Authored Regressions</header>
       <h1>{{ regressions_authored }}</h1>
       {{ regression_pr_links(authored_regression_pull_requests) }}
+      {{ regression_attribution_details(authored_regression_attributions) }}
       <small>
         {% if author_regression_rate is not none %}
           {{ author_regression_rate }}% of merged PRs
@@ -102,6 +139,7 @@
       <header>Approved Regressions</header>
       <h1>{{ regressions_approved }}</h1>
       {{ regression_pr_links(approved_regression_pull_requests) }}
+      {{ regression_attribution_details(approved_regression_attributions) }}
       <small>
         {% if reviewer_escape_rate is not none %}
           {{ reviewer_escape_rate }}% of approved PRs

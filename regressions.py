@@ -84,6 +84,13 @@ def merge_issue_attributions(
     )
     return {
         "identifier": issue.get("identifier"),
+        "issue_url": issue.get("url"),
+        "fixing_urls": fixing_urls,
+        "complete": all(
+            isinstance(result := attributions_by_fix_url.get(url), dict)
+            and result.get("complete", True)
+            for url in fixing_urls
+        ),
         "candidates": candidates,
         "attribution": candidates[0] if candidates else None,
     }
@@ -123,6 +130,7 @@ def apply_regression_overrides(
                     logging.warning("Unable to load regression override: %s", exc)
             if candidate is not None:
                 record["attribution"] = candidate
+                record["manual_override"] = True
         corrected.append(record)
     return corrected
 
@@ -147,13 +155,15 @@ def collect_regression_attributions(
             url = futures[future]
             try:
                 result = future.result()
+                if result is None:
+                    result = {"complete": False, "candidates": []}
                 results[url] = result
-                if result is not None and not result.get("complete", True):
+                if not result.get("complete", True):
                     failed_urls.add(url)
             except Exception as exc:
                 logging.warning("Regression attribution failed for %s: %s", url, exc)
                 failed_urls.add(url)
-                results[url] = None
+                results[url] = {"complete": False, "candidates": []}
     records = [
         merge_issue_attributions(
             issue,
@@ -233,6 +243,45 @@ def _sorted_pull_request_links(
     return sorted(links.values(), key=lambda link: (link["label"].casefold(), link["url"]))
 
 
+def _regression_attribution_detail(record: dict[str, Any]) -> dict[str, Any] | None:
+    attribution = record.get("attribution")
+    if not isinstance(attribution, dict):
+        return None
+    inducing_pr = _pull_request_link(attribution)
+    if inducing_pr is None:
+        return None
+
+    fixing_prs = [
+        link
+        for url in record.get("fixing_urls") or []
+        if (link := _pull_request_link({"url": url})) is not None
+    ]
+    return {
+        "identifier": str(record.get("identifier") or "Regression"),
+        "issue_url": record.get("issue_url"),
+        "inducing_pr": inducing_pr,
+        "fixing_prs": fixing_prs,
+        "line_count": attribution.get("line_count"),
+        "candidate_count": sum(
+            isinstance(candidate, dict) for candidate in record.get("candidates") or []
+        ),
+        "analysis_complete": record.get("complete", True) is True,
+        "manual_override": record.get("manual_override") is True,
+    }
+
+
+def _sorted_regression_attributions(
+    attributions: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return sorted(
+        attributions,
+        key=lambda item: (
+            item["identifier"].casefold(),
+            item["inducing_pr"]["url"],
+        ),
+    )
+
+
 def _person_metrics(
     records: list[dict[str, Any]],
     people: dict[str, dict[str, str]],
@@ -248,6 +297,8 @@ def _person_metrics(
     approved_pull_requests: dict[str, dict[str, dict[str, str]]] = {
         username: {} for username in people
     }
+    authored_attributions: dict[str, list[dict[str, Any]]] = {username: [] for username in people}
+    approved_attributions: dict[str, list[dict[str, Any]]] = {username: [] for username in people}
     for record in records:
         attribution = record.get("attribution")
         if not isinstance(attribution, dict):
@@ -256,18 +307,23 @@ def _person_metrics(
         if merged_at is None or not window.start <= merged_at < window.end:
             continue
         pull_request = _pull_request_link(attribution)
+        detail = _regression_attribution_detail(record)
         author = attribution.get("author")
         if isinstance(author, str) and author.casefold() in authored_regressions:
             username = author.casefold()
             authored_regressions[username] += 1
             if pull_request is not None:
                 authored_pull_requests[username].setdefault(pull_request["url"], pull_request)
+            if detail is not None:
+                authored_attributions[username].append(detail)
         for reviewer in attribution.get("reviewers") or []:
             if isinstance(reviewer, str) and reviewer.casefold() in approved_regressions:
                 username = reviewer.casefold()
                 approved_regressions[username] += 1
                 if pull_request is not None:
                     approved_pull_requests[username].setdefault(pull_request["url"], pull_request)
+                if detail is not None:
+                    approved_attributions[username].append(detail)
 
     author_rows, reviewer_rows = [], []
     for username, person in people.items():
@@ -280,6 +336,7 @@ def _person_metrics(
                 "pr_count": authored_count,
                 "rate": _rate(authored_regressions[username], authored_count),
                 "pull_requests": _sorted_pull_request_links(authored_pull_requests[username]),
+                "attributions": _sorted_regression_attributions(authored_attributions[username]),
             }
         )
         reviewer_rows.append(
@@ -289,6 +346,7 @@ def _person_metrics(
                 "pr_count": reviewed_count,
                 "rate": _rate(approved_regressions[username], reviewed_count),
                 "pull_requests": _sorted_pull_request_links(approved_pull_requests[username]),
+                "attributions": _sorted_regression_attributions(approved_attributions[username]),
             }
         )
     return author_rows, reviewer_rows

@@ -1766,9 +1766,11 @@ def _build_person_context(
         "regressions_authored": author_regression_metric.get("regression_count", 0),
         "author_regression_rate": author_regression_metric.get("rate"),
         "authored_regression_pull_requests": author_regression_metric.get("pull_requests", []),
+        "authored_regression_attributions": author_regression_metric.get("attributions", []),
         "regressions_approved": reviewer_regression_metric.get("regression_count", 0),
         "reviewer_escape_rate": reviewer_regression_metric.get("rate"),
         "approved_regression_pull_requests": reviewer_regression_metric.get("pull_requests", []),
+        "approved_regression_attributions": reviewer_regression_metric.get("attributions", []),
         "platform_labels": platform_labels,
         "platform_values": platform_values,
     }

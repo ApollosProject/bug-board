@@ -163,6 +163,26 @@ class NavigationTest(unittest.TestCase):
                                     "label": "apollos-platforms#123",
                                 }
                             ],
+                            "attributions": [
+                                {
+                                    "identifier": "APO-123",
+                                    "issue_url": "https://linear.app/apollos/issue/APO-123/example",
+                                    "inducing_pr": {
+                                        "url": "https://github.com/ApollosProject/apollos-platforms/pull/123",
+                                        "label": "apollos-platforms#123",
+                                    },
+                                    "fixing_prs": [
+                                        {
+                                            "url": "https://github.com/ApollosProject/apollos-platforms/pull/124",
+                                            "label": "apollos-platforms#124",
+                                        }
+                                    ],
+                                    "line_count": 3,
+                                    "candidate_count": 2,
+                                    "analysis_complete": False,
+                                    "manual_override": False,
+                                }
+                            ],
                         }
                     ],
                     "reviewer_metrics": [
@@ -200,6 +220,11 @@ class NavigationTest(unittest.TestCase):
             context["approved_regression_pull_requests"][0]["label"],
             "apollos-cluster#456",
         )
+        self.assertEqual(
+            context["authored_regression_attributions"][0]["identifier"],
+            "APO-123",
+        )
+        self.assertEqual(context["approved_regression_attributions"], [])
         merged_pr_query = parse_qs(urlparse(context["github_merged_prs_url"]).query)["q"][0]
         self.assertIn("author:bkraeling", merged_pr_query)
         self.assertIn("merged:>=2026-07-01", merged_pr_query)
@@ -216,6 +241,12 @@ class NavigationTest(unittest.TestCase):
             '<a href="https://github.com/ApollosProject/apollos-cluster/pull/456">apollos-cluster#456</a>',
             body,
         )
+        self.assertIn("Attribution evidence (1)", body)
+        self.assertIn("APO-123", body)
+        self.assertIn("apollos-platforms#124", body)
+        self.assertIn("3 matching deleted lines;", body)
+        self.assertIn("ranked first of 2 candidates", body)
+        self.assertIn("Blame data was incomplete.", body)
         fetch.assert_called_once_with()
         counts.assert_called_once_with("bkraeling", 30, counts.call_args.args[2])
         support.assert_called_once_with(config=config, projects=projects)
