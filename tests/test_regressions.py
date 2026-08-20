@@ -11,6 +11,7 @@ from regressions import (
     _person_metrics,
     apply_regression_overrides,
     build_regression_summary,
+    collect_regression_attributions,
     extract_fixing_pr_urls,
     load_regression_overrides,
     merge_issue_attributions,
@@ -132,6 +133,22 @@ class RegressionAttributionTest(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertFalse(result["complete"])  # type: ignore[index]
 
+    def test_missing_fixing_pr_metadata_marks_collection_incomplete(self):
+        fixing_url = "https://github.com/example/repo/pull/10"
+        with (
+            patch.dict("os.environ", {"LINEAR_API_KEY": "x", "GITHUB_TOKEN": "x"}),
+            patch("regressions.get_completed_regression_candidates", return_value=[{"id": "1"}]),
+            patch("regressions.extract_fixing_pr_urls", return_value=[fixing_url]),
+            patch("regressions.get_fixing_pr_attribution", return_value=None),
+        ):
+            records, failed_count = collect_regression_attributions(
+                TimeWindow.from_dates(date(2026, 8, 1), date(2026, 8, 31))
+            )
+
+        self.assertEqual(failed_count, 1)
+        self.assertFalse(records[0]["complete"])
+        self.assertIsNone(records[0]["attribution"])
+
     def test_attribution_metadata_filters_human_reviewers(self):
         url = "https://github.com/example/repo/pull/10"
         pull_request = {
@@ -239,16 +256,22 @@ class RegressionAttributionTest(unittest.TestCase):
             "author": "author",
         }
         record = merge_issue_attributions(
-            {"identifier": "APO-123"},
+            {
+                "identifier": "APO-123",
+                "url": "https://linear.app/apollos/issue/APO-123/example",
+            },
             [fixing_url, other_fix],
             {
                 fixing_url: {"candidates": [winner]},
-                other_fix: {"candidates": [later]},
+                other_fix: {"complete": False, "candidates": [later]},
             },
         )
         self.assertEqual(record["attribution"]["score"], 4.0)
         self.assertEqual(record["attribution"]["line_count"], 5)
         self.assertNotIn("age_days", record["attribution"])
+        self.assertEqual(record["issue_url"], "https://linear.app/apollos/issue/APO-123/example")
+        self.assertEqual(record["fixing_urls"], [fixing_url, other_fix])
+        self.assertFalse(record["complete"])
 
         loaded: list[str] = []
         manual = {"url": "https://github.com/example/repo/pull/9"}
@@ -261,7 +284,7 @@ class RegressionAttributionTest(unittest.TestCase):
             metadata_loader=lambda url: loaded.append(url) or manual,
         )
         self.assertEqual(loaded, [manual["url"]])
-        self.assertEqual(corrected, [{**record, "attribution": manual}])
+        self.assertEqual(corrected, [{**record, "attribution": manual, "manual_override": True}])
 
     def test_person_metrics_use_the_inducing_pr_cohort_and_stable_links(self):
         window = TimeWindow.from_dates(date(2026, 8, 1), date(2026, 8, 31))
@@ -271,20 +294,31 @@ class RegressionAttributionTest(unittest.TestCase):
         }
         records = [
             {
+                "identifier": "APO-2",
+                "issue_url": "https://linear.app/apollos/issue/APO-2/example",
+                "fixing_urls": ["https://github.com/example/zeta/pull/4"],
+                "candidates": [{"url": "first"}, {"url": "second"}],
+                "complete": False,
                 "attribution": {
                     "url": " https://github.com/example/zeta/pull/3/ ",
                     "merged_at": "2026-08-10T00:00:00Z",
                     "author": "alice",
                     "reviewers": ["bob"],
-                }
+                    "line_count": 3,
+                },
             },
             {
+                "identifier": "APO-1",
+                "issue_url": "https://linear.app/apollos/issue/APO-1/example",
+                "fixing_urls": ["https://github.com/example/alpha/pull/13"],
+                "candidates": [{"url": "candidate"}],
+                "manual_override": True,
                 "attribution": {
                     "url": "https://github.com/example/alpha/pull/12",
                     "merged_at": "2026-08-11T00:00:00Z",
                     "author": "alice",
                     "reviewers": ["bob"],
-                }
+                },
             },
             {
                 "attribution": {
@@ -311,6 +345,14 @@ class RegressionAttributionTest(unittest.TestCase):
         self.assertEqual(authors[0]["pull_requests"], expected_pull_requests)
         self.assertEqual(reviewers[1]["pull_requests"], expected_pull_requests)
         self.assertEqual(authors[1]["pull_requests"], [])
+        first, second = authors[0]["attributions"]
+        self.assertEqual((first["identifier"], second["identifier"]), ("APO-1", "APO-2"))
+        self.assertTrue(first["manual_override"])
+        self.assertEqual(second["fixing_prs"][0]["label"], "zeta#4")
+        self.assertEqual((second["line_count"], second["candidate_count"]), (3, 2))
+        self.assertFalse(second["analysis_complete"])
+        self.assertEqual(reviewers[1]["attributions"], authors[0]["attributions"])
+        self.assertEqual(authors[1]["attributions"], [])
 
     def test_unconfigured_summary_skips_external_work(self):
         with patch.dict("os.environ", {}, clear=True):
