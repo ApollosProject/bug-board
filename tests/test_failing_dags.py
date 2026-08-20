@@ -173,6 +173,7 @@ class EvaluateFleetHealthTest(unittest.TestCase):
             {dag["dag_id"]: dag["state"] for dag in payload["dags"]},
             {"healthy_dag": "success", "one_church_planning_center_people_dag": "running"},
         )
+        self.assertEqual(payload["dags"][1]["dag_run_id"], "")
         self.assertEqual(
             payload["failed_dags"],
             [
@@ -434,7 +435,7 @@ class DagsDashboardTest(unittest.TestCase):
             "dags": [
                 {"dag_id": "alpha_dag", "state": "failed", "dag_run_id": "run-alpha"},
                 {"dag_id": "beta_dag", "state": "failed", "dag_run_id": "run-beta"},
-                {"dag_id": "gamma_dag", "state": "success", "dag_run_id": "run-gamma"},
+                {"dag_id": "gamma_dag", "state": "up_for_retry", "dag_run_id": "run-gamma"},
             ],
             "failed_dags": [
                 {
@@ -507,9 +508,10 @@ class DagsDashboardTest(unittest.TestCase):
         self.assertIn("2 shown", body)
         self.assertIn('id="dag-search"', body)
         self.assertIn('<input id="show-all-dags" type="checkbox" role="switch" />', body)
-        self.assertIn('data-state="success" hidden', body)
+        self.assertIn('data-dag="gamma_dag up for retry"', body)
+        self.assertIn('data-state="up_for_retry" hidden', body)
         self.assertIn('item.dataset.state === "failed"', body)
-        self.assertIn("success", body)
+        self.assertIn("up for retry", body)
         self.assertIn("The underlying fleet check is currently returning HTTP 503.", body)
 
     def test_dashboard_marks_legacy_top_failed_dags_payload_as_partial(self):

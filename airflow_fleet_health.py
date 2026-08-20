@@ -220,7 +220,11 @@ def _build_stats(
                 "state": (
                     "unknown" if latest_run is None else latest_run["latest_state"] or "no_runs"
                 ),
-                "dag_run_id": "" if latest_run is None else latest_run["dag_run_id"],
+                "dag_run_id": (
+                    latest_run["dag_run_id"]
+                    if latest_run is not None and latest_run["latest_state"] in TERMINAL_STATES
+                    else ""
+                ),
             }
         )
 
