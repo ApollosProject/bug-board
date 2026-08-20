@@ -25,11 +25,7 @@ from github import (
 )
 from leaderboard import calculate_cycle_project_points
 from leaderboard_cache import DEFAULT_LEADERBOARD_DAYS, get_cached_leaderboard
-from leaderboard_export import (
-    build_leaderboard_export_rows,
-    leaderboard_csv_filename,
-    render_leaderboard_csv,
-)
+from leaderboard_export import build_leaderboard_export_rows, render_leaderboard_csv
 from linear.issues import (
     by_platform,
     by_project,
@@ -1050,24 +1046,20 @@ def leaderboard_csv():
     context = _leaderboard_page_context()
     if context.get("leaderboard_unavailable"):
         return Response("Leaderboard is refreshing.\n", status=503, mimetype="text/plain")
-
-    people_config = load_config().get("people", {})
-    engineering_people = {
-        slug: info
-        for slug, info in people_config.items()
-        if info.get("team") == ENGINEERING_TEAM_SLUG
-    }
-    rows = build_leaderboard_export_rows(
-        context.get("leaderboard_entries") or [],
-        engineering_people=engineering_people,
-        regression_summary=get_cached_regression_summary(),
+    preset = context.get("preset_days")
+    filename = (
+        f"leaderboard-{preset}d.csv"
+        if isinstance(preset, int)
+        else f"leaderboard-{context.get('start') or 'start'}-to-{context.get('end') or 'end'}.csv"
     )
     return Response(
-        render_leaderboard_csv(rows),
+        render_leaderboard_csv(
+            build_leaderboard_export_rows(context.get("leaderboard_entries") or [])
+        ),
         mimetype="text/csv; charset=utf-8",
         headers={
             "Cache-Control": "no-store",
-            "Content-Disposition": (f'attachment; filename="{leaderboard_csv_filename(context)}"'),
+            "Content-Disposition": f'attachment; filename="{filename}"',
         },
     )
 
