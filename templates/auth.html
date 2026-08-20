@@ -4,43 +4,178 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
-    <title>{{ title }} · Bug Board</title>
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f8faf9" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d1718" />
+    <title>{{ title }} · Apollos Engineering</title>
     <style>
       :root {
-        font-family: system-ui, sans-serif;
         color-scheme: light dark;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --auth-action: #00676d;
+        --auth-bg: #f8faf9;
+        --auth-border: rgba(0, 103, 109, 0.18);
+        --auth-card: #ffffff;
+        --auth-muted: #536563;
+        --auth-text: #17302f;
+        --brand-board: #00676d;
+        --brand-node: #17b582;
+        --brand-trace: #b8eee0;
+      }
+      * {
+        box-sizing: border-box;
       }
       body {
         display: grid;
         min-height: 100vh;
         margin: 0;
+        padding: 2rem 0;
         place-items: center;
-        background: Canvas;
-        color: CanvasText;
+        background-color: var(--auth-bg);
+        background-image:
+          radial-gradient(circle at 1px 1px, var(--auth-border) 1px, transparent 0),
+          linear-gradient(135deg, rgba(110, 197, 184, 0.08), transparent 45%);
+        background-size: 28px 28px, 100% 100%;
+        color: var(--auth-text);
       }
       main {
-        width: min(32rem, calc(100% - 3rem));
+        width: min(34rem, calc(100% - 2rem));
         text-align: center;
       }
-      a {
-        display: inline-block;
-        margin-top: 1rem;
-        padding: 0.7rem 1rem;
-        border-radius: 0.4rem;
-        background: #24292f;
-        color: #fff;
-        font-weight: 600;
+      .site-brand {
+        align-items: center;
+        color: var(--auth-text);
+        display: inline-flex;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+        text-align: left;
         text-decoration: none;
+      }
+      .site-brand-mark {
+        display: block;
+        height: 2.65rem;
+        width: 2.65rem;
+      }
+      .site-brand-board { fill: var(--brand-board); }
+      .site-brand-traces {
+        stroke: var(--brand-trace);
+        stroke-width: 0.72;
+      }
+      .site-brand-nodes { fill: var(--brand-node); }
+      .site-brand-copy { display: grid; }
+      .site-brand-name {
+        font-size: 1rem;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        line-height: 1;
+        text-transform: uppercase;
+      }
+      .site-brand-product {
+        align-items: center;
+        color: var(--auth-muted);
+        display: flex;
+        font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 0.62rem;
+        font-weight: 700;
+        gap: 0.4rem;
+        letter-spacing: 0.08em;
+        margin-top: 0.3rem;
+        text-transform: uppercase;
+      }
+      .site-brand-node {
+        background: var(--brand-node);
+        border-radius: 50%;
+        display: inline-block;
+        height: 0.3rem;
+        width: 0.3rem;
+      }
+      .auth-card {
+        background: var(--auth-card);
+        border: 1px solid var(--auth-border);
+        border-radius: 0.8rem;
+        box-shadow: 0 1.5rem 4rem rgba(0, 52, 55, 0.08);
+        overflow: hidden;
+        padding: clamp(2rem, 7vw, 3.5rem);
+        position: relative;
+      }
+      .auth-card::before {
+        background:
+          radial-gradient(circle at 18% 50%, var(--brand-node) 0 3px, transparent 3.5px),
+          radial-gradient(circle at 82% 50%, var(--brand-node) 0 3px, transparent 3.5px),
+          linear-gradient(90deg, transparent 0 18%, var(--brand-node) 18% 82%, transparent 82%);
+        content: "";
+        height: 6px;
+        inset: 0 0 auto;
+        opacity: 0.7;
+        position: absolute;
+      }
+      h1 {
+        font-size: clamp(1.8rem, 7vw, 2.4rem);
+        letter-spacing: -0.035em;
+        margin: 0;
+      }
+      p {
+        color: var(--auth-muted);
+        line-height: 1.6;
+        margin: 1rem auto 0;
+        max-width: 27rem;
+      }
+      .auth-action {
+        background: var(--auth-action);
+        border: 1px solid var(--auth-action);
+        border-radius: 0.45rem;
+        color: #ffffff;
+        display: inline-block;
+        font-weight: 700;
+        margin-top: 1.5rem;
+        padding: 0.75rem 1rem;
+        text-decoration: none;
+      }
+      .auth-action:is(:hover, :focus-visible) {
+        background: #004f54;
+        border-color: #004f54;
+      }
+      .auth-action:focus-visible,
+      .site-brand:focus-visible {
+        outline: 3px solid rgba(23, 181, 130, 0.35);
+        outline-offset: 3px;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --auth-action: #087d68;
+          --auth-bg: #0d1718;
+          --auth-border: rgba(110, 197, 184, 0.2);
+          --auth-card: #142021;
+          --auth-muted: #9cb4b0;
+          --auth-text: #f4f7f8;
+          --brand-board: #17b582;
+          --brand-node: #d5fff2;
+          --brand-trace: #024c50;
+        }
+        body {
+          background-image:
+            radial-gradient(circle at 1px 1px, rgba(110, 197, 184, 0.14) 1px, transparent 0),
+            linear-gradient(135deg, rgba(23, 181, 130, 0.08), transparent 45%);
+        }
+        .auth-card {
+          box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.24);
+        }
+        .auth-action:is(:hover, :focus-visible) {
+          background: #0a7664;
+          border-color: #0a7664;
+        }
       }
     </style>
   </head>
   <body>
     <main>
-      <h1>{{ title }}</h1>
-      <p>{{ message }}</p>
-      {% if allow_retry %}
-        <a href="{{ url_for('github_login') }}">Sign in with GitHub</a>
-      {% endif %}
+      {% include "partials/brand_lockup.html" %}
+      <section class="auth-card">
+        <h1>{{ title }}</h1>
+        <p>{{ message }}</p>
+        {% if allow_retry %}
+          <a class="auth-action" href="{{ url_for('github_login') }}">Sign in with GitHub</a>
+        {% endif %}
+      </section>
     </main>
   </body>
 </html>
