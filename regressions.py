@@ -217,11 +217,20 @@ def _rate(numerator: int, denominator: int) -> float | None:
 
 
 def _pull_request_link(attribution: dict[str, Any]) -> dict[str, str] | None:
-    url = attribution.get("url")
-    if not isinstance(url, str) or (parsed := parse_pull_request_url(url)) is None:
+    raw_url = attribution.get("url")
+    if not isinstance(raw_url, str):
+        return None
+    url = raw_url.strip().rstrip("/")
+    if (parsed := parse_pull_request_url(url)) is None:
         return None
     _owner, repo, number = parsed
-    return {"url": url.rstrip("/"), "label": f"{repo}#{number}"}
+    return {"url": url, "label": f"{repo}#{number}"}
+
+
+def _sorted_pull_request_links(
+    links: dict[str, dict[str, str]],
+) -> list[dict[str, str]]:
+    return sorted(links.values(), key=lambda link: (link["label"].casefold(), link["url"]))
 
 
 def _person_metrics(
@@ -270,7 +279,7 @@ def _person_metrics(
                 "regression_count": authored_regressions[username],
                 "pr_count": authored_count,
                 "rate": _rate(authored_regressions[username], authored_count),
-                "pull_requests": list(authored_pull_requests[username].values()),
+                "pull_requests": _sorted_pull_request_links(authored_pull_requests[username]),
             }
         )
         reviewer_rows.append(
@@ -279,7 +288,7 @@ def _person_metrics(
                 "regression_count": approved_regressions[username],
                 "pr_count": reviewed_count,
                 "rate": _rate(approved_regressions[username], reviewed_count),
-                "pull_requests": list(approved_pull_requests[username].values()),
+                "pull_requests": _sorted_pull_request_links(approved_pull_requests[username]),
             }
         )
     return author_rows, reviewer_rows
