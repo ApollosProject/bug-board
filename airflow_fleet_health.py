@@ -32,8 +32,8 @@ DagRunEvaluation = TypedDict(
 )
 
 
-FailedDagEntry = TypedDict(
-    "FailedDagEntry",
+DagEntry = TypedDict(
+    "DagEntry",
     {
         "dag_id": str,
         "state": str,
@@ -54,7 +54,8 @@ class FleetStats:
     failed_fetches: int
     dags_without_runs: int
     non_terminal_dags: int
-    failed_dags: list[FailedDagEntry]
+    dags: list[DagEntry]
+    failed_dags: list[DagEntry]
     failed_runs: int
     failure_ratio: float
     insufficient_volume: bool
@@ -83,6 +84,7 @@ def evaluate_fleet_health() -> tuple[dict[str, Any], int]:
         "failed_fetches": stats.failed_fetches,
         "dags_without_runs": stats.dags_without_runs,
         "non_terminal_dags": stats.non_terminal_dags,
+        "dags": stats.dags,
         "failed_runs": stats.failed_runs,
         "failure_ratio": stats.failure_ratio,
         "threshold_ratio": FAILURE_THRESHOLD_RATIO,
@@ -209,7 +211,24 @@ def _build_stats(
     evaluated_dags = sum(
         1 for latest_run in latest_run_by_dag.values() if latest_run["latest_terminal_state"]
     )
-    failed_dags: list[FailedDagEntry] = [
+    dags: list[DagEntry] = []
+    for dag_id in sorted(active_dags):
+        latest_run = latest_run_by_dag.get(dag_id)
+        dags.append(
+            {
+                "dag_id": dag_id,
+                "state": (
+                    "unknown" if latest_run is None else latest_run["latest_state"] or "no_runs"
+                ),
+                "dag_run_id": (
+                    latest_run["dag_run_id"]
+                    if latest_run is not None and latest_run["latest_state"] in TERMINAL_STATES
+                    else ""
+                ),
+            }
+        )
+
+    failed_dags: list[DagEntry] = [
         {
             "dag_id": dag_id,
             "state": "failed",
@@ -236,6 +255,7 @@ def _build_stats(
             1 for latest_run in latest_run_by_dag.values() if not latest_run["has_runs"]
         ),
         non_terminal_dags=non_terminal_dags,
+        dags=dags,
         failed_dags=failed_dags,
         failed_runs=failed_runs,
         failure_ratio=failure_ratio,

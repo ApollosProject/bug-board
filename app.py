@@ -302,7 +302,7 @@ def _get_airflow_fleet_health_payload(
         return payload, 503
 
 
-def _coerce_failed_dag_entries(value: Any) -> list[dict[str, str]]:
+def _coerce_dag_entries(value: Any) -> list[dict[str, str]]:
     if not isinstance(value, list):
         return []
 
@@ -333,8 +333,8 @@ def _get_astro_ui_base_url() -> str:
     return re.sub(r"/api/v\d+$", "", airflow_api_base_url)
 
 
-def _build_astro_failed_dags_url() -> str:
-    return f"{_get_astro_ui_base_url()}/dags?status=failed&state=active"
+def _build_astro_dags_url() -> str:
+    return f"{_get_astro_ui_base_url()}/dags"
 
 
 def _build_astro_dag_url(dag_id: str) -> str:
@@ -343,11 +343,11 @@ def _build_astro_dag_url(dag_id: str) -> str:
 
 
 def _get_failed_dag_entries(payload: dict[str, Any]) -> tuple[list[dict[str, str]], bool]:
-    failed_dags = _coerce_failed_dag_entries(payload.get("failed_dags"))
+    failed_dags = _coerce_dag_entries(payload.get("failed_dags"))
     if failed_dags:
         return failed_dags, False
 
-    top_failed_dags = _coerce_failed_dag_entries(payload.get("top_failed_dags"))
+    top_failed_dags = _coerce_dag_entries(payload.get("top_failed_dags"))
     failed_runs = payload.get("failed_runs")
     is_partial = (
         bool(top_failed_dags)
@@ -355,6 +355,14 @@ def _get_failed_dag_entries(payload: dict[str, Any]) -> tuple[list[dict[str, str
         and len(top_failed_dags) < failed_runs
     )
     return top_failed_dags, is_partial
+
+
+def _get_dag_entries(payload: dict[str, Any]) -> tuple[list[dict[str, str]], bool]:
+    raw_dags = payload.get("dags")
+    if isinstance(raw_dags, list):
+        return _coerce_dag_entries(raw_dags), True
+    failed_dags, _ = _get_failed_dag_entries(payload)
+    return failed_dags, False
 
 
 def _format_checked_at(value: Any) -> str | None:
@@ -380,12 +388,22 @@ def healthz():
 
 
 @app.route("/failing-dags")
-def failing_dags_dashboard():
+@app.route("/dags")
+def dags_dashboard():
     payload, status = _get_airflow_fleet_health_payload(
         allow_live_eval=_should_allow_live_airflow_eval_for_dashboard()
     )
-    failed_dags, is_partial_list = _get_failed_dag_entries(payload)
+    dags, has_full_dag_list = _get_dag_entries(payload)
     failed_runs = payload.get("failed_runs")
+    default_visible_dag_count = sum(dag["state"] == "failed" for dag in dags)
+    failed_dag_count = default_visible_dag_count
+    if not has_full_dag_list and isinstance(failed_runs, int):
+        failed_dag_count = failed_runs
+    has_dag_data = (
+        has_full_dag_list
+        or isinstance(failed_runs, int)
+        or any(isinstance(payload.get(key), list) for key in ("failed_dags", "top_failed_dags"))
+    )
     missing_airflow_env_vars = [
         env_name
         for env_name in payload.get("missing_airflow_env_vars", [])
@@ -403,23 +421,19 @@ def failing_dags_dashboard():
 
     return render_template(
         "failing_dags.html",
-        astro_failed_dags_url=_build_astro_failed_dags_url(),
+        astro_dags_url=_build_astro_dags_url(),
         checked_at=_format_checked_at(payload.get("checked_at")),
-        dags_without_runs=payload.get("dags_without_runs"),
-        evaluated_dags=payload.get("evaluated_dags"),
-        failed_dag_count=(failed_runs if isinstance(failed_runs, int) else len(failed_dags)),
-        failed_dags=failed_dags,
-        failed_fetches=payload.get("failed_fetches"),
-        failure_ratio=payload.get("failure_ratio"),
+        dags=dags,
+        default_visible_dag_count=default_visible_dag_count,
+        failed_dag_count=failed_dag_count,
+        has_dag_data=has_dag_data,
         has_missing_airflow_credentials=has_missing_airflow_credentials,
+        has_full_dag_list=has_full_dag_list,
         http_status=status,
-        is_partial_failed_dag_list=is_partial_list,
         missing_airflow_env_vars=missing_airflow_env_vars,
         non_terminal_dags=payload.get("non_terminal_dags"),
-        status=payload.get("status", "unknown"),
         status_label=status_label,
         status_variant=status_variant,
-        threshold_ratio=payload.get("threshold_ratio"),
         total_active_dags=payload.get("active_dags_total"),
     )
 

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Failing DAGs{% endblock %}
+{% block title %}DAGs{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -71,6 +71,28 @@
     gap: 0.85rem;
   }
 
+  .dag-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin: 1rem 0;
+  }
+
+  .dag-search {
+    flex: 1 1 20rem;
+    max-width: 32rem;
+    margin: 0;
+  }
+
+  .dag-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    white-space: nowrap;
+  }
+
   .dag-list-item {
     list-style: none;
     margin: 0;
@@ -82,8 +104,8 @@
 
   .dag-entry {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    align-items: start;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
     padding: 1rem 1.1rem;
     border: 1px solid rgba(115, 130, 155, 0.18);
     border-radius: 0.9rem;
@@ -93,6 +115,11 @@
       rgba(15, 23, 42, 0.02)
     );
     box-shadow: 0 0.65rem 1.5rem rgba(15, 23, 42, 0.05);
+  }
+
+  .dag-state {
+    color: var(--pico-muted-color);
+    text-transform: capitalize;
   }
 
   .dag-entry-link,
@@ -284,11 +311,11 @@
 <section>
   <div class="section-header">
     <div>
-      <h1>Failing DAGs</h1>
-      <p>Latest Airflow fleet snapshot for active DAGs.</p>
+      <h1>DAGs</h1>
+      <p>Latest run state for every active Airflow DAG.</p>
     </div>
     <p>
-      <a href="{{ astro_failed_dags_url }}" target="_blank" rel="noopener noreferrer">
+      <a href="{{ astro_dags_url }}" target="_blank" rel="noopener noreferrer">
         Open in Astro
       </a>
     </p>
@@ -302,7 +329,7 @@
       <div class="setup-kicker">Review app setup</div>
       <h2>Airflow credentials are missing for this app.</h2>
       <p class="setup-lede">
-        This review app cannot load the failing DAG snapshot yet. Add the missing
+        This review app cannot load the DAG snapshot yet. Add the missing
         Airflow API values below, then refresh the page to unlock the live
         dashboard.
       </p>
@@ -319,7 +346,7 @@
           <strong>What you will see after setup</strong>
           <p>
             Once these values are present, the next refresh will show the latest
-            fleet snapshot, health metrics, and failing DAG list automatically.
+            fleet snapshot, health metrics, and DAG list automatically.
           </p>
         </div>
       </div>
@@ -340,57 +367,44 @@
   {% if not has_missing_airflow_credentials %}
     <div class="metric-grid">
       <article class="metric-card">
-        <header><strong>Failing DAGs</strong></header>
-        <p>{{ failed_dag_count }}</p>
-      </article>
-      <article class="metric-card">
         <header><strong>Active DAGs</strong></header>
         <p>{{ total_active_dags if total_active_dags is not none else "Unavailable" }}</p>
       </article>
       <article class="metric-card">
-        <header><strong>Evaluated DAGs</strong></header>
-        <p>{{ evaluated_dags if evaluated_dags is not none else "Unavailable" }}</p>
+        <header><strong>Latest Run Failed</strong></header>
+        <p>{{ failed_dag_count }}</p>
       </article>
       <article class="metric-card">
-        <header><strong>Failure Ratio</strong></header>
-        <p>
-          {% if failure_ratio is not none and threshold_ratio is not none %}
-            {{ "%.1f"|format(failure_ratio * 100) }}% of {{ "%.1f"|format(threshold_ratio * 100) }}% threshold
-          {% else %}
-            Unavailable
-          {% endif %}
-        </p>
-      </article>
-      <article class="metric-card">
-        <header><strong>Missing Latest Run</strong></header>
-        <p>{{ dags_without_runs if dags_without_runs is not none else "Unavailable" }}</p>
-      </article>
-      <article class="metric-card">
-        <header><strong>Failed Fetches</strong></header>
-        <p>{{ failed_fetches if failed_fetches is not none else "Unavailable" }}</p>
-      </article>
-      <article class="metric-card">
-        <header><strong>Non-Terminal DAGs</strong></header>
+        <header><strong>In Progress</strong></header>
         <p>{{ non_terminal_dags if non_terminal_dags is not none else "Unavailable" }}</p>
       </article>
     </div>
   {% endif %}
 
-  {% if failed_dags %}
+  {% if has_dag_data %}
     <article>
       <header class="dag-list-header">
-        <strong>DAG List</strong>
-        <span class="dag-count">{{ failed_dag_count }} failing DAGs</span>
+        <strong>Active DAGs</strong>
+        <span class="dag-count" id="dag-count">{{ default_visible_dag_count }} shown</span>
       </header>
-      {% if is_partial_failed_dag_list %}
+      {% if not has_full_dag_list %}
         <p>
-          This cache entry only contains a partial DAG list. Refresh the worker to
-          repopulate the full failing DAG set.
+          This cached snapshot only includes failing DAGs. Refresh the worker to
+          populate the full inventory.
         </p>
       {% endif %}
-      <ul class="dag-list">
-        {% for dag in failed_dags %}
-          <li class="dag-list-item">
+      <div class="dag-controls">
+        <input class="dag-search" id="dag-search" type="search" placeholder="Search by DAG name" aria-label="Search DAGs by name" />
+        {% if has_full_dag_list %}
+          <label class="dag-toggle" for="show-all-dags">
+            <input id="show-all-dags" type="checkbox" role="switch" />
+            Show all DAGs
+          </label>
+        {% endif %}
+      </div>
+      <ul class="dag-list" id="dag-list">
+        {% for dag in dags %}
+          <li class="dag-list-item" data-dag="{{ dag.dag_id|lower }}" data-state="{{ dag.state|lower }}"{% if dag.state != "failed" %} hidden{% endif %}>
             <div class="dag-entry">
               {% if dag.astro_dag_url %}
                 <a
@@ -402,19 +416,54 @@
               {% else %}
                 <span class="dag-entry-text">{{ dag.dag_id }}</span>
               {% endif %}
+              <small class="dag-state">{{ dag.state|replace("_", " ") }}</small>
             </div>
           </li>
         {% endfor %}
       </ul>
-    </article>
-  {% elif not has_missing_airflow_credentials and status == "healthy" %}
-    <article class="empty-state">
-      <p>No failing DAGs were found in the latest snapshot.</p>
+      <p id="no-dag-results"{% if default_visible_dag_count %} hidden{% endif %}>
+        No failed DAGs in the latest snapshot.
+      </p>
     </article>
   {% elif not has_missing_airflow_credentials %}
     <article class="empty-state">
-      <p>Failing DAG data is currently unavailable.</p>
+      <p>DAG data is currently unavailable.</p>
     </article>
   {% endif %}
 </section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  const search = document.querySelector("#dag-search");
+  const showAll = document.querySelector("#show-all-dags");
+  const items = [...document.querySelectorAll("#dag-list [data-dag]")];
+  const count = document.querySelector("#dag-count");
+  const empty = document.querySelector("#no-dag-results");
+
+  const applyFilters = () => {
+    if (!count || !empty) return;
+
+    const query = search.value.trim().toLowerCase();
+    const showAllDags = showAll?.checked ?? false;
+    let visible = 0;
+    items.forEach((item) => {
+      const matchesMode = showAllDags || item.dataset.state === "failed";
+      const matchesSearch = item.dataset.dag.includes(query);
+      item.hidden = !(matchesMode && matchesSearch);
+      visible += item.hidden ? 0 : 1;
+    });
+    count.textContent = `${visible} shown`;
+    empty.hidden = visible > 0;
+    empty.textContent = query
+      ? "No DAGs match that search."
+      : showAllDags
+        ? "No DAGs are available in this snapshot."
+        : "No failed DAGs in the latest snapshot.";
+  };
+
+  search?.addEventListener("input", applyFilters);
+  showAll?.addEventListener("change", applyFilters);
+  applyFilters();
+</script>
 {% endblock %}

@@ -119,6 +119,8 @@ class EvaluateFleetHealthTest(unittest.TestCase):
                             payload, status = airflow_fleet_health.evaluate_fleet_health()
 
         self.assertEqual(status, 503)
+        self.assertEqual(len(payload["dags"]), 21)
+        self.assertEqual(payload["dags"][0]["state"], "failed")
         self.assertEqual(payload["failed_runs"], 11)
         self.assertEqual(len(payload["failed_dags"]), 11)
         self.assertEqual(len(payload["top_failed_dags"]), 10)
@@ -167,6 +169,11 @@ class EvaluateFleetHealthTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(payload["failed_runs"], 1)
         self.assertEqual(payload["non_terminal_dags"], 1)
+        self.assertEqual(
+            {dag["dag_id"]: dag["state"] for dag in payload["dags"]},
+            {"healthy_dag": "success", "one_church_planning_center_people_dag": "running"},
+        )
+        self.assertEqual(payload["dags"][1]["dag_run_id"], "")
         self.assertEqual(
             payload["failed_dags"],
             [
@@ -367,7 +374,7 @@ class FetchActiveDagsTest(unittest.TestCase):
         self.assertEqual(active_dags, expected_dags)
 
 
-class FailingDagsDashboardTest(unittest.TestCase):
+class DagsDashboardTest(unittest.TestCase):
     def setUp(self):
         self.client = app_module.app.test_client()
 
@@ -387,7 +394,7 @@ class FailingDagsDashboardTest(unittest.TestCase):
         self.assertIn('href="/grid/static/styles.css"', body)
         self.assertIn('href="/grid/"', body)
         self.assertIn('href="/grid/projects"', body)
-        self.assertIn('href="/grid/failing-dags"', body)
+        self.assertIn('href="/grid/dags"', body)
 
     def test_build_astro_dag_url_strips_airflow_api_version_suffix(self):
         expected_url = (
@@ -413,7 +420,7 @@ class FailingDagsDashboardTest(unittest.TestCase):
 
                 self.assertEqual(url, expected_url)
 
-    def test_dashboard_renders_full_failed_dag_list(self):
+    def test_dashboard_renders_searchable_dag_inventory(self):
         payload = {
             "status": "degraded",
             "checked_at": "2026-03-08T17:00:00+00:00",
@@ -425,6 +432,11 @@ class FailingDagsDashboardTest(unittest.TestCase):
             "failed_runs": 2,
             "failure_ratio": 2 / 3,
             "threshold_ratio": 0.10,
+            "dags": [
+                {"dag_id": "alpha_dag", "state": "failed", "dag_run_id": "run-alpha"},
+                {"dag_id": "beta_dag", "state": "failed", "dag_run_id": "run-beta"},
+                {"dag_id": "gamma_dag", "state": "up_for_retry", "dag_run_id": "run-gamma"},
+            ],
             "failed_dags": [
                 {
                     "dag_id": "alpha_dag",
@@ -460,19 +472,16 @@ class FailingDagsDashboardTest(unittest.TestCase):
                 "_get_airflow_fleet_health_payload",
                 return_value=(payload, 503),
             ):
-                response = self.client.get("/failing-dags")
+                response = self.client.get("/dags")
 
         body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Failing DAGs", body)
+        self.assertIn("<h1>DAGs</h1>", body)
         self.assertIn("alpha_dag", body)
         self.assertIn("beta_dag", body)
         self.assertIn("Open in Astro", body)
         self.assertIn(
-            (
-                'href="https://clnlmo4ly14938581uy6kk252z28.28.astronomer.run/'
-                'dk252z28/dags?status=failed&amp;state=active"'
-            ),
+            ('href="https://clnlmo4ly14938581uy6kk252z28.28.astronomer.run/dk252z28/dags"'),
             body,
         )
         self.assertIn(
@@ -491,17 +500,18 @@ class FailingDagsDashboardTest(unittest.TestCase):
             ),
             body,
         )
-        self.assertIn('<ul class="dag-list">', body)
+        self.assertIn('<ul class="dag-list" id="dag-list">', body)
         self.assertIn(".dag-list-item {", body)
         self.assertIn("list-style: none;", body)
         self.assertIn(".dag-list-item::marker {", body)
         self.assertIn('content: "";', body)
-        self.assertIn("2 failing DAGs", body)
-        self.assertNotIn('class="dag-table"', body)
-        self.assertNotIn('class="dag-entry-index"', body)
-        self.assertNotIn("Astro Failed DAGs", body)
-        self.assertNotIn('<ol class="dag-list">', body)
-        self.assertNotIn('scope="col">DAG ID</th>', body)
+        self.assertIn("2 shown", body)
+        self.assertIn('placeholder="Search by DAG name"', body)
+        self.assertIn('<input id="show-all-dags" type="checkbox" role="switch" />', body)
+        self.assertIn('data-dag="gamma_dag"', body)
+        self.assertIn('data-state="up_for_retry" hidden', body)
+        self.assertIn('item.dataset.state === "failed"', body)
+        self.assertIn("up for retry", body)
         self.assertIn("The underlying fleet check is currently returning HTTP 503.", body)
 
     def test_dashboard_marks_legacy_top_failed_dags_payload_as_partial(self):
@@ -533,10 +543,11 @@ class FailingDagsDashboardTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("alpha_dag", body)
         self.assertIn("beta_dag", body)
-        self.assertIn("3 failing DAGs", body)
+        self.assertIn("2 shown", body)
         self.assertIn('/dags/alpha_dag"', body)
         self.assertNotIn("/dags/alpha_dag/grid?dag_run_id=", body)
-        self.assertIn("This cache entry only contains a partial DAG list.", body)
+        self.assertIn("This cached snapshot only includes failing DAGs.", body)
+        self.assertNotIn('id="show-all-dags"', body)
 
     def test_dashboard_explains_missing_airflow_credentials_without_live_eval(self):
         with patch.dict(app_module.os.environ, {}, clear=False):
@@ -561,8 +572,8 @@ class FailingDagsDashboardTest(unittest.TestCase):
         self.assertIn("AIRFLOW_API_TOKEN", body)
         self.assertIn("Add the missing", body)
         self.assertIn("Airflow API values below", body)
-        self.assertIn("health metrics, and failing DAG list automatically.", body)
-        self.assertNotIn("Failing DAG data is currently unavailable.", body)
+        self.assertIn("health metrics, and DAG list automatically.", body)
+        self.assertNotIn("DAG data is currently unavailable.", body)
         self.assertNotIn("The underlying fleet check is currently returning HTTP 503.", body)
         self.assertNotIn("<strong>Active DAGs</strong>", body)
         evaluate_mock.assert_not_called()
@@ -584,7 +595,12 @@ class FailingDagsDashboardTest(unittest.TestCase):
                     with patch.object(app_module, "evaluate_fleet_health") as evaluate_mock:
                         response = self.client.get("/failing-dags")
 
+        body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
+        self.assertIn("0 shown", body)
+        self.assertIn("No failed DAGs in the latest snapshot.", body)
+        self.assertIn("This cached snapshot only includes failing DAGs.", body)
+        self.assertNotIn("DAG data is currently unavailable.", body)
         evaluate_mock.assert_not_called()
 
     def test_dashboard_explains_missing_airflow_credentials_from_cached_payload(self):
@@ -617,7 +633,7 @@ class FailingDagsDashboardTest(unittest.TestCase):
         self.assertIn("Required before this page can load", body)
         self.assertIn("AIRFLOW_API_BASE_URL", body)
         self.assertIn("AIRFLOW_API_TOKEN", body)
-        self.assertNotIn("Failing DAG data is currently unavailable.", body)
+        self.assertNotIn("DAG data is currently unavailable.", body)
         evaluate_mock.assert_not_called()
 
     def test_dashboard_skips_live_eval_without_cache_when_token_is_absent(self):
@@ -639,7 +655,7 @@ class FailingDagsDashboardTest(unittest.TestCase):
 
         body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Failing DAG data is currently unavailable.", body)
+        self.assertIn("DAG data is currently unavailable.", body)
         self.assertNotIn("Setup required", body)
         evaluate_mock.assert_not_called()
 
@@ -659,7 +675,7 @@ class FailingDagsDashboardTest(unittest.TestCase):
 
         body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
-        self.assertIn("Failing DAG data is currently unavailable.", body)
+        self.assertIn("DAG data is currently unavailable.", body)
         evaluate_mock.assert_not_called()
 
     def test_dashboard_uses_live_eval_without_cache_in_debug_mode(self):
@@ -714,10 +730,7 @@ class FailingDagsDashboardTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("alpha_dag", body)
         self.assertIn("25", body)
-        self.assertIn("21", body)
         self.assertIn("4", body)
-        self.assertIn("1", body)
-        self.assertIn("2", body)
         self.assertIn("3", body)
         evaluate_mock.assert_called_once_with()
 
@@ -739,7 +752,7 @@ class FailingDagsDashboardTest(unittest.TestCase):
         self.assertIn("Setup required", body)
         self.assertIn("AIRFLOW_API_BASE_URL", body)
         self.assertIn("AIRFLOW_API_TOKEN", body)
-        self.assertNotIn("Failing DAG data is currently unavailable.", body)
+        self.assertNotIn("DAG data is currently unavailable.", body)
         evaluate_mock.assert_not_called()
 
     def test_healthz_returns_ok_payload(self):

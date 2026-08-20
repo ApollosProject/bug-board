@@ -30,11 +30,12 @@ class NavigationTest(unittest.TestCase):
         self.assertIn('href="/apps"', header)
         self.assertIn('href="/projects"', header)
         self.assertIn(">Projects</a>", header)
-        self.assertIn('href="/failing-dags"', header)
+        self.assertIn('href="/dags"', header)
+        self.assertIn(">DAGs</a>", header)
 
         self.assertNotIn('href="/apps"', footer)
         self.assertNotIn('href="/projects"', footer)
-        self.assertNotIn('href="/failing-dags"', footer)
+        self.assertNotIn('href="/dags"', footer)
 
     def test_header_menu_overrides_pico_left_aligned_dropdown(self):
         with open("static/styles.css") as styles_file:
