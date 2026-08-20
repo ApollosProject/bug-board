@@ -15,6 +15,18 @@ CARD_METRIC_KEYS = (
     "lead_incomplete_projects",
     "lead_completed_projects_avg_early_late",
 )
+CARD_METRIC_LABELS = {
+    "prs_merged": "PRs Merged",
+    "prs_reviewed": "PRs Reviewed",
+    "priority_bugs_fixed": "Priority Bugs Fixed",
+    "priority_bug_avg_time_to_fix": "Priority Bug Time to Fix",
+    "all_work_done": "All Work Done",
+    "avg_all_time_to_fix": "Time to Completion",
+    "lead_current_projects": "Current Projects",
+    "lead_completed_projects": "Completed Project Weeks",
+    "lead_incomplete_projects": "Incomplete Projects",
+    "lead_completed_projects_avg_early_late": "Avg Days Early/Late",
+}
 
 # Displayed σ is oriented so + is better than the engineering average and − is worse.
 LOWER_IS_BETTER_METRIC_KEYS = frozenset(
@@ -56,6 +68,25 @@ def issue_card_values(items: list[dict]) -> dict[str, MetricValue]:
         "all_work_done": len(items),
         "avg_all_time_to_fix": int(sum(times) / len(times)) if times else None,
     }
+
+
+def performance_outliers(
+    people_metrics: Mapping[str, Mapping[str, MetricValue]],
+) -> dict[str, dict[str, list[dict[str, str]]]]:
+    team_metrics = list(people_metrics.values())
+    outliers: dict[str, dict[str, list[dict[str, str]]]] = {}
+    for slug, metrics in people_metrics.items():
+        high: list[dict[str, str]] = []
+        low: list[dict[str, str]] = []
+        for key, entry in metric_stdevs_for_person(metrics, team_metrics).items():
+            tone = entry.get("tone")
+            if tone not in {"high", "low"}:
+                continue
+            item = {"name": CARD_METRIC_LABELS[key], "label": entry["label"]}
+            (high if tone == "high" else low).append(item)
+        if high or low:
+            outliers[slug] = {"high": high, "low": low}
+    return outliers
 
 
 def z_score(value: float, values: list[float]) -> float | None:
