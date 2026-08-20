@@ -31,6 +31,14 @@ PUBLIC_ENDPOINTS = {
     "github_logout",
     "healthz",
 }
+PUBLIC_STATIC_FILES = frozenset({"brand-mark.svg", "og-image.png"})
+SITE_NAME = "Apollos Engineering"
+SITE_PRODUCT = "Bug Board"
+SITE_DESCRIPTION = (
+    "Internal engineering dashboard for Linear issues, GitHub PR stats, and Airflow fleet health."
+)
+OG_IMAGE_WIDTH = 1200
+OG_IMAGE_HEIGHT = 630
 
 
 class GitHubOAuthError(Exception):
@@ -45,6 +53,46 @@ def _truthy(value: str | bool | None) -> bool:
     if isinstance(value, bool):
         return value
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _canonical_app_url() -> str:
+    configured = os.getenv("APP_URL", "").strip().rstrip("/")
+    if configured:
+        return configured
+    return request.url_root.rstrip("/")
+
+
+def _social_meta_context() -> dict[str, str | int]:
+    app_url = _canonical_app_url()
+    return {
+        "og_title": f"{SITE_NAME} · {SITE_PRODUCT}",
+        "og_description": SITE_DESCRIPTION,
+        "og_url": f"{app_url}/",
+        "og_image_url": f"{app_url}/static/og-image.png",
+        "og_image_width": OG_IMAGE_WIDTH,
+        "og_image_height": OG_IMAGE_HEIGHT,
+    }
+
+
+def _public_static_filename() -> str | None:
+    if request.endpoint != "static":
+        return None
+    filename = (request.view_args or {}).get("filename")
+    if isinstance(filename, str) and filename in PUBLIC_STATIC_FILES:
+        return filename
+    return None
+
+
+def _wants_html_sign_in_page() -> bool:
+    if request.method not in {"GET", "HEAD"}:
+        return False
+    if request.endpoint == "static":
+        return False
+    best = request.accept_mimetypes.best_match(
+        ["text/html", "application/json"],
+        default="text/html",
+    )
+    return best == "text/html"
 
 
 def _configured_callback_url() -> str:
@@ -92,12 +140,19 @@ def _authentication_configuration_errors() -> list[str]:
     return errors
 
 
-def _render_auth_message(title: str, message: str, status: int, allow_retry: bool = False):
+def _render_auth_message(
+    title: str,
+    message: str,
+    status: int,
+    allow_retry: bool = False,
+    signin_next: str | None = None,
+):
     response = render_template(
         "auth.html",
         title=title,
         message=message,
         allow_retry=allow_retry,
+        signin_next=_safe_next_url(signin_next),
     )
     return response, status
 
@@ -248,6 +303,10 @@ def register_github_oauth(app: Flask) -> None:
 
     reported_configuration_errors: set[tuple[str, ...]] = set()
 
+    @app.context_processor
+    def inject_social_meta():
+        return _social_meta_context()
+
     def log_configuration_errors_once(configuration_errors: list[str]) -> None:
         error_signature = tuple(configuration_errors)
         if error_signature in reported_configuration_errors:
@@ -264,6 +323,8 @@ def register_github_oauth(app: Flask) -> None:
             return None
         if request.endpoint in PUBLIC_ENDPOINTS:
             return None
+        if _public_static_filename() is not None:
+            return None
 
         configuration_errors = _authentication_configuration_errors()
         if configuration_errors:
@@ -278,18 +339,35 @@ def register_github_oauth(app: Flask) -> None:
         if _has_authenticated_session(org):
             return None
 
-        login_url = f"/login?{urlencode({'next': _authentication_return_url()})}"
+        next_url = _authentication_return_url()
+        login_url = f"/login?{urlencode({'next': next_url})}"
         if request.headers.get("HX-Request", "").lower() == "true":
             response = Response(status=401)
             response.headers["HX-Redirect"] = login_url
             response.headers["Cache-Control"] = "private, no-store"
             return response
+        # Keep GitHub off the redirect chain for HTML documents. Slack and other
+        # unfurlers follow /login to github.com and would otherwise preview GitHub.
+        if _wants_html_sign_in_page():
+            return _render_auth_message(
+                "Sign in",
+                "Sign in with GitHub to open Bug Board.",
+                200,
+                allow_retry=True,
+                signin_next=next_url,
+            )
         return redirect(login_url)
 
     @app.after_request
     def prevent_authenticated_response_caching(response: Response):
-        if current_app.config.get("GITHUB_OAUTH_ENABLED") and request.endpoint != "healthz":
-            response.headers["Cache-Control"] = "private, no-store"
+        if not current_app.config.get("GITHUB_OAUTH_ENABLED"):
+            return response
+        if request.endpoint == "healthz":
+            return response
+        if _public_static_filename() is not None:
+            response.headers["Cache-Control"] = "public, max-age=86400"
+            return response
+        response.headers["Cache-Control"] = "private, no-store"
         return response
 
     @app.get("/login")

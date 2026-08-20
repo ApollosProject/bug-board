@@ -6,6 +6,12 @@
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f8faf9" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d1718" />
+    {% include "partials/social_meta.html" %}
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="{{ url_for('static', filename='brand-mark.svg') }}"
+    />
     <title>{{ title }} · Apollos Engineering</title>
     <style>
       :root {
@@ -179,7 +185,7 @@
         <h1>{{ title }}</h1>
         <p>{{ message }}</p>
         {% if allow_retry %}
-          <a class="auth-action" href="{{ url_for('github_login') }}">Sign in with GitHub</a>
+          <a class="auth-action" href="{{ url_for('github_login', next=signin_next|default('/')) }}">Sign in with GitHub</a>
         {% endif %}
       </section>
     </main>

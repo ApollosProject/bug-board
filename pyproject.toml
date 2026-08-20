@@ -24,6 +24,7 @@ exclude = ["venv", ".venv", "env", ".env", "__pycache__", ".git", "static", "tem
 ignore_decorators = [
     "@app.after_request",
     "@app.before_request",
+    "@app.context_processor",
     "@app.get",
     "@app.post",
     "@app.route",

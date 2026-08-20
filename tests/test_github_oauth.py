@@ -1,6 +1,8 @@
 import base64
 import hashlib
 import os
+import re
+import struct
 import unittest
 from unittest.mock import Mock, patch
 from urllib.parse import parse_qs, urlsplit
@@ -31,6 +33,16 @@ class GitHubOAuthTest(unittest.TestCase):
         self.client = app_module.app.test_client()
 
     @staticmethod
+    def _sign_in_next(body: str) -> str:
+        match = re.search(r'class="auth-action" href="([^"]+)"', body)
+        if match is None:
+            raise AssertionError("sign-in action is missing")
+        login_url = urlsplit(match.group(1))
+        if login_url.path != "/login":
+            raise AssertionError(f"unexpected sign-in path: {login_url.path}")
+        return parse_qs(login_url.query)["next"][0]
+
+    @staticmethod
     def _response(status_code, payload):
         response = Mock(status_code=status_code)
         response.json.return_value = payload
@@ -50,8 +62,63 @@ class GitHubOAuthTest(unittest.TestCase):
             authenticated_session[github_oauth.AUTHENTICATED_USER_ID_SESSION_KEY] = 123
             authenticated_session[github_oauth.AUTHENTICATED_ORG_SESSION_KEY] = "ApollosProject"
 
-    def test_protected_routes_redirect_to_login_but_health_remains_public(self):
-        response = self.client.get("/projects?days=30")
+    def test_protected_html_serves_a_share_preview_instead_of_redirecting_to_github(self):
+        response = self.client.get(
+            "/",
+            headers={"User-Agent": "Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)"},
+        )
+        body = response.get_data(as_text=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.location)
+        self.assertIn("Sign in with GitHub to open Bug Board.", body)
+        self.assertIn('property="og:title"', body)
+        self.assertIn("Apollos Engineering", body)
+        self.assertIn("Bug Board", body)
+        self.assertIn('property="og:image"', body)
+        self.assertIn("/static/og-image.png", body)
+        self.assertNotIn("github.com/login/oauth", body)
+        self.assertEqual(self._sign_in_next(body), "/")
+
+        projects_response = self.client.get("/projects?days=30")
+        projects_body = projects_response.get_data(as_text=True)
+        self.assertEqual(projects_response.status_code, 200)
+        self.assertEqual(self._sign_in_next(projects_body), "/projects?days=30")
+
+    def test_share_preview_uses_the_public_app_url(self):
+        with patch.dict(os.environ, {"APP_URL": "https://engineering.apollos.app"}):
+            response = self.client.get("/")
+
+        body = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('content="https://engineering.apollos.app/"', body)
+        self.assertIn(
+            'content="https://engineering.apollos.app/static/og-image.png"',
+            body,
+        )
+
+    def test_share_preview_assets_remain_public(self):
+        image = self.client.get("/static/og-image.png")
+        try:
+            self.assertEqual(image.status_code, 200)
+            self.assertEqual(image.mimetype, "image/png")
+            self.assertIn("public", image.headers.get("Cache-Control", ""))
+            self.assertEqual(
+                struct.unpack(">II", image.data[16:24]),
+                (github_oauth.OG_IMAGE_WIDTH, github_oauth.OG_IMAGE_HEIGHT),
+            )
+        finally:
+            image.close()
+
+        mark = self.client.get("/static/brand-mark.svg")
+        try:
+            self.assertEqual(mark.status_code, 200)
+            self.assertIn("image/svg+xml", mark.mimetype)
+        finally:
+            mark.close()
+
+    def test_protected_non_html_redirects_to_login_but_health_remains_public(self):
+        response = self.client.get("/projects?days=30", headers={"Accept": "application/json"})
 
         self.assertEqual(response.status_code, 302)
         login_url = urlsplit(response.location)
