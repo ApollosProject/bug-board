@@ -1,0 +1,8 @@
+{
+  "name": "bug-board",
+  "description": "Internal engineering dashboard for Linear issues, GitHub PR stats, and Airflow fleet health.",
+  "repository": "https://github.com/ApollosProject/bug-board",
+  "website": "https://engineering.apollos.app",
+  "stack": "heroku-26",
+  "success_url": "/healthz"
+}
