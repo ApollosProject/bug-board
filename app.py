@@ -8,7 +8,7 @@ from functools import lru_cache
 from typing import Any, TypedDict, TypeVar
 from urllib.parse import quote
 
-from flask import Flask, abort, jsonify, render_template, request
+from flask import Flask, Response, abort, jsonify, render_template, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from airflow_fleet_health import AirflowFleetHealthError, evaluate_fleet_health
@@ -25,6 +25,7 @@ from github import (
 )
 from leaderboard import calculate_cycle_project_points
 from leaderboard_cache import DEFAULT_LEADERBOARD_DAYS, get_cached_leaderboard
+from leaderboard_export import build_leaderboard_export_rows, render_leaderboard_csv
 from linear.issues import (
     by_platform,
     by_project,
@@ -451,6 +452,8 @@ class LeaderboardEntry(TypedDict):
     display_name: str | None
     score: int
     breakdown: str | None
+    points: dict[str, int]
+    counts: dict[str, int]
 
 
 BREAKDOWN_CATEGORIES: list[BreakdownCategory] = [
@@ -759,6 +762,8 @@ def _build_leaderboard_entries(
                 count_breakdown_by_slug.get(slug),
             )
             or None,
+            "points": dict(points_breakdown_by_slug.get(slug) or {}),
+            "counts": dict(count_breakdown_by_slug.get(slug) or {}),
         }
         for slug, score in scores_by_slug.items()
     ]
@@ -773,6 +778,8 @@ def _build_leaderboard_entries(
                     count_breakdown_by_external.get(key),
                 )
                 or None,
+                "points": dict(points_breakdown_by_external.get(key) or {}),
+                "counts": dict(count_breakdown_by_external.get(key) or {}),
             }
             for key, score in scores_by_external.items()
         ]
@@ -1010,29 +1017,51 @@ def index_open_items_partial():
     return render_template("partials/index_open_items.html", **context)
 
 
-@app.route("/partials/index/leaderboard")
-def index_leaderboard_partial():
+def _leaderboard_page_context() -> dict:
     window = _request_time_window()
     if should_use_redis_cache() and window.preset_days == DEFAULT_LEADERBOARD_DAYS:
         cached = get_cached_leaderboard(window.preset_days)
         if cached is not None:
-            return render_template(
-                "partials/index_leaderboard.html",
-                **{**window.template_vars(), **cached},
-            )
+            return {**window.template_vars(), **cached}
         if not _is_development_mode():
             logging.info(
                 "Leaderboard cache miss while REDIS_URL is configured (days=%s)",
                 window.preset_days,
             )
-            return render_template(
-                "partials/index_leaderboard.html",
+            return {
                 **window.template_vars(),
-                leaderboard_entries=[],
-                leaderboard_unavailable=True,
-            )
-    context = _cached_window_context(_build_leaderboard_context, window)
-    return render_template("partials/index_leaderboard.html", **context)
+                "leaderboard_entries": [],
+                "leaderboard_unavailable": True,
+            }
+    return _cached_window_context(_build_leaderboard_context, window)
+
+
+@app.route("/partials/index/leaderboard")
+def index_leaderboard_partial():
+    return render_template("partials/index_leaderboard.html", **_leaderboard_page_context())
+
+
+@app.route("/leaderboard.csv")
+def leaderboard_csv():
+    context = _leaderboard_page_context()
+    if context.get("leaderboard_unavailable"):
+        return Response("Leaderboard is refreshing.\n", status=503, mimetype="text/plain")
+    preset = context.get("preset_days")
+    filename = (
+        f"leaderboard-{preset}d.csv"
+        if isinstance(preset, int)
+        else f"leaderboard-{context.get('start') or 'start'}-to-{context.get('end') or 'end'}.csv"
+    )
+    return Response(
+        render_leaderboard_csv(
+            build_leaderboard_export_rows(context.get("leaderboard_entries") or [])
+        ),
+        mimetype="text/csv; charset=utf-8",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
 
 
 @app.route("/partials/index/regressions")
