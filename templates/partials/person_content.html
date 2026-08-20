@@ -104,7 +104,7 @@
 <div class="grid">
   <div>
     <article>
-      <header><a href="https://linear.app/differential/view/sla-issues-7e2098ebf79e">Priority Bugs Fixed</a></header>
+      <header><a href="{{ issue_metric_urls.priority_bugs_fixed }}">Priority Bugs Fixed</a></header>
       {{ metric_heading('priority_bugs_fixed', priority_bugs_fixed) }}
       {{ stdev_badge('priority_bugs_fixed') }}
     </article>
@@ -125,7 +125,7 @@
   <div>
     <article>
       <header>
-        <a href="https://linear.app/differential/profiles/{{ linear_username }}">All Work Done</a>
+        <a href="{{ issue_metric_urls.all_work_done }}">All Work Done</a>
       </header>
       {{ metric_heading('all_work_done', all_work_done) }}
       {{ stdev_badge('all_work_done') }}
