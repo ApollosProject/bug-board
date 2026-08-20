@@ -936,7 +936,7 @@ class TeamContextProjectFilteringTest(unittest.TestCase):
                                     context = app_module._build_person_context("darryl", 7, 1)
 
         self.assertEqual(context["lead_current_projects"], 0)
-        self.assertEqual(context["lead_completed_projects"], 1)
+        self.assertEqual(context["lead_completed_projects"], 2)
         self.assertEqual(context["lead_incomplete_projects"], 0)
         self.assertEqual(context["lead_completed_projects_avg_early_late"], "on time")
 
@@ -995,7 +995,7 @@ class TeamContextProjectFilteringTest(unittest.TestCase):
                                 with patch.object(app_module, "get_support_slugs", return_value=[]):
                                     context = app_module._build_person_context("darryl", 7, 1)
 
-        self.assertEqual(context["lead_completed_projects"], 2)
+        self.assertEqual(context["lead_completed_projects"], 3)
         self.assertEqual(context["lead_completed_projects_avg_early_late"], "1d late")
 
     def test_project_deadline_uses_hours_when_less_than_day_left(self):

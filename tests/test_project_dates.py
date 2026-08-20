@@ -1,7 +1,11 @@
 import unittest
 from datetime import date, datetime, timezone
 
-from project_dates import format_project_start_status, format_project_target_status
+from project_dates import (
+    format_project_start_status,
+    format_project_target_status,
+    get_project_planned_weeks,
+)
 
 
 class ProjectDateStatusFormattingTest(unittest.TestCase):
@@ -48,6 +52,30 @@ class ProjectDateStatusFormattingTest(unittest.TestCase):
 
         self.assertEqual(days_left, 3)
         self.assertEqual(status_text, "3d left")
+
+
+class ProjectPlannedWeeksTest(unittest.TestCase):
+    def test_two_week_and_four_week_projects_use_calendar_span(self):
+        two_week = {"startDate": "2026-03-02", "targetDate": "2026-03-15"}
+        four_week = {"startDate": "2026-03-02", "targetDate": "2026-03-29"}
+
+        self.assertEqual(get_project_planned_weeks(two_week), 2)
+        self.assertEqual(get_project_planned_weeks(four_week), 4)
+        self.assertEqual(
+            get_project_planned_weeks(two_week) + get_project_planned_weeks(two_week),
+            get_project_planned_weeks(four_week),
+        )
+
+    def test_missing_dates_count_as_one_week(self):
+        self.assertEqual(get_project_planned_weeks({}), 1)
+        self.assertEqual(get_project_planned_weeks({"startDate": "2026-03-02"}), 1)
+        self.assertEqual(get_project_planned_weeks({"targetDate": "2026-03-15"}), 1)
+
+    def test_inverted_dates_still_count_the_span(self):
+        self.assertEqual(
+            get_project_planned_weeks({"startDate": "2026-03-15", "targetDate": "2026-03-02"}),
+            2,
+        )
 
 
 if __name__ == "__main__":

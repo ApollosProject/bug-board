@@ -20,13 +20,23 @@ def _issue(*, priority=4, bug=False):
     }
 
 
-def _project(lead_name: str, project_id: str, *, status: str, completed: bool = False) -> dict:
+def _project(
+    lead_name: str,
+    project_id: str,
+    *,
+    status: str,
+    completed: bool = False,
+    start_date: str | None = None,
+    target_date: str | None = None,
+) -> dict:
     return {
         "id": project_id,
         "name": f"Project {project_id}",
         "url": f"https://linear.example/project/{project_id}",
         "status": {"name": status},
         "completedAt": "2026-08-01T00:00:00.000Z" if completed else None,
+        "startDate": start_date,
+        "targetDate": target_date,
         "lead": {"displayName": lead_name},
         "members": [],
     }
@@ -248,3 +258,65 @@ class PersonStatsTest(unittest.TestCase):
         styles = Path(__file__).resolve().parents[1].joinpath("static/styles.css").read_text()
         self.assertIn("max-width: min(12rem, calc(100vw - 2rem));", styles)
         self.assertIn("white-space: normal;", styles)
+
+    def test_completed_project_weeks_treat_two_short_projects_like_one_long_project(self):
+        app_module._build_person_context.cache_clear()
+        self.addCleanup(app_module._build_person_context.cache_clear)
+        config = {
+            "people": {
+                "alice": {
+                    "team": "engineering",
+                    "linear_username": "alice",
+                    "github_username": "alice-gh",
+                },
+                "bob": {
+                    "team": "engineering",
+                    "linear_username": "bob",
+                    "github_username": "bob-gh",
+                },
+            }
+        }
+        projects = [
+            _project(
+                "Alice",
+                "alice-two-week-1",
+                status="Completed",
+                completed=True,
+                start_date="2026-03-02",
+                target_date="2026-03-15",
+            ),
+            _project(
+                "Alice",
+                "alice-two-week-2",
+                status="Completed",
+                completed=True,
+                start_date="2026-03-16",
+                target_date="2026-03-29",
+            ),
+            _project(
+                "Bob",
+                "bob-four-week",
+                status="Completed",
+                completed=True,
+                start_date="2026-03-02",
+                target_date="2026-03-29",
+            ),
+        ]
+
+        with (
+            patch.object(app_module, "load_config", return_value=config),
+            patch.object(app_module, "get_open_issues_for_person", return_value=[]),
+            patch.object(app_module, "get_completed_issues_for_person", return_value=[]),
+            patch.object(app_module, "get_projects", return_value=projects),
+            patch.object(app_module, "get_merged_pr_counts_for_user", return_value=(0, 0)),
+            patch.object(app_module, "get_support_slugs", return_value=set()),
+        ):
+            alice = app_module._build_person_context("alice", 30, 1)
+            bob = app_module._build_person_context("bob", 30, 1)
+
+        self.assertEqual(alice["lead_completed_projects"], 4)
+        self.assertEqual(bob["lead_completed_projects"], 4)
+        with app_module.app.test_request_context():
+            body = app_module.render_template("partials/person_content.html", **alice)
+        self.assertIn("Completed Project Weeks", body)
+        self.assertNotIn("Completed Projects</a>", body)
