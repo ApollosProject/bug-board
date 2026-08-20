@@ -19,6 +19,7 @@ class _RecordingClient:
 
 class GraphQLClientRequestTests(unittest.TestCase):
     def test_person_pr_counts_use_scoped_searches_and_only_count_approvals(self):
+        github._get_cursor_authored_merged_prs_cached.cache_clear()
         response = {
             "authored": {"issueCount": 60},
             "reviewed": {
@@ -34,13 +35,42 @@ class GraphQLClientRequestTests(unittest.TestCase):
             patch.object(github, "token", "token"),
             patch.object(github, "get_github_orgs", return_value=["apollosproject"]),
             patch.object(github, "_execute", return_value=response) as execute,
+            patch.object(github.time, "monotonic", return_value=120),
         ):
             counts = github.get_merged_pr_counts_for_user("bkraeling", 30)
+            self.assertEqual(github.get_merged_pr_counts_for_user("bkraeling", 30), counts)
 
         self.assertEqual(counts, (60, 1))
-        variables = execute.call_args.kwargs["variable_values"]
+        variables = execute.call_args_list[0].kwargs["variable_values"]
         self.assertIn("author:bkraeling", variables["authored"])
         self.assertIn("reviewed-by:bkraeling", variables["reviewed"])
+        delegated_variables = execute.call_args_list[1].kwargs["variable_values"]
+        self.assertIn("author:app/cursor", delegated_variables["query"])
+        self.assertEqual(execute.call_count, 3)
+
+    def test_person_pr_counts_include_cursor_coauthored_prs_once_each(self):
+        response = {
+            "authored": {"issueCount": 3},
+            "reviewed": {
+                "nodes": [],
+                "pageInfo": {"hasNextPage": False, "endCursor": None},
+            },
+        }
+        cursor_prs = [
+            self._cursor_pr("alice", "Alice"),
+            self._cursor_pr("ALICE"),
+            self._cursor_pr("bob"),
+        ]
+
+        with (
+            patch.object(github, "token", "token"),
+            patch.object(github, "get_github_orgs", return_value=["apollosproject"]),
+            patch.object(github, "_execute", return_value=response),
+            patch.object(github, "_get_cursor_authored_merged_prs", return_value=cursor_prs),
+        ):
+            counts = github.get_merged_pr_counts_for_user("Alice", 30)
+
+        self.assertEqual(counts, (5, 0))
 
     def test_merged_pr_activity_fetches_once_and_groups_authors_and_reviewers(self):
         prs = [
@@ -54,14 +84,53 @@ class GraphQLClientRequestTests(unittest.TestCase):
             },
         ]
 
-        with patch.object(github, "_get_merged_prs", return_value=prs) as fetch:
+        cursor_prs = [self._cursor_pr("ALICE"), self._cursor_pr("CARA"), self._cursor_pr("Cara")]
+        with (
+            patch.object(github, "_get_merged_prs", return_value=prs) as fetch,
+            patch.object(github, "_get_cursor_authored_merged_prs", return_value=cursor_prs),
+        ):
             authored, reviewed = github.get_merged_pr_activity(30)
 
         fetch.assert_called_once_with(30, None)
-        self.assertEqual(list(authored), ["alice", "bob"])
+        self.assertEqual(list(authored), ["alice", "bob", "CARA"])
         self.assertEqual(list(reviewed), ["bob", "alice"])
-        self.assertEqual(len(authored["alice"]), 1)
+        self.assertEqual((len(authored["alice"]), len(authored["CARA"])), (2, 2))
         self.assertEqual(len(reviewed["bob"]), 1)
+
+    @staticmethod
+    def _cursor_pr(*coauthors):
+        return {
+            "author": {"login": "cursor"},
+            "commits": {
+                "nodes": [
+                    {
+                        "commit": {
+                            "author": {"user": {"login": "cursoragent"}},
+                            "authors": {
+                                "nodes": [
+                                    {"user": {"login": login}}
+                                    for login in ("cursoragent", *coauthors)
+                                ]
+                            },
+                        }
+                    }
+                ]
+            },
+        }
+
+    def test_cursor_coauthors_require_cursor_app_and_generated_first_commit(self):
+        human_pr = self._cursor_pr("alice")
+        human_pr["author"] = {"login": "bob"}
+        human_first_commit = self._cursor_pr("alice")
+        human_first_commit["commits"]["nodes"][0]["commit"]["author"] = {"user": {"login": "bob"}}
+        later_cursor_commit = self._cursor_pr()
+        later_cursor_commit["commits"]["nodes"].append(
+            self._cursor_pr("alice")["commits"]["nodes"][0]
+        )
+
+        self.assertEqual(github._cursor_coauthors(human_pr), [])
+        self.assertEqual(github._cursor_coauthors(human_first_commit), [])
+        self.assertEqual(github._cursor_coauthors(later_cursor_commit), [])
 
     def test_github_client_allows_slow_repository_queries(self):
         previous_client = getattr(github._thread_local, "client", None)

@@ -1,6 +1,7 @@
 import logging
 import os
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
@@ -30,6 +31,8 @@ TRACKED_REPOSITORIES = (
     "differential/crossroads-anywhere",
 )
 GITHUB_GRAPHQL_EXECUTE_TIMEOUT_SECONDS = 30
+CURSOR_AGENT_LOGIN = "cursoragent"
+_cursor_pr_cache_lock = threading.Lock()
 
 
 class GitHubDataError(RuntimeError):
@@ -340,6 +343,106 @@ def _merged_search_qualifier(days: int = 30, window: TimeWindow | None = None) -
     return TimeWindow.resolve(days, window=window).github_merged_qualifier()
 
 
+def _search_prs(query, search_query: str) -> List[Dict[str, Any]]:
+    prs: List[Dict[str, Any]] = []
+    cursor = None
+    for _ in range(10):
+        try:
+            data = _execute(query, variable_values={"query": search_query, "cursor": cursor})
+        except Exception:
+            return []
+        payload = data.get("search", {}) or {}
+        prs.extend(node for node in payload.get("nodes", []) or [] if node)
+        page_info = payload.get("pageInfo", {}) or {}
+        next_cursor = page_info.get("endCursor") if page_info.get("hasNextPage") else None
+        if not next_cursor or next_cursor == cursor:
+            break
+        cursor = next_cursor
+    return prs
+
+
+@lru_cache(maxsize=32)
+def _get_cursor_authored_merged_prs_cached(search_query: str, _minute: int) -> List[Dict[str, Any]]:
+    query = gql(
+        """
+        query CursorAuthoredMergedPRs($query: String!, $cursor: String) {
+          search(type: ISSUE, query: $query, first: 100, after: $cursor) {
+            nodes {
+              ... on PullRequest {
+                author { login }
+                commits(first: 1) {
+                  nodes {
+                    commit {
+                      author { user { login } }
+                      authors(first: 10) {
+                        nodes { user { login } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+        """
+    )
+    return _search_prs(query, search_query)
+
+
+def _get_cursor_authored_merged_prs(
+    days: int = 30, window: TimeWindow | None = None
+) -> List[Dict[str, Any]]:
+    orgs = get_github_orgs() if token else []
+    if not orgs:
+        return []
+    org_filter = " ".join(f"org:{org}" for org in orgs)
+    search_query = (
+        f"{org_filter} is:pr is:merged {_merged_search_qualifier(days, window)} author:app/cursor"
+    )
+    with _cursor_pr_cache_lock:
+        return _get_cursor_authored_merged_prs_cached(search_query, int(time.monotonic() // 60))
+
+
+def _cursor_coauthors(pr: Dict[str, Any]) -> List[str]:
+    pr_author = ((pr.get("author") or {}).get("login") or "").casefold()
+    if pr_author != "cursor":
+        return []
+
+    commits = (pr.get("commits") or {}).get("nodes", []) or []
+    if not commits:
+        return []
+    commit = (commits[0] or {}).get("commit") or {}
+    primary_author = (
+        ((commit.get("author") or {}).get("user") or {}).get("login") or ""
+    ).casefold()
+    if primary_author != CURSOR_AGENT_LOGIN:
+        return []
+
+    coauthors: Dict[str, str] = {}
+    for author in (commit.get("authors") or {}).get("nodes", []) or []:
+        login = ((author.get("user") or {}).get("login") or "").strip()
+        normalized_login = login.casefold()
+        if normalized_login and normalized_login != primary_author:
+            coauthors.setdefault(normalized_login, login)
+    return list(coauthors.values())
+
+
+def _group_cursor_prs_by_coauthor(
+    prs: List[Dict[str, Any]],
+) -> Dict[str, List[Dict[str, Any]]]:
+    prs_by_coauthor: Dict[str, List[Dict[str, Any]]] = {}
+    canonical_logins: Dict[str, str] = {}
+    for pr in prs:
+        for coauthor in _cursor_coauthors(pr):
+            coauthor = canonical_logins.setdefault(coauthor.casefold(), coauthor)
+            prs_by_coauthor.setdefault(coauthor, []).append(pr)
+    return prs_by_coauthor
+
+
 def _get_merged_prs(days: int = 30, window: TimeWindow | None = None):
     """Return merged PRs within the last ``days`` days using GitHub search."""
     if not token:
@@ -372,34 +475,13 @@ def _get_merged_prs(days: int = 30, window: TimeWindow | None = None):
         }
         """
     )
-    prs = []
-    cursor = None
-    max_pages = 10
-    pages = 0
-    while True:
-        try:
-            data = _execute(query, variable_values={"query": search_query, "cursor": cursor})
-        except Exception:
-            return []
-        payload = data.get("search", {}) or {}
-        nodes = payload.get("nodes", []) or []
-        for node in nodes:
-            if node:
-                prs.append(node)
-        page_info = payload.get("pageInfo", {}) or {}
-        if not page_info.get("hasNextPage"):
-            break
-        cursor = page_info.get("endCursor")
-        pages += 1
-        if pages >= max_pages:
-            break
-    return prs
+    return _search_prs(query, search_query)
 
 
 def get_merged_pr_counts_for_user(
     username: str, days: int = 30, window: TimeWindow | None = None
 ) -> tuple[int, int]:
-    """Return authored and approved-review PR counts for one GitHub user."""
+    """Return credited-author and approved-review PR counts for one GitHub user."""
     if not token or not username:
         return 0, 0
     orgs = get_github_orgs()
@@ -464,6 +546,14 @@ def get_merged_pr_counts_for_user(
             break
         cursor = next_cursor
 
+    authored_count += sum(
+        len(prs)
+        for author, prs in _group_cursor_prs_by_coauthor(
+            _get_cursor_authored_merged_prs(days, window)
+        ).items()
+        if author.casefold() == normalized_username
+    )
+
     return authored_count, reviewed_count
 
 
@@ -491,9 +581,18 @@ def get_merged_pr_activity(
     days: int = 30,
     window: TimeWindow | None = None,
 ) -> tuple[Dict[str, List[Dict[str, Any]]], Dict[str, List[Dict[str, Any]]]]:
-    """Return merged PRs grouped by author and reviewer from one GitHub search."""
-    prs = _get_merged_prs(days, window)
-    return _group_merged_prs_by_author(prs), _group_merged_prs_by_reviewer(prs)
+    """Return merged PRs grouped by credited author and reviewer."""
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        prs_future = executor.submit(_get_merged_prs, days, window)
+        cursor_prs_future = executor.submit(_get_cursor_authored_merged_prs, days, window)
+        prs = prs_future.result()
+        cursor_prs = cursor_prs_future.result()
+    prs_by_author = _group_merged_prs_by_author(prs)
+    canonical_authors = {author.casefold(): author for author in prs_by_author}
+    for coauthor, coauthored_prs in _group_cursor_prs_by_coauthor(cursor_prs).items():
+        author = canonical_authors.get(coauthor.casefold(), coauthor)
+        prs_by_author.setdefault(author, []).extend(coauthored_prs)
+    return prs_by_author, _group_merged_prs_by_reviewer(prs)
 
 
 def get_prs_waiting_for_review_by_reviewer():
