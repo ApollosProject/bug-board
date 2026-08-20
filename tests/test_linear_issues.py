@@ -50,10 +50,11 @@ class GetCompletedIssuesForPersonTest(unittest.TestCase):
         self.assertIn("after", captured["variables"])
         self.assertIn("before", captured["variables"])
         self.assertNotIn("days", captured["variables"])
-        normalized_query = " ".join(captured["query"].split())
-        self.assertIn('state: { type: { in: ["completed"] } }', normalized_query)
-        self.assertIn("completedAt: { gte: $after, lt: $before }", normalized_query)
-        self.assertNotIn('state: { name: { in: ["Done"] } }', normalized_query)
+        normalized_query = "".join(captured["query"].split())
+        self.assertIn('state:{type:{in:["completed"]}}', normalized_query)
+        self.assertIn("completedAt:{gte:$after,lt:$before}", normalized_query)
+        self.assertIn("identifier", normalized_query)
+        self.assertNotIn('state:{name:{in:["Done"]}}', normalized_query)
 
 
 if __name__ == "__main__":

@@ -351,23 +351,25 @@ class PersonStatsTest(unittest.TestCase):
             {
                 **_issue(priority=1, bug=True),
                 "id": "alice-priority-bug",
+                "identifier": "APO-1",
                 "title": "Urgent bug",
             },
             {
                 **_issue(priority=4, bug=False),
                 "id": "alice-other-work",
+                "identifier": "APO-2",
                 "title": "Chore",
             },
             {
                 **_issue(priority=2, bug=False),
                 "id": "alice-high-non-bug",
+                "identifier": "APO-3",
                 "title": "High chore",
             },
         ]
 
         with (
             patch.object(app_module, "load_config", return_value=config),
-            patch.object(app_module, "get_linear_team_key", return_value="APO"),
             patch.object(app_module, "get_open_issues_for_person", return_value=[]),
             patch.object(app_module, "get_completed_issues_for_person", return_value=completed),
             patch.object(app_module, "get_projects", return_value=[]),
@@ -376,22 +378,19 @@ class PersonStatsTest(unittest.TestCase):
         ):
             context = app_module._build_person_context("alice", 30, 1)
 
-        expected_issue_ids = {
-            "priority_bugs_fixed": ["alice-priority-bug"],
-            "all_work_done": ["alice-priority-bug", "alice-other-work", "alice-high-non-bug"],
-        }
-        for metric, issue_ids in expected_issue_ids.items():
-            with self.subTest(metric=metric):
-                path, layout, linked_issue_ids = _linear_id_link_details(
-                    context["issue_metric_urls"][metric]
-                )
-                self.assertEqual(path, "/differential/team/APO/all")
-                self.assertEqual(layout, "list")
-                self.assertEqual(linked_issue_ids, issue_ids)
+        self.assertEqual(
+            context["issue_metric_urls"]["priority_bugs_fixed"],
+            "https://linear.app/differential/issues/APO-1",
+        )
+        self.assertEqual(
+            context["issue_metric_urls"]["all_work_done"],
+            "https://linear.app/differential/issues/APO-1,APO-2,APO-3",
+        )
 
         with app_module.app.test_request_context():
             body = app_module.render_template("partials/person_content.html", **context)
-        self.assertEqual(body.count("linear.app/differential/team/APO/all?filter="), 2)
+        self.assertEqual(body.count("linear.app/differential/issues/APO-"), 2)
+        self.assertNotIn("linear.app/differential/team/APO/all?filter=", body)
         self.assertNotIn("sla-issues-7e2098ebf79e", body)
         self.assertNotIn("linear.app/differential/profiles/alice", body)
 

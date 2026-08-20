@@ -95,7 +95,27 @@ def linear_project_list_url(projects: list[dict[str, Any]]) -> str:
 
 
 def linear_issue_list_url(issues: list[dict[str, Any]]) -> str:
-    return linear_id_list_url(f"team/{get_linear_team_key()}/all", issues)
+    identifiers = list(
+        dict.fromkeys(
+            identifier
+            for issue in issues
+            if isinstance((identifier := _linear_issue_identifier(issue)), str) and identifier
+        )
+    )
+    if not identifiers:
+        return f"https://linear.app/differential/team/{get_linear_team_key()}/all?layout=list"
+    return f"https://linear.app/differential/issues/{','.join(identifiers)}"
+
+
+def _linear_issue_identifier(issue: dict[str, Any]) -> str | None:
+    identifier = issue.get("identifier")
+    if isinstance(identifier, str) and identifier:
+        return identifier
+    url = issue.get("url")
+    if not isinstance(url, str):
+        return None
+    match = re.search(r"/issue/([A-Z0-9]+-\d+)", url)
+    return match.group(1) if match else None
 
 
 def _request_time_window() -> TimeWindow:
