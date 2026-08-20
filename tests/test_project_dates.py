@@ -2,9 +2,14 @@ import unittest
 from datetime import date, datetime, timezone
 
 from project_dates import (
+    completed_project_weeks,
     format_project_start_status,
     format_project_target_status,
     get_project_planned_weeks,
+    get_project_schedule_variance_days,
+    is_completed_project,
+    is_inactive_project,
+    is_incomplete_project,
 )
 
 
@@ -76,6 +81,25 @@ class ProjectPlannedWeeksTest(unittest.TestCase):
             get_project_planned_weeks({"startDate": "2026-03-15", "targetDate": "2026-03-02"}),
             2,
         )
+
+
+class ProjectStatusClassificationTest(unittest.TestCase):
+    def test_released_project_is_inactive_and_completed(self):
+        project = {"status": {"name": "Released"}}
+
+        self.assertTrue(is_inactive_project(project))
+        self.assertTrue(is_completed_project(project))
+        self.assertFalse(is_incomplete_project(project))
+
+    def test_completed_project_weeks_and_schedule_variance(self):
+        early = {
+            "status": {"name": "Completed"},
+            "completedAt": "2026-03-10",
+            "startDate": "2026-03-02",
+            "targetDate": "2026-03-15",
+        }
+        self.assertEqual(completed_project_weeks([early]), 2)
+        self.assertEqual(get_project_schedule_variance_days(early), -5)
 
 
 if __name__ == "__main__":

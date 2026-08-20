@@ -320,3 +320,59 @@ class PersonStatsTest(unittest.TestCase):
             body = app_module.render_template("partials/person_content.html", **alice)
         self.assertIn("Completed Project Weeks", body)
         self.assertNotIn("Completed Projects</a>", body)
+
+    def test_card_metric_labels_cover_every_card_metric(self):
+        self.assertEqual(
+            frozenset(person_stats.CARD_METRIC_LABELS),
+            frozenset(person_stats.CARD_METRIC_KEYS),
+        )
+
+    def test_person_card_metrics_include_prs_issues_and_led_projects(self):
+        metrics = person_stats.person_card_metrics(
+            [_issue(priority=2, bug=True), _issue()],
+            prs_merged=3,
+            prs_reviewed=4,
+            led_projects=[
+                _project("Alice", "done", status="Completed", completed=True),
+                _project("Alice", "open", status="In Progress"),
+                _project("Alice", "incomplete", status="Incomplete"),
+            ],
+        )
+        self.assertEqual(metrics["prs_merged"], 3)
+        self.assertEqual(metrics["prs_reviewed"], 4)
+        self.assertEqual(metrics["priority_bugs_fixed"], 1)
+        self.assertEqual(metrics["all_work_done"], 2)
+        self.assertEqual(metrics["lead_completed_projects"], 1)
+        self.assertEqual(metrics["lead_incomplete_projects"], 1)
+        self.assertEqual(metrics["lead_current_projects"], 1)
+
+    def test_performance_outliers_split_praise_and_coach_categories(self):
+        def counts(**overrides):
+            metrics = dict.fromkeys(person_stats.CARD_METRIC_KEYS, 0)
+            metrics["priority_bug_avg_time_to_fix"] = None
+            metrics["avg_all_time_to_fix"] = None
+            metrics["lead_completed_projects_avg_early_late"] = None
+            metrics.update(overrides)
+            return metrics
+
+        outliers = person_stats.performance_outliers(
+            {
+                "alice": counts(prs_merged=20),
+                "bob": counts(prs_merged=0),
+                "cara": counts(prs_merged=10),
+                "drew": counts(prs_merged=10),
+                "eve": counts(prs_merged=10),
+            }
+        )
+
+        self.assertEqual(list(outliers), ["alice", "bob"])
+        self.assertEqual(
+            [(item["name"], item["label"]) for item in outliers["alice"]["high"]],
+            [("PRs Merged", "+1.6σ")],
+        )
+        self.assertEqual(outliers["alice"]["low"], [])
+        self.assertEqual(
+            [(item["name"], item["label"]) for item in outliers["bob"]["low"]],
+            [("PRs Merged", "−1.6σ")],
+        )
+        self.assertEqual(outliers["bob"]["high"], [])

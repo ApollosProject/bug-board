@@ -3,6 +3,14 @@ from __future__ import annotations
 import statistics
 from collections.abc import Iterable, Mapping
 
+from project_dates import (
+    completed_project_weeks,
+    get_project_schedule_variance_days,
+    is_completed_project,
+    is_inactive_project,
+    is_incomplete_project,
+)
+
 CARD_METRIC_KEYS = (
     "prs_merged",
     "prs_reviewed",
@@ -15,6 +23,18 @@ CARD_METRIC_KEYS = (
     "lead_incomplete_projects",
     "lead_completed_projects_avg_early_late",
 )
+CARD_METRIC_LABELS = {
+    "prs_merged": "PRs Merged",
+    "prs_reviewed": "PRs Reviewed",
+    "priority_bugs_fixed": "Priority Bugs Fixed",
+    "priority_bug_avg_time_to_fix": "Priority Bug Time to Fix",
+    "all_work_done": "All Work Done",
+    "avg_all_time_to_fix": "Time to Completion",
+    "lead_current_projects": "Current Projects",
+    "lead_completed_projects": "Completed Project Weeks",
+    "lead_incomplete_projects": "Incomplete Projects",
+    "lead_completed_projects_avg_early_late": "Avg Days Early/Late",
+}
 
 # Displayed σ is oriented so + is better than the engineering average and − is worse.
 LOWER_IS_BETTER_METRIC_KEYS = frozenset(
@@ -56,6 +76,77 @@ def issue_card_values(items: list[dict]) -> dict[str, MetricValue]:
         "all_work_done": len(items),
         "avg_all_time_to_fix": int(sum(times) / len(times)) if times else None,
     }
+
+
+def lead_project_card_values(led_projects: Iterable[dict]) -> dict[str, MetricValue]:
+    projects = list(led_projects)
+    variances = [
+        variance_days
+        for project in projects
+        if is_completed_project(project)
+        for variance_days in [get_project_schedule_variance_days(project)]
+        if variance_days is not None
+    ]
+    current_count = 0
+    incomplete_count = 0
+    for project in projects:
+        if not is_inactive_project(project):
+            current_count += 1
+        if is_incomplete_project(project):
+            incomplete_count += 1
+    return {
+        "lead_current_projects": current_count,
+        "lead_completed_projects": completed_project_weeks(projects),
+        "lead_incomplete_projects": incomplete_count,
+        "lead_completed_projects_avg_early_late": (
+            sum(variances) / len(variances) if variances else None
+        ),
+    }
+
+
+def person_card_metrics(
+    completed_items: list[dict],
+    *,
+    prs_merged: int = 0,
+    prs_reviewed: int = 0,
+    led_projects: Iterable[dict] | None = None,
+) -> dict[str, MetricValue]:
+    return {
+        "prs_merged": prs_merged,
+        "prs_reviewed": prs_reviewed,
+        **issue_card_values(completed_items),
+        **lead_project_card_values(led_projects or []),
+    }
+
+
+def performance_outliers(
+    people_metrics: Mapping[str, Mapping[str, MetricValue]],
+) -> dict[str, dict[str, list[dict[str, str]]]]:
+    team_metrics = list(people_metrics.values())
+    outliers: dict[str, dict[str, list[dict[str, str]]]] = {}
+    for slug, metrics in people_metrics.items():
+        stdevs = metric_stdevs_for_person(metrics, team_metrics)
+        high: list[dict[str, str]] = []
+        low: list[dict[str, str]] = []
+        for key in CARD_METRIC_KEYS:
+            entry = stdevs.get(key)
+            if not entry:
+                continue
+            tone = entry.get("tone")
+            if tone not in {"high", "low"}:
+                continue
+            item = {
+                "key": key,
+                "name": CARD_METRIC_LABELS[key],
+                "label": entry["label"],
+            }
+            if tone == "high":
+                high.append(item)
+            else:
+                low.append(item)
+        if high or low:
+            outliers[slug] = {"high": high, "low": low}
+    return outliers
 
 
 def z_score(value: float, values: list[float]) -> float | None:

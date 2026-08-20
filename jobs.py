@@ -17,6 +17,7 @@ from fleet_health_cache import refresh_fleet_health_cache, should_use_redis_cach
 from github import (
     GitHubDataError,
     get_merged_pr_activity,
+    get_merged_pr_counts_for_user,
     get_pr_diff,
     get_prs_waiting_for_review_by_reviewer,
 )
@@ -32,6 +33,7 @@ from linear.issues import (
 )
 from linear.projects import get_projects
 from openai_client import get_chat_function_call
+from person_stats import performance_outliers, person_card_metrics
 from project_dates import format_project_target_status, parse_iso_date
 from regression_cache import refresh_regression_summary_cache
 from support import get_support_slugs
@@ -48,6 +50,7 @@ REGRESSION_CACHE_REFRESH_HOURS = 6
 AIRFLOW_FLEET_HEARTBEAT_TIMEOUT_SECONDS = 10
 AIRFLOW_FLEET_UNKNOWN_HEARTBEAT_FAILURE_THRESHOLD = 3
 STALE_LINEAR_ISSUE_DAYS = 21
+PERFORMANCE_OUTLIER_DAYS = 7
 INACTIVE_PROJECT_STATUS_NAMES = {
     "completed",
     "incomplete",
@@ -748,29 +751,94 @@ def post_stale():
     post_to_slack(markdown)
 
 
+def _person_led_projects(projects: list[dict], person_key: str, person: dict) -> list[dict]:
+    raw_name = person.get("linear_display_name") or person.get("linear_username") or person_key
+    target = _normalize_linear_display_name(str(raw_name))
+    led: list[dict] = []
+    for project in projects:
+        lead = (project.get("lead") or {}).get("displayName")
+        if not isinstance(lead, str) or not lead:
+            continue
+        if _normalize_linear_display_name(lead) == target:
+            led.append(project)
+    return led
+
+
+def _format_outlier_categories(items: list[dict[str, str]]) -> str:
+    return ", ".join(f"{item['name']} {item['label']}" for item in items)
+
+
+def format_performance_outlier_markdown(
+    outliers: dict[str, dict[str, list[dict[str, str]]]],
+    *,
+    base_url: str,
+    days: int = PERFORMANCE_OUTLIER_DAYS,
+) -> str | None:
+    praise_lines: list[str] = []
+    coach_lines: list[str] = []
+    for slug in sorted(outliers):
+        url = f"{base_url.rstrip('/')}/team/{slug}?days={days}"
+        name = f"<{url}|{slug}>"
+        buckets = outliers[slug]
+        if buckets.get("high"):
+            praise_lines.append(f"- {name}: {_format_outlier_categories(buckets['high'])}")
+        if buckets.get("low"):
+            coach_lines.append(f"- {name}: {_format_outlier_categories(buckets['low'])}")
+    if not praise_lines and not coach_lines:
+        return None
+    sections = [f"*Who to praise and coach (±1.5σ, last {days} days)*"]
+    if praise_lines:
+        sections.append("*Praise*\n\n" + "\n".join(praise_lines))
+    if coach_lines:
+        sections.append("*Coach*\n\n" + "\n".join(coach_lines))
+    board_link = base_url.rstrip("/")
+    if board_link:
+        sections.append(f"<{board_link}|View Bug Board>")
+    return "\n\n".join(sections)
+
+
 @with_retries
-def post_inactive_engineers():
-    """Send list of engineers with no completed Linear issues in the last 7 days."""
+def post_performance_outliers():
+    """Send weekly ±1.5σ outliers so managers know who to praise and coach."""
+    days = PERFORMANCE_OUTLIER_DAYS
     engineering_team_members = get_team_members(ENGINEERING_TEAM_SLUG)
-    inactive = []
-    base_url = os.getenv("APP_URL", "")
+    try:
+        projects = get_projects()
+    except Exception as exc:
+        logging.error("Failed to fetch projects for performance outliers: %s", exc)
+        projects = []
+
+    people_metrics = {}
     for person_key, person in engineering_team_members.items():
         login = person.get("linear_username")
         if not login:
             continue
         try:
-            completed = get_completed_issues_for_person(login, 7)
-        except Exception as e:
-            logging.error(f"Failed to fetch completed issues for {login}: {e}")
+            completed = get_completed_issues_for_person(login, days)
+        except Exception as exc:
+            logging.error("Failed to fetch completed issues for %s: %s", login, exc)
             continue
-        if not completed:
-            # link to user page filtered to last 7 days
-            url = f"{base_url.rstrip('/')}/team/{person_key}?days=7"
-            inactive.append(f"- <{url}|{person_key}>")
-    if not inactive:
+        github_username = person.get("github_username")
+        prs_merged = prs_reviewed = 0
+        if github_username:
+            try:
+                prs_merged, prs_reviewed = get_merged_pr_counts_for_user(github_username, days)
+            except Exception as exc:
+                logging.error("Failed to fetch PR counts for %s: %s", github_username, exc)
+        people_metrics[person_key] = person_card_metrics(
+            completed,
+            prs_merged=prs_merged,
+            prs_reviewed=prs_reviewed,
+            led_projects=_person_led_projects(projects, person_key, person),
+        )
+
+    markdown = format_performance_outlier_markdown(
+        performance_outliers(people_metrics),
+        base_url=os.getenv("APP_URL", ""),
+        days=days,
+    )
+    if not markdown:
         return
-    markdown = "*Engineers with no completed issues in the last 7 days*\n\n"
-    markdown += "\n".join(inactive)
     post_to_manager_slack(markdown)
 
 
@@ -986,7 +1054,7 @@ def run_debug_jobs() -> None:
         refresh_airflow_fleet_health_cache_job()
         refresh_leaderboard_cache_job()
         refresh_regression_summary_cache_job()
-    post_inactive_engineers()
+    post_performance_outliers()
     post_priority_bugs()
     post_leaderboard()
     # post_weekly_changelog()
@@ -1019,7 +1087,7 @@ def configure_scheduled_jobs() -> None:
     else:
         logging.info("REDIS_URL not set; cache refresh is disabled")
 
-    schedule.every().friday.at("13:00").do(post_inactive_engineers)
+    schedule.every().friday.at("13:00").do(post_performance_outliers)
     schedule.every().day.at("12:00").do(post_priority_bugs)
     # schedule.every().friday.at("16:00", "America/New_York").do(post_leaderboard)
     # schedule.every().thursday.at("19:00").do(post_weekly_changelog)

@@ -56,6 +56,7 @@ def _install_import_shims() -> None:
     github_module.get_pr_diff = lambda *args, **kwargs: ""
     github_module.get_prs_waiting_for_review_by_reviewer = lambda *args, **kwargs: {}
     github_module.get_merged_pr_activity = lambda *args, **kwargs: ({}, {})
+    github_module.get_merged_pr_counts_for_user = lambda *args, **kwargs: (0, 0)
     sys.modules.setdefault("github", github_module)
 
     leaderboard_module = cast(Any, types.ModuleType("leaderboard"))
@@ -166,7 +167,7 @@ class _FakeScheduledJob:
 
 
 class ConfigureScheduledJobsTest(unittest.TestCase):
-    def test_registers_inactive_engineers_friday_job(self):
+    def test_registers_performance_outliers_friday_job(self):
         recorded_jobs = []
 
         def fake_every(interval=None):
@@ -182,7 +183,7 @@ class ConfigureScheduledJobsTest(unittest.TestCase):
                 "unit": "friday",
                 "at_time": "13:00",
                 "timezone": None,
-                "func": jobs_module.post_inactive_engineers,
+                "func": jobs_module.post_performance_outliers,
             },
             recorded_jobs,
         )
@@ -280,7 +281,7 @@ class RegressionSummaryCacheRefreshTest(unittest.TestCase):
 class RunDebugJobsTest(unittest.TestCase):
     def test_runs_leaderboard_stale_and_project_updates(self):
         with patch.object(jobs_module, "should_use_redis_cache", return_value=False):
-            with patch.object(jobs_module, "post_inactive_engineers"):
+            with patch.object(jobs_module, "post_performance_outliers"):
                 with patch.object(jobs_module, "post_priority_bugs"):
                     with patch.object(jobs_module, "post_leaderboard") as leaderboard:
                         with patch.object(jobs_module, "post_stale") as stale:
@@ -1282,6 +1283,88 @@ class PostProjectUpdatesTest(unittest.TestCase):
         self.assertEqual(len(posted_after_first_deadline), 1)
         self.assertIn("*Projects With Overdue Updates*", posted_after_first_deadline[0])
         self.assertIn("Starting Sunday", posted_after_first_deadline[0])
+
+
+class PostPerformanceOutliersTest(unittest.TestCase):
+    def _people(self):
+        return {
+            slug: {
+                "linear_username": slug,
+                "github_username": f"{slug}-gh",
+                "slack_id": f"U{slug}",
+            }
+            for slug in ("alice", "bob", "cara", "drew", "eve")
+        }
+
+    def test_posts_praise_and_coach_for_sigma_outliers(self):
+        pr_counts = {
+            "alice-gh": (20, 0),
+            "bob-gh": (0, 0),
+            "cara-gh": (10, 0),
+            "drew-gh": (10, 0),
+            "eve-gh": (10, 0),
+        }
+
+        with patch.object(jobs_module, "get_team_members", return_value=self._people()):
+            with patch.object(jobs_module, "get_projects", return_value=[]):
+                with patch.object(jobs_module, "get_completed_issues_for_person", return_value=[]):
+                    with patch.object(
+                        jobs_module,
+                        "get_merged_pr_counts_for_user",
+                        side_effect=lambda username, days=7: pr_counts[username],
+                    ):
+                        with patch.dict(
+                            jobs_module.os.environ,
+                            {"APP_URL": "https://bug-board.example"},
+                            clear=False,
+                        ):
+                            with patch.object(jobs_module, "post_to_manager_slack") as manager_post:
+                                jobs_module.post_performance_outliers()
+
+        manager_post.assert_called_once()
+        message = manager_post.call_args.args[0]
+        self.assertIn("*Who to praise and coach (±1.5σ, last 7 days)*", message)
+        self.assertIn("*Praise*", message)
+        self.assertIn("*Coach*", message)
+        self.assertIn("PRs Merged +1.6σ", message)
+        self.assertIn("PRs Merged −1.6σ", message)
+        self.assertIn("https://bug-board.example/team/alice?days=7", message)
+        self.assertIn("https://bug-board.example/team/bob?days=7", message)
+        self.assertNotIn("/team/cara?", message)
+        self.assertIn("https://bug-board.example|View Bug Board", message)
+
+    def test_skips_post_when_nobody_is_an_outlier(self):
+        people = {
+            "alice": {"linear_username": "alice", "github_username": "alice-gh"},
+            "bob": {"linear_username": "bob", "github_username": "bob-gh"},
+        }
+
+        with patch.object(jobs_module, "get_team_members", return_value=people):
+            with patch.object(jobs_module, "get_projects", return_value=[]):
+                with patch.object(jobs_module, "get_completed_issues_for_person", return_value=[]):
+                    with patch.object(
+                        jobs_module, "get_merged_pr_counts_for_user", return_value=(5, 0)
+                    ):
+                        with patch.object(jobs_module, "post_to_manager_slack") as manager_post:
+                            jobs_module.post_performance_outliers()
+
+        manager_post.assert_not_called()
+
+    def test_format_markdown_omits_empty_sections(self):
+        markdown = jobs_module.format_performance_outlier_markdown(
+            {
+                "alice": {
+                    "high": [{"name": "PRs Merged", "label": "+1.6σ"}],
+                    "low": [],
+                }
+            },
+            base_url="https://bug-board.example",
+        )
+
+        self.assertIsNotNone(markdown)
+        self.assertIn("*Praise*", markdown)
+        self.assertNotIn("*Coach*", markdown)
+        self.assertIn("PRs Merged +1.6σ", markdown)
 
 
 if __name__ == "__main__":

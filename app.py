@@ -39,11 +39,13 @@ from linear.issues import (
     get_time_data,
 )
 from linear.projects import get_projects
-from person_stats import issue_card_values, metric_stdevs_for_person
+from person_stats import metric_stdevs_for_person, person_card_metrics
 from project_dates import (
     format_project_start_status,
     format_project_target_status,
-    get_project_planned_weeks,
+    get_project_status_name,
+    is_completed_project,
+    is_inactive_project,
     parse_iso_date,
 )
 from regression_cache import get_cached_regression_summary
@@ -86,43 +88,6 @@ def _window_from_parts(
     return TimeWindow.resolve(days, start=start, end=end, now=datetime.now(timezone.utc))
 
 
-INACTIVE_PROJECT_STATUS_NAMES = {
-    "completed",
-    "incomplete",
-    "canceled",
-    "cancelled",
-    "released",
-}
-COMPLETED_PROJECT_STATUS_NAMES = {"completed", "released"}
-INCOMPLETE_PROJECT_STATUS_NAMES = {"incomplete"}
-CANCELED_PROJECT_STATUS_NAMES = {"canceled", "cancelled"}
-
-
-def get_project_status_name(project: dict[str, Any]) -> str:
-    status = project.get("status") or {}
-    name = status.get("name")
-    if not isinstance(name, str):
-        return ""
-    return name.strip().lower()
-
-
-def is_incomplete_project(project: dict[str, Any]) -> bool:
-    return get_project_status_name(project) in INCOMPLETE_PROJECT_STATUS_NAMES
-
-
-def is_completed_project(project: dict[str, Any]) -> bool:
-    status_name = get_project_status_name(project)
-    if status_name in INCOMPLETE_PROJECT_STATUS_NAMES | CANCELED_PROJECT_STATUS_NAMES:
-        return False
-    return bool(project.get("completedAt")) or status_name in COMPLETED_PROJECT_STATUS_NAMES
-
-
-def is_inactive_project(project: dict[str, Any]) -> bool:
-    return bool(project.get("completedAt")) or (
-        get_project_status_name(project) in INACTIVE_PROJECT_STATUS_NAMES
-    )
-
-
 def _annotate_project_schedule_fields(projects: list[dict[str, Any]]) -> None:
     now = datetime.now(timezone.utc)
     for project in projects:
@@ -156,20 +121,6 @@ def _annotate_project_schedule_fields(projects: list[dict[str, Any]]) -> None:
         project["starts_in"] = starts_in
         project["target_status_text"] = target_status_text
         project["start_status_text"] = start_status_text
-
-
-def get_project_schedule_variance_days(project: dict[str, Any]) -> int | None:
-    target_date = parse_iso_date(project.get("targetDate"))
-    completed_date = parse_iso_date(project.get("completedAt"))
-    if target_date is None or completed_date is None:
-        return None
-    return (completed_date - target_date).days
-
-
-def completed_project_weeks(projects: list[dict[str, Any]]) -> int:
-    return sum(
-        get_project_planned_weeks(project) for project in projects if is_completed_project(project)
-    )
 
 
 def format_average_project_schedule_variance(
@@ -1521,32 +1472,16 @@ def _build_person_context(
         if normalize_display_name((project.get("lead") or {}).get("displayName"))
         == normalized_person_name
     ]
-    lead_completed_projects = completed_project_weeks(led_projects)
-    lead_incomplete_projects = sum(1 for project in led_projects if is_incomplete_project(project))
-    lead_current_projects = sum(1 for project in led_projects if not project.get("is_inactive"))
-    lead_completed_project_variances = [
-        variance_days
-        for project in led_projects
-        if is_completed_project(project)
-        for variance_days in [get_project_schedule_variance_days(project)]
-        if variance_days is not None
-    ]
-    if lead_completed_project_variances:
-        average_completed_project_variance = sum(lead_completed_project_variances) / len(
-            lead_completed_project_variances
-        )
-    else:
-        average_completed_project_variance = None
-
-    current_metrics = {
-        "prs_merged": prs_merged,
-        "prs_reviewed": prs_reviewed,
-        **issue_card_values(completed_items),
-        "lead_current_projects": lead_current_projects,
-        "lead_completed_projects": lead_completed_projects,
-        "lead_incomplete_projects": lead_incomplete_projects,
-        "lead_completed_projects_avg_early_late": average_completed_project_variance,
-    }
+    current_metrics = person_card_metrics(
+        completed_items,
+        prs_merged=prs_merged,
+        prs_reviewed=prs_reviewed,
+        led_projects=led_projects,
+    )
+    lead_completed_projects = current_metrics["lead_completed_projects"]
+    lead_incomplete_projects = current_metrics["lead_incomplete_projects"]
+    lead_current_projects = current_metrics["lead_current_projects"]
+    average_completed_project_variance = current_metrics["lead_completed_projects_avg_early_late"]
     team_metrics = [current_metrics] if slug in engineering_people else []
     for other_slug, info in other_engineers.items():
         completed_future_for_other = other_completed_futures.get(other_slug)
@@ -1571,29 +1506,13 @@ def _build_person_context(
             if normalize_display_name((project.get("lead") or {}).get("displayName"))
             == normalize_display_name(info.get("linear_display_name") or other_name)
         ]
-        other_variances = [
-            variance_days
-            for project in other_led
-            if is_completed_project(project)
-            for variance_days in [get_project_schedule_variance_days(project)]
-            if variance_days is not None
-        ]
         team_metrics.append(
-            {
-                "prs_merged": other_prs_merged,
-                "prs_reviewed": other_prs_reviewed,
-                **issue_card_values(other_completed),
-                "lead_current_projects": sum(
-                    1 for project in other_led if not project.get("is_inactive")
-                ),
-                "lead_completed_projects": completed_project_weeks(other_led),
-                "lead_incomplete_projects": sum(
-                    1 for project in other_led if is_incomplete_project(project)
-                ),
-                "lead_completed_projects_avg_early_late": (
-                    sum(other_variances) / len(other_variances) if other_variances else None
-                ),
-            }
+            person_card_metrics(
+                other_completed,
+                prs_merged=other_prs_merged,
+                prs_reviewed=other_prs_reviewed,
+                led_projects=other_led,
+            )
         )
     metric_stdevs = metric_stdevs_for_person(current_metrics, team_metrics)
 
