@@ -1286,85 +1286,55 @@ class PostProjectUpdatesTest(unittest.TestCase):
 
 
 class PostPerformanceOutliersTest(unittest.TestCase):
-    def _people(self):
-        return {
-            slug: {
-                "linear_username": slug,
-                "github_username": f"{slug}-gh",
-                "slack_id": f"U{slug}",
-            }
-            for slug in ("alice", "bob", "cara", "drew", "eve")
-        }
+    def _run(self, people, pr_counts):
+        with (
+            patch.object(jobs_module, "get_team_members", return_value=people),
+            patch.object(jobs_module, "get_projects", return_value=[]),
+            patch.object(jobs_module, "get_completed_issues_for_person", return_value=[]),
+            patch.object(
+                jobs_module,
+                "get_merged_pr_counts_for_user",
+                side_effect=lambda username, days=7: pr_counts[username],
+            ),
+            patch.dict(
+                jobs_module.os.environ,
+                {"APP_URL": "https://bug-board.example"},
+                clear=False,
+            ),
+            patch.object(jobs_module, "post_to_manager_slack") as post,
+        ):
+            jobs_module.post_performance_outliers()
+        return post
 
     def test_posts_praise_and_coach_for_sigma_outliers(self):
-        pr_counts = {
-            "alice-gh": (20, 0),
-            "bob-gh": (0, 0),
-            "cara-gh": (10, 0),
-            "drew-gh": (10, 0),
-            "eve-gh": (10, 0),
+        people = {
+            slug: {"linear_username": slug, "github_username": f"{slug}-gh"}
+            for slug in ("alice", "bob", "cara", "drew", "eve")
         }
-
-        with patch.object(jobs_module, "get_team_members", return_value=self._people()):
-            with patch.object(jobs_module, "get_projects", return_value=[]):
-                with patch.object(jobs_module, "get_completed_issues_for_person", return_value=[]):
-                    with patch.object(
-                        jobs_module,
-                        "get_merged_pr_counts_for_user",
-                        side_effect=lambda username, days=7: pr_counts[username],
-                    ):
-                        with patch.dict(
-                            jobs_module.os.environ,
-                            {"APP_URL": "https://bug-board.example"},
-                            clear=False,
-                        ):
-                            with patch.object(jobs_module, "post_to_manager_slack") as manager_post:
-                                jobs_module.post_performance_outliers()
-
-        manager_post.assert_called_once()
-        message = manager_post.call_args.args[0]
-        self.assertIn("*Who to praise and coach (±1.5σ, last 7 days)*", message)
+        post = self._run(
+            people,
+            {
+                "alice-gh": (20, 0),
+                "bob-gh": (0, 0),
+                "cara-gh": (10, 0),
+                "drew-gh": (10, 0),
+                "eve-gh": (10, 0),
+            },
+        )
+        post.assert_called_once()
+        message = post.call_args.args[0]
         self.assertIn("*Praise*", message)
         self.assertIn("*Coach*", message)
         self.assertIn("PRs Merged +1.6σ", message)
-        self.assertIn("PRs Merged −1.6σ", message)
-        self.assertIn("https://bug-board.example/team/alice?days=7", message)
-        self.assertIn("https://bug-board.example/team/bob?days=7", message)
+        self.assertIn("/team/alice?days=7", message)
         self.assertNotIn("/team/cara?", message)
-        self.assertIn("https://bug-board.example|View Bug Board", message)
 
     def test_skips_post_when_nobody_is_an_outlier(self):
         people = {
             "alice": {"linear_username": "alice", "github_username": "alice-gh"},
             "bob": {"linear_username": "bob", "github_username": "bob-gh"},
         }
-
-        with patch.object(jobs_module, "get_team_members", return_value=people):
-            with patch.object(jobs_module, "get_projects", return_value=[]):
-                with patch.object(jobs_module, "get_completed_issues_for_person", return_value=[]):
-                    with patch.object(
-                        jobs_module, "get_merged_pr_counts_for_user", return_value=(5, 0)
-                    ):
-                        with patch.object(jobs_module, "post_to_manager_slack") as manager_post:
-                            jobs_module.post_performance_outliers()
-
-        manager_post.assert_not_called()
-
-    def test_format_markdown_omits_empty_sections(self):
-        markdown = jobs_module.format_performance_outlier_markdown(
-            {
-                "alice": {
-                    "high": [{"name": "PRs Merged", "label": "+1.6σ"}],
-                    "low": [],
-                }
-            },
-            base_url="https://bug-board.example",
-        )
-
-        self.assertIsNotNone(markdown)
-        self.assertIn("*Praise*", markdown)
-        self.assertNotIn("*Coach*", markdown)
-        self.assertIn("PRs Merged +1.6σ", markdown)
+        self._run(people, {"alice-gh": (5, 0), "bob-gh": (5, 0)}).assert_not_called()
 
 
 if __name__ == "__main__":

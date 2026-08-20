@@ -3,17 +3,6 @@ from __future__ import annotations
 import math
 from datetime import date, datetime, time, timedelta, timezone
 
-INACTIVE_PROJECT_STATUS_NAMES = {
-    "completed",
-    "incomplete",
-    "canceled",
-    "cancelled",
-    "released",
-}
-COMPLETED_PROJECT_STATUS_NAMES = {"completed", "released"}
-INCOMPLETE_PROJECT_STATUS_NAMES = {"incomplete"}
-CANCELED_PROJECT_STATUS_NAMES = {"canceled", "cancelled"}
-
 
 def parse_iso_date(value: str | None) -> date | None:
     if not value:
@@ -39,45 +28,6 @@ def get_project_planned_weeks(project: dict) -> int:
         start, target = target, start
     inclusive_days = (target - start).days + 1
     return max(1, round(inclusive_days / 7))
-
-
-def get_project_status_name(project: dict) -> str:
-    status = project.get("status") or {}
-    name = status.get("name")
-    if not isinstance(name, str):
-        return ""
-    return name.strip().lower()
-
-
-def is_incomplete_project(project: dict) -> bool:
-    return get_project_status_name(project) in INCOMPLETE_PROJECT_STATUS_NAMES
-
-
-def is_completed_project(project: dict) -> bool:
-    status_name = get_project_status_name(project)
-    if status_name in INCOMPLETE_PROJECT_STATUS_NAMES | CANCELED_PROJECT_STATUS_NAMES:
-        return False
-    return bool(project.get("completedAt")) or status_name in COMPLETED_PROJECT_STATUS_NAMES
-
-
-def is_inactive_project(project: dict) -> bool:
-    return bool(project.get("completedAt")) or (
-        get_project_status_name(project) in INACTIVE_PROJECT_STATUS_NAMES
-    )
-
-
-def get_project_schedule_variance_days(project: dict) -> int | None:
-    target_date = parse_iso_date(project.get("targetDate"))
-    completed_date = parse_iso_date(project.get("completedAt"))
-    if target_date is None or completed_date is None:
-        return None
-    return (completed_date - target_date).days
-
-
-def completed_project_weeks(projects: list[dict]) -> int:
-    return sum(
-        get_project_planned_weeks(project) for project in projects if is_completed_project(project)
-    )
 
 
 def _format_hours(delta: timedelta) -> str:

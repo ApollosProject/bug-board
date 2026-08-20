@@ -783,6 +783,15 @@ class FailingDagsDashboardTest(unittest.TestCase):
         )
 
 
+class ProjectStatusClassificationTest(unittest.TestCase):
+    def test_released_project_is_inactive_and_completed(self):
+        project = {"status": {"name": "Released"}}
+
+        self.assertTrue(app_module.is_inactive_project(project))
+        self.assertTrue(app_module.is_completed_project(project))
+        self.assertFalse(app_module.is_incomplete_project(project))
+
+
 class TeamContextProjectFilteringTest(unittest.TestCase):
     def setUp(self):
         app_module._build_team_context.cache_clear()

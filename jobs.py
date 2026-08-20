@@ -33,8 +33,8 @@ from linear.issues import (
 )
 from linear.projects import get_projects
 from openai_client import get_chat_function_call
-from person_stats import performance_outliers, person_card_metrics
-from project_dates import format_project_target_status, parse_iso_date
+from person_stats import issue_card_values, performance_outliers
+from project_dates import format_project_target_status, get_project_planned_weeks, parse_iso_date
 from regression_cache import refresh_regression_summary_cache
 from support import get_support_slugs
 
@@ -752,20 +752,46 @@ def post_stale():
 
 
 def _person_led_projects(projects: list[dict], person_key: str, person: dict) -> list[dict]:
-    raw_name = person.get("linear_display_name") or person.get("linear_username") or person_key
-    target = _normalize_linear_display_name(str(raw_name))
-    led: list[dict] = []
-    for project in projects:
-        lead = (project.get("lead") or {}).get("displayName")
-        if not isinstance(lead, str) or not lead:
-            continue
-        if _normalize_linear_display_name(lead) == target:
-            led.append(project)
-    return led
+    target = _normalize_linear_display_name(
+        str(person.get("linear_display_name") or person.get("linear_username") or person_key)
+    )
+    return [
+        project
+        for project in projects
+        if _normalize_linear_display_name(str((project.get("lead") or {}).get("displayName") or ""))
+        == target
+    ]
 
 
-def _format_outlier_categories(items: list[dict[str, str]]) -> str:
-    return ", ".join(f"{item['name']} {item['label']}" for item in items)
+def _person_card_metrics(
+    completed: list[dict], prs_merged: int, prs_reviewed: int, led: list[dict]
+) -> dict:
+    current = incomplete = weeks = 0
+    variances: list[int] = []
+    for project in led:
+        status = ((project.get("status") or {}).get("name") or "").strip().lower()
+        incomplete += int(status == "incomplete")
+        done = status not in {"incomplete", "canceled", "cancelled"} and (
+            bool(project.get("completedAt")) or status in {"completed", "released"}
+        )
+        if done:
+            weeks += get_project_planned_weeks(project)
+            target = parse_iso_date(project.get("targetDate"))
+            finished = parse_iso_date(project.get("completedAt"))
+            if target is not None and finished is not None:
+                variances.append((finished - target).days)
+        current += int(not _is_inactive_project(project))
+    return {
+        "prs_merged": prs_merged,
+        "prs_reviewed": prs_reviewed,
+        **issue_card_values(completed),
+        "lead_current_projects": current,
+        "lead_completed_projects": weeks,
+        "lead_incomplete_projects": incomplete,
+        "lead_completed_projects_avg_early_late": (
+            sum(variances) / len(variances) if variances else None
+        ),
+    }
 
 
 def format_performance_outlier_markdown(
@@ -774,26 +800,26 @@ def format_performance_outlier_markdown(
     base_url: str,
     days: int = PERFORMANCE_OUTLIER_DAYS,
 ) -> str | None:
-    praise_lines: list[str] = []
-    coach_lines: list[str] = []
-    for slug in sorted(outliers):
-        url = f"{base_url.rstrip('/')}/team/{slug}?days={days}"
-        name = f"<{url}|{slug}>"
-        buckets = outliers[slug]
-        if buckets.get("high"):
-            praise_lines.append(f"- {name}: {_format_outlier_categories(buckets['high'])}")
-        if buckets.get("low"):
-            coach_lines.append(f"- {name}: {_format_outlier_categories(buckets['low'])}")
-    if not praise_lines and not coach_lines:
+    def lines(kind: str) -> list[str]:
+        result = []
+        for slug, buckets in sorted(outliers.items()):
+            items = buckets.get(kind) or []
+            if not items:
+                continue
+            cats = ", ".join(f"{item['name']} {item['label']}" for item in items)
+            result.append(f"- <{base_url.rstrip('/')}/team/{slug}?days={days}|{slug}>: {cats}")
+        return result
+
+    praise, coach = lines("high"), lines("low")
+    if not praise and not coach:
         return None
     sections = [f"*Who to praise and coach (±1.5σ, last {days} days)*"]
-    if praise_lines:
-        sections.append("*Praise*\n\n" + "\n".join(praise_lines))
-    if coach_lines:
-        sections.append("*Coach*\n\n" + "\n".join(coach_lines))
-    board_link = base_url.rstrip("/")
-    if board_link:
-        sections.append(f"<{board_link}|View Bug Board>")
+    if praise:
+        sections.append("*Praise*\n\n" + "\n".join(praise))
+    if coach:
+        sections.append("*Coach*\n\n" + "\n".join(coach))
+    if base_url.strip():
+        sections.append(f"<{base_url.rstrip('/')}|View Bug Board>")
     return "\n\n".join(sections)
 
 
@@ -801,15 +827,10 @@ def format_performance_outlier_markdown(
 def post_performance_outliers():
     """Send weekly ±1.5σ outliers so managers know who to praise and coach."""
     days = PERFORMANCE_OUTLIER_DAYS
-    engineering_team_members = get_team_members(ENGINEERING_TEAM_SLUG)
-    try:
-        projects = get_projects()
-    except Exception as exc:
-        logging.error("Failed to fetch projects for performance outliers: %s", exc)
-        projects = []
-
-    people_metrics = {}
-    for person_key, person in engineering_team_members.items():
+    people = get_team_members(ENGINEERING_TEAM_SLUG)
+    projects = get_projects()
+    metrics = {}
+    for slug, person in people.items():
         login = person.get("linear_username")
         if not login:
             continue
@@ -818,28 +839,20 @@ def post_performance_outliers():
         except Exception as exc:
             logging.error("Failed to fetch completed issues for %s: %s", login, exc)
             continue
-        github_username = person.get("github_username")
         prs_merged = prs_reviewed = 0
+        github_username = person.get("github_username")
         if github_username:
-            try:
-                prs_merged, prs_reviewed = get_merged_pr_counts_for_user(github_username, days)
-            except Exception as exc:
-                logging.error("Failed to fetch PR counts for %s: %s", github_username, exc)
-        people_metrics[person_key] = person_card_metrics(
-            completed,
-            prs_merged=prs_merged,
-            prs_reviewed=prs_reviewed,
-            led_projects=_person_led_projects(projects, person_key, person),
+            prs_merged, prs_reviewed = get_merged_pr_counts_for_user(github_username, days)
+        metrics[slug] = _person_card_metrics(
+            completed, prs_merged, prs_reviewed, _person_led_projects(projects, slug, person)
         )
-
     markdown = format_performance_outlier_markdown(
-        performance_outliers(people_metrics),
+        performance_outliers(metrics),
         base_url=os.getenv("APP_URL", ""),
         days=days,
     )
-    if not markdown:
-        return
-    post_to_manager_slack(markdown)
+    if markdown:
+        post_to_manager_slack(markdown)
 
 
 @with_retries
