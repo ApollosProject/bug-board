@@ -11,7 +11,7 @@
 <h2>{{ 'Current Support Work' if on_call_support else 'Current Project Work' }}</h2>
 {% if open_current_cycle %}
 {% for project, issues in open_current_cycle.items() %}
-<details open>
+<details>
   <summary>{{ project }}</summary>
   {% for issue in issues %}
   <div class="card">
