@@ -292,6 +292,62 @@ class PersonStatsTest(unittest.TestCase):
         self.assertIn("max-width: min(12rem, calc(100vw - 2rem));", styles)
         self.assertIn("white-space: normal;", styles)
 
+    def test_non_engineers_skip_relative_metrics_and_peer_fetches(self):
+        app_module._build_person_context.cache_clear()
+        self.addCleanup(app_module._build_person_context.cache_clear)
+        config = {
+            "people": {
+                "andy": {
+                    "team": "unassigned",
+                    "linear_username": "andy",
+                    "github_username": "andy-gh",
+                },
+                "alice": {
+                    "team": "engineering",
+                    "linear_username": "alice",
+                    "github_username": "alice-gh",
+                },
+                "bob": {
+                    "team": "engineering",
+                    "linear_username": "bob",
+                    "github_username": "bob-gh",
+                },
+            }
+        }
+        completed_logins: list[str] = []
+        github_usernames: list[str] = []
+
+        def fake_completed(login, days=30, window=None):
+            completed_logins.append(login)
+            return [_issue(priority=2, bug=True) for _ in range(10)]
+
+        def fake_github(username, days=30, window=None):
+            github_usernames.append(username)
+            return (10, 10)
+
+        with (
+            patch.object(app_module, "load_config", return_value=config),
+            patch.object(app_module, "get_open_issues_for_person", return_value=[]),
+            patch.object(app_module, "get_completed_issues_for_person", side_effect=fake_completed),
+            patch.object(app_module, "get_projects", return_value=[]),
+            patch.object(app_module, "get_merged_pr_counts_for_user", side_effect=fake_github),
+            patch.object(app_module, "get_support_slugs", return_value=set()),
+        ):
+            context = app_module._build_person_context("andy", 30, 1)
+
+        self.assertEqual(context["metric_stdevs"], {})
+        self.assertEqual(context["prs_merged"], 10)
+        self.assertEqual(context["priority_bugs_fixed"], 10)
+        self.assertEqual(completed_logins, ["andy"])
+        self.assertEqual(github_usernames, ["andy-gh"])
+        with app_module.app.test_request_context():
+            body = app_module.render_template("partials/person_content.html", **context)
+        self.assertIn("<h1>10</h1>", body)
+        self.assertNotIn("metric-stdev", body)
+        self.assertNotIn("σ", body)
+        self.assertNotIn('class="high"', body)
+        self.assertNotIn('class="low"', body)
+
     def test_project_metric_cards_link_to_their_exact_linear_project_lists(self):
         app_module._build_person_context.cache_clear()
         self.addCleanup(app_module._build_person_context.cache_clear)
