@@ -40,6 +40,17 @@ class LeaderboardExportTest(unittest.TestCase):
             html = client.get("/partials/index/leaderboard").get_data(as_text=True)
         self.assertTrue(csv_text.startswith("person,slug,score"))
         self.assertIn("/leaderboard.csv?days=30", html)
+        self.assertIn('class="leaderboard-export"', html)
+        self.assertIn(">Export CSV</a>", html)
+        self.assertNotIn("<h2>\n  Leaderboard", html)
+        with open("static/styles.css") as styles_file:
+            styles = styles_file.read()
+        heading = styles.split(".leaderboard-heading {", 1)[1].split("}", 1)[0]
+        export = styles.split("a.leaderboard-export {", 1)[1].split("}", 1)[0]
+        self.assertIn("display: flex;", heading)
+        self.assertIn("justify-content: space-between;", heading)
+        self.assertIn("font-size: 0.8rem;", export)
+        self.assertIn("text-decoration: none;", export)
         with patch.object(
             app_module, "_leaderboard_page_context", return_value={"leaderboard_unavailable": True}
         ):

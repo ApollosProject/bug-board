@@ -160,6 +160,17 @@ details.dropdown.site-menu > summary + ul {
   box-sizing: border-box;
 }
 
+.leaderboard-heading {
+  align-items: baseline; display: flex; flex-wrap: wrap;
+  gap: 0.5rem 1rem; justify-content: space-between; margin: 0 0 0.75rem;
+}
+.leaderboard-heading h2 { margin: 0; }
+a.leaderboard-export {
+  color: var(--pico-muted-color); font-size: 0.8rem; font-weight: 600;
+  text-decoration: none; white-space: nowrap;
+}
+a.leaderboard-export:is(:hover, :focus) { color: var(--pico-primary); }
+
 .project-timeline-heading {
   align-items: baseline; display: flex; flex-wrap: wrap;
   gap: 0.5rem 1rem; justify-content: space-between; margin: 1.5rem 0 0.75rem;
