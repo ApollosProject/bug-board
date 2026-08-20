@@ -16,13 +16,21 @@ CARD_METRIC_KEYS = (
     "lead_completed_projects_avg_early_late",
 )
 
+# Displayed σ is oriented so + is better than the engineering average and − is worse.
 LOWER_IS_BETTER_METRIC_KEYS = frozenset(
     {
         "priority_bug_avg_time_to_fix",
         "avg_all_time_to_fix",
+        "lead_incomplete_projects",
         "lead_completed_projects_avg_early_late",
     }
 )
+STDEV_DIRECTION_HINTS = {
+    "priority_bug_avg_time_to_fix": "lower is better",
+    "avg_all_time_to_fix": "lower is better",
+    "lead_incomplete_projects": "lower is better",
+    "lead_completed_projects_avg_early_late": "earlier is better",
+}
 
 STDEV_COLOR_THRESHOLD = 1.5
 STDEV_COLOR_METRIC_KEYS = frozenset({"prs_merged", "prs_reviewed", "all_work_done"})
@@ -75,9 +83,9 @@ def stdev_tone(z: float, *, threshold: float = STDEV_COLOR_THRESHOLD) -> str | N
     return None
 
 
-def format_stdev_tooltip(values: list[float], *, lower_is_better: bool = False) -> str:
+def format_stdev_tooltip(values: list[float], *, hint: str | None = None) -> str:
     tooltip = f"eng avg {statistics.fmean(values):.1f} · σ {statistics.pstdev(values):.1f}"
-    return f"{tooltip} · lower is better" if lower_is_better else tooltip
+    return f"{tooltip} · {hint}" if hint else tooltip
 
 
 def metric_stdevs_for_person(
@@ -94,12 +102,11 @@ def metric_stdevs_for_person(
         z = z_score(float(person_value), values)
         if z is None:
             continue
-        lower_is_better = key in LOWER_IS_BETTER_METRIC_KEYS
-        if lower_is_better:
+        if key in LOWER_IS_BETTER_METRIC_KEYS:
             z = -z
         entry: dict[str, str] = {
             "label": format_stdev_label(z),
-            "tooltip": format_stdev_tooltip(values, lower_is_better=lower_is_better),
+            "tooltip": format_stdev_tooltip(values, hint=STDEV_DIRECTION_HINTS.get(key)),
         }
         if key in STDEV_COLOR_METRIC_KEYS:
             tone = stdev_tone(z)
