@@ -1465,9 +1465,14 @@ def _build_person_context(
         for key, info in config.get("people", {}).items()
         if info.get("team") == ENGINEERING_TEAM_SLUG
     }
-    other_engineers = {key: info for key, info in engineering_people.items() if key != slug}
+    include_relative_metrics = slug in engineering_people
+    other_engineers = (
+        {key: info for key, info in engineering_people.items() if key != slug}
+        if include_relative_metrics
+        else {}
+    )
     extra_workers = 0
-    if len(engineering_people) >= 2:
+    if other_engineers:
         extra_workers = len(other_engineers) + sum(
             1
             for info in other_engineers.values()
@@ -1489,7 +1494,7 @@ def _build_person_context(
                 days,
                 window,
             )
-        if len(engineering_people) >= 2:
+        if other_engineers:
             for other_slug, info in other_engineers.items():
                 other_completed_futures[other_slug] = executor.submit(
                     get_completed_issues_for_person,
@@ -1617,7 +1622,7 @@ def _build_person_context(
         "lead_incomplete_projects": lead_incomplete_projects,
         "lead_completed_projects_avg_early_late": average_completed_project_variance,
     }
-    team_metrics = [current_metrics] if slug in engineering_people else []
+    team_metrics = [current_metrics] if include_relative_metrics else []
     for other_slug, info in other_engineers.items():
         completed_future_for_other = other_completed_futures.get(other_slug)
         if completed_future_for_other is None:
@@ -1665,7 +1670,9 @@ def _build_person_context(
                 ),
             }
         )
-    metric_stdevs = metric_stdevs_for_person(current_metrics, team_metrics)
+    metric_stdevs = (
+        metric_stdevs_for_person(current_metrics, team_metrics) if include_relative_metrics else {}
+    )
 
     project_names = {proj.get("name") for proj in cycle_projects if proj.get("name")}
 
