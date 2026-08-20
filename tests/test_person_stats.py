@@ -20,6 +20,27 @@ def _issue(*, priority=4, bug=False):
     }
 
 
+def _project(lead_name: str, project_id: str, *, status: str, completed: bool = False) -> dict:
+    return {
+        "id": project_id,
+        "name": f"Project {project_id}",
+        "url": f"https://linear.example/project/{project_id}",
+        "status": {"name": status},
+        "completedAt": "2026-08-01T00:00:00.000Z" if completed else None,
+        "lead": {"displayName": lead_name},
+        "members": [],
+    }
+
+
+def _outlier_metrics(*, better: bool) -> dict[str, int]:
+    high = 10 if better else 0
+    low = 0 if better else 10
+    metrics = dict.fromkeys(person_stats.CARD_METRIC_KEYS, high)
+    for key in person_stats.LOWER_IS_BETTER_METRIC_KEYS:
+        metrics[key] = low
+    return metrics
+
+
 class PersonStatsTest(unittest.TestCase):
     def test_z_scores_skip_zero_variance_and_keep_copy_short(self):
         self.assertIsNone(person_stats.z_score(9, [4, 4]))
@@ -92,16 +113,16 @@ class PersonStatsTest(unittest.TestCase):
             )
         )
 
-    def test_pr_cards_color_at_one_and_a_half_sigma(self):
+    def test_all_card_metrics_color_at_one_and_a_half_sigma(self):
         self.assertEqual(person_stats.stdev_tone(1.5), "high")
         self.assertEqual(person_stats.stdev_tone(-1.5), "low")
         self.assertIsNone(person_stats.stdev_tone(1.49))
         self.assertIsNone(person_stats.stdev_tone(-1.49))
 
-        high_person = {"prs_merged": 10, "prs_reviewed": 10, "all_work_done": 10}
-        clustered_low = {"prs_merged": 0, "prs_reviewed": 0, "all_work_done": 0}
-        low_person = {"prs_merged": 0, "prs_reviewed": 0, "all_work_done": 0}
-        clustered_high = {"prs_merged": 10, "prs_reviewed": 10, "all_work_done": 10}
+        high_person = _outlier_metrics(better=True)
+        clustered_low = _outlier_metrics(better=False)
+        low_person = _outlier_metrics(better=False)
+        clustered_high = _outlier_metrics(better=True)
 
         high_stdevs = person_stats.metric_stdevs_for_person(
             high_person, [high_person, clustered_low, clustered_low, clustered_low]
@@ -110,14 +131,12 @@ class PersonStatsTest(unittest.TestCase):
             low_person, [low_person, clustered_high, clustered_high, clustered_high]
         )
 
-        self.assertEqual(high_stdevs["prs_merged"]["tone"], "high")
-        self.assertEqual(high_stdevs["prs_reviewed"]["tone"], "high")
-        self.assertEqual(high_stdevs["all_work_done"]["tone"], "high")
-        self.assertEqual(low_stdevs["prs_merged"]["tone"], "low")
-        self.assertEqual(low_stdevs["prs_reviewed"]["tone"], "low")
-        self.assertEqual(low_stdevs["all_work_done"]["tone"], "low")
+        for key in person_stats.CARD_METRIC_KEYS:
+            with self.subTest(key=key):
+                self.assertEqual(high_stdevs[key]["tone"], "high")
+                self.assertEqual(low_stdevs[key]["tone"], "low")
 
-    def test_person_cards_color_pr_headings_beyond_stdev_threshold(self):
+    def test_person_cards_color_headings_beyond_stdev_threshold(self):
         app_module._build_person_context.cache_clear()
         self.addCleanup(app_module._build_person_context.cache_clear)
         config = {
@@ -132,13 +151,21 @@ class PersonStatsTest(unittest.TestCase):
         }
 
         def fake_completed(login, days=30, window=None):
-            return [_issue() for _ in range(10)] if login == "alice" else []
+            return [_issue(priority=2, bug=True) for _ in range(10)] if login == "alice" else []
+
+        projects = [
+            *[
+                _project("Alice", f"alice-done-{index}", status="Completed", completed=True)
+                for index in range(10)
+            ],
+            *[_project("Alice", f"alice-open-{index}", status="Incomplete") for index in range(10)],
+        ]
 
         with (
             patch.object(app_module, "load_config", return_value=config),
             patch.object(app_module, "get_open_issues_for_person", return_value=[]),
             patch.object(app_module, "get_completed_issues_for_person", side_effect=fake_completed),
-            patch.object(app_module, "get_projects", return_value=[]),
+            patch.object(app_module, "get_projects", return_value=projects),
             patch.object(
                 app_module,
                 "get_merged_pr_counts_for_user",
@@ -150,12 +177,19 @@ class PersonStatsTest(unittest.TestCase):
         ):
             context = app_module._build_person_context("alice", 30, 1)
 
-        self.assertEqual(context["metric_stdevs"]["prs_merged"]["tone"], "high")
-        self.assertEqual(context["metric_stdevs"]["prs_reviewed"]["tone"], "high")
-        self.assertEqual(context["metric_stdevs"]["all_work_done"]["tone"], "high")
+        for key in (
+            "prs_merged",
+            "prs_reviewed",
+            "priority_bugs_fixed",
+            "all_work_done",
+            "lead_completed_projects",
+        ):
+            self.assertEqual(context["metric_stdevs"][key]["tone"], "high")
+        self.assertEqual(context["metric_stdevs"]["lead_incomplete_projects"]["tone"], "low")
         with app_module.app.test_request_context():
             body = app_module.render_template("partials/person_content.html", **context)
-        self.assertEqual(body.count('<h1 class="high">10</h1>'), 3)
+        self.assertEqual(body.count('<h1 class="high">10</h1>'), 5)
+        self.assertEqual(body.count('<h1 class="low">10</h1>'), 1)
         self.assertNotIn('<h1 class="high">0</h1>', body)
         self.assertNotIn("2/week", body)
         self.assertNotIn("5/week", body)

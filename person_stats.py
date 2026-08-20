@@ -33,7 +33,6 @@ STDEV_DIRECTION_HINTS = {
 }
 
 STDEV_COLOR_THRESHOLD = 1.5
-STDEV_COLOR_METRIC_KEYS = frozenset({"prs_merged", "prs_reviewed", "all_work_done"})
 
 MetricValue = float | int | None
 
@@ -108,9 +107,8 @@ def metric_stdevs_for_person(
             "label": format_stdev_label(z),
             "tooltip": format_stdev_tooltip(values, hint=STDEV_DIRECTION_HINTS.get(key)),
         }
-        if key in STDEV_COLOR_METRIC_KEYS:
-            tone = stdev_tone(z)
-            if tone is not None:
-                entry["tone"] = tone
+        tone = stdev_tone(z)
+        if tone is not None:
+            entry["tone"] = tone
         result[key] = entry
     return result

@@ -105,18 +105,17 @@
   <div>
     <article>
       <header><a href="https://linear.app/differential/view/sla-issues-7e2098ebf79e">Priority Bugs Fixed</a></header>
-      <h1>{{ priority_bugs_fixed }}</h1>
+      {{ metric_heading('priority_bugs_fixed', priority_bugs_fixed) }}
       {{ stdev_badge('priority_bugs_fixed') }}
     </article>
   </div>
   <div>
     <article>
       <header>Priority Bug Time to Fix</header>
-      {% if priority_bug_avg_time_to_fix is not none %}
-      <h1>{{ priority_bug_avg_time_to_fix }}d</h1>
-      {% else %}
-      <h1>n/a</h1>
-      {% endif %}
+      {{ metric_heading(
+        'priority_bug_avg_time_to_fix',
+        (priority_bug_avg_time_to_fix ~ 'd') if priority_bug_avg_time_to_fix is not none else 'n/a'
+      ) }}
       {{ stdev_badge('priority_bug_avg_time_to_fix') }}
     </article>
   </div>
@@ -135,11 +134,10 @@
   <div>
     <article>
       <header>Time to Completion</header>
-      {% if avg_all_time_to_fix is not none %}
-      <h1>{{ avg_all_time_to_fix }}d</h1>
-      {% else %}
-      <h1>n/a</h1>
-      {% endif %}
+      {{ metric_heading(
+        'avg_all_time_to_fix',
+        (avg_all_time_to_fix ~ 'd') if avg_all_time_to_fix is not none else 'n/a'
+      ) }}
       {{ stdev_badge('avg_all_time_to_fix') }}
     </article>
   </div>
@@ -148,32 +146,31 @@
   <div>
     <article>
       <header><a href="https://linear.app/differential/projects/all">Current Projects</a></header>
-      <h1>{{ lead_current_projects }}</h1>
+      {{ metric_heading('lead_current_projects', lead_current_projects) }}
       {{ stdev_badge('lead_current_projects') }}
     </article>
   </div>
   <div>
     <article>
       <header><a href="https://linear.app/differential/projects/all">Completed Projects</a></header>
-      <h1>{{ lead_completed_projects }}</h1>
+      {{ metric_heading('lead_completed_projects', lead_completed_projects) }}
       {{ stdev_badge('lead_completed_projects') }}
     </article>
   </div>
   <div>
     <article>
       <header><a href="https://linear.app/differential/projects/all">Incomplete Projects</a></header>
-      <h1>{{ lead_incomplete_projects }}</h1>
+      {{ metric_heading('lead_incomplete_projects', lead_incomplete_projects) }}
       {{ stdev_badge('lead_incomplete_projects') }}
     </article>
   </div>
   <div>
     <article>
       <header><a href="https://linear.app/differential/projects/all">Avg Days Early/Late</a></header>
-      {% if lead_completed_projects_avg_early_late %}
-      <h1>{{ lead_completed_projects_avg_early_late }}</h1>
-      {% else %}
-      <h1>n/a</h1>
-      {% endif %}
+      {{ metric_heading(
+        'lead_completed_projects_avg_early_late',
+        lead_completed_projects_avg_early_late or 'n/a'
+      ) }}
       {{ stdev_badge('lead_completed_projects_avg_early_late') }}
     </article>
   </div>
