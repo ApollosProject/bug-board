@@ -25,6 +25,7 @@ ignore_decorators = [
     "@app.after_request",
     "@app.before_request",
     "@app.get",
+    "@app.post",
     "@app.route",
     "@app.template_filter",
 ]

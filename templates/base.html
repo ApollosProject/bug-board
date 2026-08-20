@@ -24,9 +24,11 @@
         <ul>
           {% if session.get('github_login') %}
             <li>
-              <a href="{{ url_for('github_logout') }}" title="Sign out">
-                @{{ session.get('github_login') }}
-              </a>
+              <form class="logout-form" method="post" action="{{ url_for('github_logout') }}">
+                <button type="submit" title="Sign out">
+                  @{{ session.get('github_login') }}
+                </button>
+              </form>
             </li>
           {% endif %}
           <li>

@@ -14,7 +14,7 @@ from flask import Flask, Response, current_app, redirect, render_template, reque
 GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
 GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
 GITHUB_API_URL = "https://api.github.com"
-GITHUB_API_VERSION = "2026-03-10"
+GITHUB_API_VERSION = "2022-11-28"
 GITHUB_REQUEST_TIMEOUT_SECONDS = 10
 DEFAULT_GITHUB_ORG = "ApollosProject"
 
@@ -246,6 +246,18 @@ def register_github_oauth(app: Flask) -> None:
     if secret_key:
         app.secret_key = secret_key
 
+    reported_configuration_errors: set[tuple[str, ...]] = set()
+
+    def log_configuration_errors_once(configuration_errors: list[str]) -> None:
+        error_signature = tuple(configuration_errors)
+        if error_signature in reported_configuration_errors:
+            return
+        reported_configuration_errors.add(error_signature)
+        logging.error(
+            "GitHub OAuth configuration error: %s",
+            "; ".join(configuration_errors),
+        )
+
     @app.before_request
     def require_github_org_membership():
         if not current_app.config.get("GITHUB_OAUTH_ENABLED"):
@@ -255,10 +267,7 @@ def register_github_oauth(app: Flask) -> None:
 
         configuration_errors = _authentication_configuration_errors()
         if configuration_errors:
-            logging.error(
-                "GitHub OAuth configuration error: %s",
-                "; ".join(configuration_errors),
-            )
+            log_configuration_errors_once(configuration_errors)
             return _render_auth_message(
                 "Authentication unavailable",
                 "Bug Board authentication is not configured correctly.",
@@ -287,10 +296,7 @@ def register_github_oauth(app: Flask) -> None:
     def github_login():
         configuration_errors = _authentication_configuration_errors()
         if configuration_errors:
-            logging.error(
-                "GitHub OAuth configuration error: %s",
-                "; ".join(configuration_errors),
-            )
+            log_configuration_errors_once(configuration_errors)
             return _render_auth_message(
                 "Authentication unavailable",
                 "Bug Board authentication is not configured correctly.",
@@ -322,10 +328,7 @@ def register_github_oauth(app: Flask) -> None:
     def github_oauth_callback():
         configuration_errors = _authentication_configuration_errors()
         if configuration_errors:
-            logging.error(
-                "GitHub OAuth configuration error: %s",
-                "; ".join(configuration_errors),
-            )
+            log_configuration_errors_once(configuration_errors)
             return _render_auth_message(
                 "Authentication unavailable",
                 "Bug Board authentication is not configured correctly.",
@@ -394,16 +397,13 @@ def register_github_oauth(app: Flask) -> None:
         session[AUTHENTICATED_ORG_SESSION_KEY] = org
         return redirect(next_url)
 
-    @app.get("/logout")
+    @app.post("/logout")
     def github_logout():
         if not current_app.config.get("GITHUB_OAUTH_ENABLED"):
             return redirect("/")
         configuration_errors = _authentication_configuration_errors()
         if configuration_errors:
-            logging.error(
-                "GitHub OAuth configuration error: %s",
-                "; ".join(configuration_errors),
-            )
+            log_configuration_errors_once(configuration_errors)
             return _render_auth_message(
                 "Authentication unavailable",
                 "Bug Board authentication is not configured correctly.",

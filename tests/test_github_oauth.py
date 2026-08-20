@@ -44,6 +44,12 @@ class GitHubOAuthTest(unittest.TestCase):
             oauth_session[github_oauth.OAUTH_VERIFIER_SESSION_KEY] = "v" * 64
             oauth_session[github_oauth.OAUTH_NEXT_SESSION_KEY] = next_url
 
+    def _seed_authenticated_session(self):
+        with self.client.session_transaction() as authenticated_session:
+            authenticated_session[github_oauth.AUTHENTICATED_LOGIN_SESSION_KEY] = "octocat"
+            authenticated_session[github_oauth.AUTHENTICATED_USER_ID_SESSION_KEY] = 123
+            authenticated_session[github_oauth.AUTHENTICATED_ORG_SESSION_KEY] = "ApollosProject"
+
     def test_protected_routes_redirect_to_login_but_health_remains_public(self):
         response = self.client.get("/projects?days=30")
 
@@ -109,6 +115,13 @@ class GitHubOAuthTest(unittest.TestCase):
             self.assertEqual(oauth_session[github_oauth.OAUTH_STATE_SESSION_KEY], "random-state")
             self.assertEqual(oauth_session[github_oauth.OAUTH_VERIFIER_SESSION_KEY], verifier)
             self.assertEqual(oauth_session[github_oauth.OAUTH_NEXT_SESSION_KEY], "/")
+
+    def test_github_api_version_matches_the_existing_rest_clients(self):
+        self.assertEqual(github_oauth.GITHUB_API_VERSION, "2022-11-28")
+        self.assertEqual(
+            github_oauth._github_api_headers("temporary-token")["X-GitHub-Api-Version"],
+            "2022-11-28",
+        )
 
     def test_callback_verifies_identity_and_active_org_membership(self):
         self._seed_oauth_session("/projects?days=30")
@@ -205,6 +218,57 @@ class GitHubOAuthTest(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         post.assert_not_called()
         get.assert_not_called()
+
+    def test_logout_requires_post_and_clears_the_authenticated_session(self):
+        self._seed_authenticated_session()
+
+        page_response = self.client.get("/projects")
+        page = page_response.get_data(as_text=True)
+        self.assertEqual(page_response.status_code, 200)
+        self.assertIn('method="post"', page)
+        self.assertIn('action="/logout"', page)
+        self.assertNotIn('href="/logout"', page)
+
+        get_response = self.client.get("/logout")
+        self.assertEqual(get_response.status_code, 405)
+        with self.client.session_transaction() as authenticated_session:
+            self.assertEqual(authenticated_session["github_login"], "octocat")
+
+        post_response = self.client.post("/logout")
+        self.assertEqual(post_response.status_code, 200)
+        self.assertIn("Signed out", post_response.get_data(as_text=True))
+        with self.client.session_transaction() as signed_out_session:
+            self.assertNotIn("github_login", signed_out_session)
+            self.assertNotIn("github_user_id", signed_out_session)
+            self.assertNotIn("github_org", signed_out_session)
+
+    def test_configuration_errors_are_logged_once_per_process(self):
+        with patch.dict(
+            os.environ,
+            {
+                "GITHUB_OAUTH_ENABLED": "true",
+                "GITHUB_OAUTH_CLIENT_ID": "oauth-client-id",
+                "APP_URL": "https://bug-board.example",
+            },
+            clear=True,
+        ):
+            test_app = Flask("oauth-logging-test")
+            test_app.get("/protected")(lambda: "ok")
+            github_oauth.register_github_oauth(test_app)
+
+        client = test_app.test_client()
+        with self.assertLogs(level="ERROR") as logs:
+            first_response = client.get("/protected")
+            second_response = client.get("/protected")
+            login_response = client.get("/login")
+
+        self.assertEqual(first_response.status_code, 503)
+        self.assertEqual(second_response.status_code, 503)
+        self.assertEqual(login_response.status_code, 503)
+        oauth_errors = [
+            message for message in logs.output if "GitHub OAuth configuration error" in message
+        ]
+        self.assertEqual(len(oauth_errors), 1)
 
     def test_partially_configured_oauth_fails_closed(self):
         with patch.dict(
