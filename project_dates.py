@@ -13,6 +13,23 @@ def parse_iso_date(value: str | None) -> date | None:
         return None
 
 
+def get_project_planned_weeks(project: dict) -> int:
+    start = parse_iso_date(project.get("startDate"))
+    target = parse_iso_date(project.get("targetDate"))
+    if start is None and target is None:
+        return 1
+    if start is None:
+        start = target
+    if target is None:
+        target = start
+    if start is None or target is None:
+        return 1
+    if start > target:
+        start, target = target, start
+    inclusive_days = (target - start).days + 1
+    return max(1, round(inclusive_days / 7))
+
+
 def _format_hours(delta: timedelta) -> str:
     seconds = max(delta.total_seconds(), 0)
     hours = math.ceil(seconds / 3600) if seconds else 0

@@ -43,6 +43,7 @@ from person_stats import issue_card_values, metric_stdevs_for_person
 from project_dates import (
     format_project_start_status,
     format_project_target_status,
+    get_project_planned_weeks,
     parse_iso_date,
 )
 from regression_cache import get_cached_regression_summary
@@ -163,6 +164,12 @@ def get_project_schedule_variance_days(project: dict[str, Any]) -> int | None:
     if target_date is None or completed_date is None:
         return None
     return (completed_date - target_date).days
+
+
+def completed_project_weeks(projects: list[dict[str, Any]]) -> int:
+    return sum(
+        get_project_planned_weeks(project) for project in projects if is_completed_project(project)
+    )
 
 
 def format_average_project_schedule_variance(
@@ -1514,7 +1521,7 @@ def _build_person_context(
         if normalize_display_name((project.get("lead") or {}).get("displayName"))
         == normalized_person_name
     ]
-    lead_completed_projects = sum(1 for project in led_projects if is_completed_project(project))
+    lead_completed_projects = completed_project_weeks(led_projects)
     lead_incomplete_projects = sum(1 for project in led_projects if is_incomplete_project(project))
     lead_current_projects = sum(1 for project in led_projects if not project.get("is_inactive"))
     lead_completed_project_variances = [
@@ -1579,9 +1586,7 @@ def _build_person_context(
                 "lead_current_projects": sum(
                     1 for project in other_led if not project.get("is_inactive")
                 ),
-                "lead_completed_projects": sum(
-                    1 for project in other_led if is_completed_project(project)
-                ),
+                "lead_completed_projects": completed_project_weeks(other_led),
                 "lead_incomplete_projects": sum(
                     1 for project in other_led if is_incomplete_project(project)
                 ),
