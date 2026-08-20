@@ -1,6 +1,9 @@
+import base64
+import json
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlparse
 
 import app as app_module
 import person_stats
@@ -49,6 +52,14 @@ def _outlier_metrics(*, better: bool) -> dict[str, int]:
     for key in person_stats.LOWER_IS_BETTER_METRIC_KEYS:
         metrics[key] = low
     return metrics
+
+
+def _linear_project_link_details(url: str) -> tuple[str, list[str]]:
+    query = parse_qs(urlparse(url).query)
+    encoded_filter = query["filter"][0]
+    encoded_filter += "=" * (-len(encoded_filter) % 4)
+    project_filter = json.loads(base64.urlsafe_b64decode(encoded_filter).decode("utf-8"))
+    return query["layout"][0], project_filter["and"][0]["id"]["in"]
 
 
 class PersonStatsTest(unittest.TestCase):
@@ -258,6 +269,70 @@ class PersonStatsTest(unittest.TestCase):
         styles = Path(__file__).resolve().parents[1].joinpath("static/styles.css").read_text()
         self.assertIn("max-width: min(12rem, calc(100vw - 2rem));", styles)
         self.assertIn("white-space: normal;", styles)
+
+    def test_project_metric_cards_link_to_their_exact_linear_project_lists(self):
+        app_module._build_person_context.cache_clear()
+        self.addCleanup(app_module._build_person_context.cache_clear)
+        config = {
+            "people": {
+                "alice": {
+                    "team": "engineering",
+                    "linear_username": "alice",
+                }
+            }
+        }
+        projects = [
+            _project("Alice", "alice-current", status="In Progress"),
+            _project(
+                "Alice",
+                "alice-completed-with-dates",
+                status="Completed",
+                completed=True,
+                start_date="2026-07-01",
+                target_date="2026-07-30",
+            ),
+            _project(
+                "Alice",
+                "alice-completed-without-dates",
+                status="Completed",
+                completed=True,
+            ),
+            _project("Alice", "alice-incomplete", status="Incomplete"),
+            _project("Alice", "alice-canceled", status="Canceled"),
+            _project("Bob", "bob-current", status="In Progress"),
+        ]
+
+        with (
+            patch.object(app_module, "load_config", return_value=config),
+            patch.object(app_module, "get_open_issues_for_person", return_value=[]),
+            patch.object(app_module, "get_completed_issues_for_person", return_value=[]),
+            patch.object(app_module, "get_projects", return_value=projects),
+            patch.object(app_module, "get_support_slugs", return_value=set()),
+            patch.object(app_module, "get_cached_regression_summary", return_value=None),
+        ):
+            context = app_module._build_person_context("alice", 30, 1)
+
+        expected_project_ids = {
+            "lead_current_projects": ["alice-current"],
+            "lead_completed_projects": [
+                "alice-completed-with-dates",
+                "alice-completed-without-dates",
+            ],
+            "lead_incomplete_projects": ["alice-incomplete"],
+            "lead_completed_projects_avg_early_late": ["alice-completed-with-dates"],
+        }
+        for metric, project_ids in expected_project_ids.items():
+            with self.subTest(metric=metric):
+                layout, linked_project_ids = _linear_project_link_details(
+                    context["project_metric_urls"][metric]
+                )
+                self.assertEqual(layout, "list")
+                self.assertEqual(linked_project_ids, project_ids)
+
+        with app_module.app.test_request_context():
+            body = app_module.render_template("partials/person_content.html", **context)
+        self.assertEqual(body.count("linear.app/differential/projects/all?filter="), 4)
+        self.assertNotIn('href="https://linear.app/differential/projects/all"', body)
 
     def test_completed_project_weeks_treat_two_short_projects_like_one_long_project(self):
         app_module._build_person_context.cache_clear()

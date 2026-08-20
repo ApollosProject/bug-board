@@ -145,28 +145,28 @@
 <div class="grid">
   <div>
     <article>
-      <header><a href="https://linear.app/differential/projects/all">Current Projects</a></header>
+      <header><a href="{{ project_metric_urls.lead_current_projects }}">Current Projects</a></header>
       {{ metric_heading('lead_current_projects', lead_current_projects) }}
       {{ stdev_badge('lead_current_projects') }}
     </article>
   </div>
   <div>
     <article>
-      <header><a href="https://linear.app/differential/projects/all">Completed Project Weeks</a></header>
+      <header><a href="{{ project_metric_urls.lead_completed_projects }}">Completed Project Weeks</a></header>
       {{ metric_heading('lead_completed_projects', lead_completed_projects) }}
       {{ stdev_badge('lead_completed_projects') }}
     </article>
   </div>
   <div>
     <article>
-      <header><a href="https://linear.app/differential/projects/all">Incomplete Projects</a></header>
+      <header><a href="{{ project_metric_urls.lead_incomplete_projects }}">Incomplete Projects</a></header>
       {{ metric_heading('lead_incomplete_projects', lead_incomplete_projects) }}
       {{ stdev_badge('lead_incomplete_projects') }}
     </article>
   </div>
   <div>
     <article>
-      <header><a href="https://linear.app/differential/projects/all">Avg Days Early/Late</a></header>
+      <header><a href="{{ project_metric_urls.lead_completed_projects_avg_early_late }}">Avg Days Early/Late</a></header>
       {{ metric_heading(
         'lead_completed_projects_avg_early_late',
         lead_completed_projects_avg_early_late or 'n/a'
