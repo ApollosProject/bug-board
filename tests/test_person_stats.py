@@ -395,3 +395,57 @@ class PersonStatsTest(unittest.TestCase):
             body = app_module.render_template("partials/person_content.html", **alice)
         self.assertIn("Completed Project Weeks", body)
         self.assertNotIn("Completed Projects</a>", body)
+
+    def test_current_work_starts_collapsed(self):
+        app_module._build_person_context.cache_clear()
+        self.addCleanup(app_module._build_person_context.cache_clear)
+        config = {
+            "people": {
+                "alice": {
+                    "team": "engineering",
+                    "linear_username": "alice",
+                }
+            }
+        }
+        current_issue = {
+            **_issue(),
+            "title": "Ship the current work",
+            "url": "https://linear.example/issue/current",
+            "daysUpdated": 2,
+            "project": {"name": "Project alpha"},
+        }
+        other_issue = {
+            **_issue(),
+            "title": "Unrelated chore",
+            "url": "https://linear.example/issue/other",
+            "daysUpdated": 4,
+            "project": {"name": "Side quest"},
+        }
+
+        with (
+            patch.object(app_module, "load_config", return_value=config),
+            patch.object(
+                app_module,
+                "get_open_issues_for_person",
+                return_value=[current_issue, other_issue],
+            ),
+            patch.object(app_module, "get_completed_issues_for_person", return_value=[]),
+            patch.object(
+                app_module,
+                "get_projects",
+                return_value=[_project("Alice", "alpha", status="In Progress")],
+            ),
+            patch.object(app_module, "get_support_slugs", return_value=set()),
+            patch.object(app_module, "get_cached_regression_summary", return_value=None),
+        ):
+            context = app_module._build_person_context("alice", 30, 1)
+
+        with app_module.app.test_request_context():
+            body = app_module.render_template("partials/person_content.html", **context)
+
+        current_work = body.split("<h2>Current Project Work</h2>", 1)[1].split("<h2>", 1)[0]
+        self.assertIn("<summary>Project alpha</summary>", current_work)
+        self.assertIn("Ship the current work", current_work)
+        self.assertIn("<details>", current_work)
+        self.assertNotIn("<details open>", current_work)
+        self.assertIn("<h2>Other Work</h2>", body)
