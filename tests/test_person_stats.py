@@ -54,12 +54,13 @@ def _outlier_metrics(*, better: bool) -> dict[str, int]:
     return metrics
 
 
-def _linear_project_link_details(url: str) -> tuple[str, list[str]]:
-    query = parse_qs(urlparse(url).query)
+def _linear_id_link_details(url: str) -> tuple[str, str, list[str]]:
+    parsed = urlparse(url)
+    query = parse_qs(parsed.query)
     encoded_filter = query["filter"][0]
     encoded_filter += "=" * (-len(encoded_filter) % 4)
-    project_filter = json.loads(base64.urlsafe_b64decode(encoded_filter).decode("utf-8"))
-    return query["layout"][0], project_filter["and"][0]["id"]["in"]
+    id_filter = json.loads(base64.urlsafe_b64decode(encoded_filter).decode("utf-8"))
+    return parsed.path, query["layout"][0], id_filter["and"][0]["id"]["in"]
 
 
 class PersonStatsTest(unittest.TestCase):
@@ -323,9 +324,10 @@ class PersonStatsTest(unittest.TestCase):
         }
         for metric, project_ids in expected_project_ids.items():
             with self.subTest(metric=metric):
-                layout, linked_project_ids = _linear_project_link_details(
+                path, layout, linked_project_ids = _linear_id_link_details(
                     context["project_metric_urls"][metric]
                 )
+                self.assertEqual(path, "/differential/projects/all")
                 self.assertEqual(layout, "list")
                 self.assertEqual(linked_project_ids, project_ids)
 
@@ -333,6 +335,64 @@ class PersonStatsTest(unittest.TestCase):
             body = app_module.render_template("partials/person_content.html", **context)
         self.assertEqual(body.count("linear.app/differential/projects/all?filter="), 4)
         self.assertNotIn('href="https://linear.app/differential/projects/all"', body)
+
+    def test_issue_metric_cards_link_to_their_exact_linear_issue_lists(self):
+        app_module._build_person_context.cache_clear()
+        self.addCleanup(app_module._build_person_context.cache_clear)
+        config = {
+            "people": {
+                "alice": {
+                    "team": "engineering",
+                    "linear_username": "alice",
+                }
+            }
+        }
+        completed = [
+            {
+                **_issue(priority=1, bug=True),
+                "id": "alice-priority-bug",
+                "identifier": "APO-1",
+                "title": "Urgent bug",
+            },
+            {
+                **_issue(priority=4, bug=False),
+                "id": "alice-other-work",
+                "identifier": "APO-2",
+                "title": "Chore",
+            },
+            {
+                **_issue(priority=2, bug=False),
+                "id": "alice-high-non-bug",
+                "identifier": "APO-3",
+                "title": "High chore",
+            },
+        ]
+
+        with (
+            patch.object(app_module, "load_config", return_value=config),
+            patch.object(app_module, "get_open_issues_for_person", return_value=[]),
+            patch.object(app_module, "get_completed_issues_for_person", return_value=completed),
+            patch.object(app_module, "get_projects", return_value=[]),
+            patch.object(app_module, "get_support_slugs", return_value=set()),
+            patch.object(app_module, "get_cached_regression_summary", return_value=None),
+        ):
+            context = app_module._build_person_context("alice", 30, 1)
+
+        self.assertEqual(
+            context["issue_metric_urls"]["priority_bugs_fixed"],
+            "https://linear.app/differential/issues/APO-1",
+        )
+        self.assertEqual(
+            context["issue_metric_urls"]["all_work_done"],
+            "https://linear.app/differential/issues/APO-1,APO-2,APO-3",
+        )
+
+        with app_module.app.test_request_context():
+            body = app_module.render_template("partials/person_content.html", **context)
+        self.assertEqual(body.count("linear.app/differential/issues/APO-"), 2)
+        self.assertNotIn("linear.app/differential/team/APO/all?filter=", body)
+        self.assertNotIn("sla-issues-7e2098ebf79e", body)
+        self.assertNotIn("linear.app/differential/profiles/alice", body)
 
     def test_completed_project_weeks_treat_two_short_projects_like_one_long_project(self):
         app_module._build_person_context.cache_clear()

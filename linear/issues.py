@@ -683,6 +683,7 @@ def get_completed_issues_for_person(login: str, days=30, window: TimeWindow | No
           ) {
             nodes {
               id
+              identifier
               title
               url
               completedAt

@@ -15,7 +15,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from airflow_fleet_health import AirflowFleetHealthError, evaluate_fleet_health
 from app_versions import get_app_versions_context
-from config import load_config
+from config import get_linear_team_key, load_config
 from constants import ENGINEERING_TEAM_SLUG, PRIORITY_TO_SCORE
 from fleet_health_cache import (
     get_cached_fleet_health,
@@ -74,21 +74,48 @@ def github_merged_prs_url(username: str, days: int, window: TimeWindow | None = 
     return f"https://github.com/pulls?q={quote(query, safe='')}"
 
 
-def linear_project_list_url(projects: list[dict[str, Any]]) -> str:
-    project_ids = list(
+def linear_id_list_url(path: str, items: list[dict[str, Any]]) -> str:
+    item_ids = list(
         dict.fromkeys(
-            project_id
-            for project in projects
-            if isinstance((project_id := project.get("id")), str) and project_id
+            item_id for item in items if isinstance((item_id := item.get("id")), str) and item_id
         )
     )
-    project_filter = {"and": [{"id": {"in": project_ids}}]}
     encoded_filter = (
-        base64.urlsafe_b64encode(json.dumps(project_filter, separators=(",", ":")).encode("utf-8"))
+        base64.urlsafe_b64encode(
+            json.dumps({"and": [{"id": {"in": item_ids}}]}, separators=(",", ":")).encode("utf-8")
+        )
         .decode("ascii")
         .rstrip("=")
     )
-    return f"https://linear.app/differential/projects/all?filter={encoded_filter}&layout=list"
+    return f"https://linear.app/differential/{path}?filter={encoded_filter}&layout=list"
+
+
+def linear_project_list_url(projects: list[dict[str, Any]]) -> str:
+    return linear_id_list_url("projects/all", projects)
+
+
+def linear_issue_list_url(issues: list[dict[str, Any]]) -> str:
+    identifiers = list(
+        dict.fromkeys(
+            identifier
+            for issue in issues
+            if isinstance((identifier := _linear_issue_identifier(issue)), str) and identifier
+        )
+    )
+    if not identifiers:
+        return f"https://linear.app/differential/team/{get_linear_team_key()}/all?layout=list"
+    return f"https://linear.app/differential/issues/{','.join(identifiers)}"
+
+
+def _linear_issue_identifier(issue: dict[str, Any]) -> str | None:
+    identifier = issue.get("identifier")
+    if isinstance(identifier, str) and identifier:
+        return identifier
+    url = issue.get("url")
+    if not isinstance(url, str):
+        return None
+    match = re.search(r"/issue/([A-Z0-9]+-\d+)", url)
+    return match.group(1) if match else None
 
 
 def _request_time_window() -> TimeWindow:
@@ -1494,18 +1521,18 @@ def _build_person_context(
         else:
             prs_merged = prs_reviewed = 0
 
-    priority_fix_times = []
-    priority_bugs_fixed = 0
-    for issue in completed_items:
-        is_priority_bug = issue.get("priority", 5) <= 2 and any(
-            lbl.get("name") == "Bug" for lbl in issue.get("labels", {}).get("nodes", [])
-        )
-        if not is_priority_bug:
-            continue
-        priority_bugs_fixed += 1
-        if issue.get("assignee_time_to_fix") is not None:
-            fix_time = issue["assignee_time_to_fix"]
-            priority_fix_times.append(fix_time)
+    priority_bugs = [
+        issue
+        for issue in completed_items
+        if issue.get("priority", 5) <= 2
+        and any(lbl.get("name") == "Bug" for lbl in issue.get("labels", {}).get("nodes", []))
+    ]
+    priority_bugs_fixed = len(priority_bugs)
+    priority_fix_times = [
+        issue["assignee_time_to_fix"]
+        for issue in priority_bugs
+        if issue.get("assignee_time_to_fix") is not None
+    ]
 
     if priority_fix_times:
         avg_priority_bug_fix = int(sum(priority_fix_times) / len(priority_fix_times))
@@ -1716,6 +1743,10 @@ def _build_person_context(
             "lead_completed_projects_avg_early_late": linear_project_list_url(
                 [project for project, _ in completed_project_variances]
             ),
+        },
+        "issue_metric_urls": {
+            "priority_bugs_fixed": linear_issue_list_url(priority_bugs),
+            "all_work_done": linear_issue_list_url(completed_items),
         },
         "metric_stdevs": metric_stdevs,
         "regression_metrics_status": (
