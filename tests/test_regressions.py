@@ -272,6 +272,7 @@ class RegressionAttributionTest(unittest.TestCase):
         records = [
             {
                 "attribution": {
+                    "url": "https://github.com/example/repo/pull/12/",
                     "merged_at": "2026-08-10T00:00:00Z",
                     "author": "alice",
                     "reviewers": ["bob"],
@@ -279,6 +280,7 @@ class RegressionAttributionTest(unittest.TestCase):
             },
             {
                 "attribution": {
+                    "url": "https://github.com/example/repo/pull/11",
                     "merged_at": "2025-08-10T00:00:00Z",
                     "author": "alice",
                     "reviewers": ["bob"],
@@ -294,6 +296,12 @@ class RegressionAttributionTest(unittest.TestCase):
         )
         self.assertEqual(authors[0]["rate"], 5.0)
         self.assertEqual(reviewers[1]["rate"], 4.0)
+        expected_pull_requests = [
+            {"url": "https://github.com/example/repo/pull/12", "label": "repo#12"}
+        ]
+        self.assertEqual(authors[0]["pull_requests"], expected_pull_requests)
+        self.assertEqual(reviewers[1]["pull_requests"], expected_pull_requests)
+        self.assertEqual(authors[1]["pull_requests"], [])
 
     def test_unconfigured_summary_skips_external_work(self):
         with patch.dict("os.environ", {}, clear=True):

@@ -192,7 +192,8 @@ their fixing PRs, and maps those commits back to likely inducing PR authors and 
 It refreshes one 30-day Redis summary every six hours.
 
 The homepage shows team-level regression cards. Person pages show authored and approved
-regression counts and rates. Web requests only read the cached summary and never run the
-attribution pipeline. Automated blame is directional rather than proof of causality;
+regression counts, rates, and direct links to the attributed GitHub PRs. Web requests only read
+the cached summary and never run the attribution pipeline. Automated blame is directional rather
+than proof of causality;
 version-controlled corrections and exclusions can be added to
 `regression_overrides.yml`.

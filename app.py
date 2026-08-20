@@ -1765,8 +1765,10 @@ def _build_person_context(
         ),
         "regressions_authored": author_regression_metric.get("regression_count", 0),
         "author_regression_rate": author_regression_metric.get("rate"),
+        "authored_regression_pull_requests": author_regression_metric.get("pull_requests", []),
         "regressions_approved": reviewer_regression_metric.get("regression_count", 0),
         "reviewer_escape_rate": reviewer_regression_metric.get("rate"),
+        "approved_regression_pull_requests": reviewer_regression_metric.get("pull_requests", []),
         "platform_labels": platform_labels,
         "platform_values": platform_values,
     }

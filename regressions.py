@@ -216,6 +216,14 @@ def _rate(numerator: int, denominator: int) -> float | None:
     return round(numerator / denominator * 100, 1) if denominator else None
 
 
+def _pull_request_link(attribution: dict[str, Any]) -> dict[str, str] | None:
+    url = attribution.get("url")
+    if not isinstance(url, str) or (parsed := parse_pull_request_url(url)) is None:
+        return None
+    _owner, repo, number = parsed
+    return {"url": url.rstrip("/"), "label": f"{repo}#{number}"}
+
+
 def _person_metrics(
     records: list[dict[str, Any]],
     people: dict[str, dict[str, str]],
@@ -225,6 +233,12 @@ def _person_metrics(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     authored_regressions = {username: 0 for username in people}
     approved_regressions = {username: 0 for username in people}
+    authored_pull_requests: dict[str, dict[str, dict[str, str]]] = {
+        username: {} for username in people
+    }
+    approved_pull_requests: dict[str, dict[str, dict[str, str]]] = {
+        username: {} for username in people
+    }
     for record in records:
         attribution = record.get("attribution")
         if not isinstance(attribution, dict):
@@ -232,12 +246,19 @@ def _person_metrics(
         merged_at = _parse_datetime(attribution.get("merged_at"))
         if merged_at is None or not window.start <= merged_at < window.end:
             continue
+        pull_request = _pull_request_link(attribution)
         author = attribution.get("author")
         if isinstance(author, str) and author.casefold() in authored_regressions:
-            authored_regressions[author.casefold()] += 1
+            username = author.casefold()
+            authored_regressions[username] += 1
+            if pull_request is not None:
+                authored_pull_requests[username].setdefault(pull_request["url"], pull_request)
         for reviewer in attribution.get("reviewers") or []:
             if isinstance(reviewer, str) and reviewer.casefold() in approved_regressions:
-                approved_regressions[reviewer.casefold()] += 1
+                username = reviewer.casefold()
+                approved_regressions[username] += 1
+                if pull_request is not None:
+                    approved_pull_requests[username].setdefault(pull_request["url"], pull_request)
 
     author_rows, reviewer_rows = [], []
     for username, person in people.items():
@@ -249,6 +270,7 @@ def _person_metrics(
                 "regression_count": authored_regressions[username],
                 "pr_count": authored_count,
                 "rate": _rate(authored_regressions[username], authored_count),
+                "pull_requests": list(authored_pull_requests[username].values()),
             }
         )
         reviewer_rows.append(
@@ -257,6 +279,7 @@ def _person_metrics(
                 "regression_count": approved_regressions[username],
                 "pr_count": reviewed_count,
                 "rate": _rate(approved_regressions[username], reviewed_count),
+                "pull_requests": list(approved_pull_requests[username].values()),
             }
         )
     return author_rows, reviewer_rows
