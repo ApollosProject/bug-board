@@ -119,9 +119,9 @@
 .site-brand-mark {
   display: block;
   flex: 0 0 auto;
-  height: 2.35rem;
+  height: 2.55rem;
   transition: transform 160ms ease;
-  width: 2.35rem;
+  width: 2.55rem;
 }
 
 .site-brand:is(:hover, :focus-visible) .site-brand-mark {
@@ -130,15 +130,22 @@
 
 .site-brand-board {
   fill: var(--brand-board);
+  stroke: var(--brand-board);
+  stroke-linejoin: miter;
+  stroke-width: 1.2;
 }
 
 .site-brand-traces {
   stroke: var(--brand-trace);
-  stroke-width: 0.72;
+  stroke-width: 1.15;
 }
 
 .site-brand-nodes {
-  fill: var(--brand-node);
+  fill: var(--brand-trace);
+}
+
+.site-brand-vias {
+  fill: var(--brand-board);
 }
 
 .site-brand-copy {
@@ -501,8 +508,8 @@ a.leaderboard-export:is(:hover, :focus) { color: var(--pico-primary); }
   }
 
   .site-brand-mark {
-    height: 2rem;
-    width: 2rem;
+    height: 2.15rem;
+    width: 2.15rem;
   }
 
   .site-brand-product {

@@ -49,8 +49,11 @@ class NavigationTest(unittest.TestCase):
         self.assertIn("brand-mark.svg", head)
         self.assertIn('aria-label="Apollos Engineering Bug Board home"', header)
         self.assertIn('class="site-brand-mark"', header)
+        self.assertIn('viewBox="0 0 32 32"', header)
+        self.assertIn('clip-path="url(#apollos-a-clip)"', header)
         self.assertIn('class="site-brand-traces"', header)
         self.assertIn('class="site-brand-nodes"', header)
+        self.assertIn('class="site-brand-vias"', header)
         self.assertIn('class="site-brand-name">Apollos</strong>', header)
         self.assertIn("Engineering", header)
         self.assertIn("Bug Board", header)
@@ -60,6 +63,12 @@ class NavigationTest(unittest.TestCase):
         self.assertIn("--apollos-brand: #00676d;", styles)
         self.assertIn("--apollos-action: #17b582;", styles)
         self.assertIn("--apollos-accent: #6ec5b8;", styles)
+
+        with open("static/brand-mark.svg") as favicon_file:
+            favicon = favicon_file.read()
+        self.assertIn('viewBox="0 0 32 32"', favicon)
+        self.assertIn('clip-path="url(#apollos-a-clip)"', favicon)
+        self.assertIn('class="vias"', favicon)
 
     def test_header_menu_overrides_pico_left_aligned_dropdown(self):
         with open("static/styles.css") as styles_file:
