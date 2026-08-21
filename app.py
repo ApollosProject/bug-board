@@ -48,6 +48,7 @@ from project_dates import (
     format_project_target_status,
     get_project_planned_weeks,
     parse_iso_date,
+    project_completed_in_window,
 )
 from regression_cache import get_cached_regression_summary
 from regressions import REGRESSION_DAYS
@@ -1589,14 +1590,18 @@ def _build_person_context(
         == normalized_person_name
     ]
     current_led_projects = [project for project in led_projects if not project.get("is_inactive")]
-    completed_led_projects = [project for project in led_projects if is_completed_project(project)]
+    completed_led_projects = [
+        project
+        for project in led_projects
+        if is_completed_project(project)
+        and project_completed_in_window(project, window.start, window.end)
+    ]
     incomplete_led_projects = [
         project for project in led_projects if is_incomplete_project(project)
     ]
     completed_project_variances = [
         (project, variance_days)
-        for project in led_projects
-        if is_completed_project(project)
+        for project in completed_led_projects
         for variance_days in [get_project_schedule_variance_days(project)]
         if variance_days is not None
     ]
@@ -1646,10 +1651,15 @@ def _build_person_context(
             if normalize_display_name((project.get("lead") or {}).get("displayName"))
             == normalize_display_name(info.get("linear_display_name") or other_name)
         ]
-        other_variances = [
-            variance_days
+        other_completed_led = [
+            project
             for project in other_led
             if is_completed_project(project)
+            and project_completed_in_window(project, window.start, window.end)
+        ]
+        other_variances = [
+            variance_days
+            for project in other_completed_led
             for variance_days in [get_project_schedule_variance_days(project)]
             if variance_days is not None
         ]
@@ -1661,7 +1671,7 @@ def _build_person_context(
                 "lead_current_projects": sum(
                     1 for project in other_led if not project.get("is_inactive")
                 ),
-                "lead_completed_projects": completed_project_weeks(other_led),
+                "lead_completed_projects": completed_project_weeks(other_completed_led),
                 "lead_incomplete_projects": sum(
                     1 for project in other_led if is_incomplete_project(project)
                 ),

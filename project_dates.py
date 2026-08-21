@@ -5,12 +5,32 @@ from datetime import date, datetime, time, timedelta, timezone
 
 
 def parse_iso_date(value: str | None) -> date | None:
+    parsed = parse_iso_datetime(value)
+    if parsed is None:
+        return None
+    return parsed.date()
+
+
+def parse_iso_datetime(value: str | None) -> datetime | None:
     if not value:
         return None
+    normalized = value.strip()
+    if normalized.endswith("Z"):
+        normalized = f"{normalized[:-1]}+00:00"
     try:
-        return datetime.fromisoformat(value).date()
+        parsed = datetime.fromisoformat(normalized)
     except ValueError:
         return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def project_completed_in_window(project: dict, start: datetime, end: datetime) -> bool:
+    completed = parse_iso_datetime(project.get("completedAt"))
+    if completed is None:
+        return False
+    return start <= completed < end
 
 
 def get_project_planned_weeks(project: dict) -> int:

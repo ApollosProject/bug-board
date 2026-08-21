@@ -5,6 +5,8 @@ from project_dates import (
     format_project_start_status,
     format_project_target_status,
     get_project_planned_weeks,
+    parse_iso_datetime,
+    project_completed_in_window,
 )
 
 
@@ -76,6 +78,32 @@ class ProjectPlannedWeeksTest(unittest.TestCase):
             get_project_planned_weeks({"startDate": "2026-03-15", "targetDate": "2026-03-02"}),
             2,
         )
+
+
+class ProjectCompletedInWindowTest(unittest.TestCase):
+    def test_includes_completed_at_on_start_and_excludes_end(self):
+        start = datetime(2026, 8, 14, tzinfo=timezone.utc)
+        end = datetime(2026, 8, 21, tzinfo=timezone.utc)
+
+        self.assertTrue(
+            project_completed_in_window({"completedAt": "2026-08-14T00:00:00.000Z"}, start, end)
+        )
+        self.assertFalse(
+            project_completed_in_window({"completedAt": "2026-08-21T00:00:00.000Z"}, start, end)
+        )
+
+    def test_missing_or_invalid_completed_at_is_outside_window(self):
+        start = datetime(2026, 8, 14, tzinfo=timezone.utc)
+        end = datetime(2026, 8, 21, tzinfo=timezone.utc)
+
+        self.assertFalse(project_completed_in_window({}, start, end))
+        self.assertFalse(project_completed_in_window({"completedAt": "not-a-date"}, start, end))
+
+    def test_parse_iso_datetime_accepts_zulu_and_naive_values(self):
+        zulu = parse_iso_datetime("2026-08-20T12:00:00.000Z")
+        naive = parse_iso_datetime("2026-08-20T12:00:00")
+        self.assertEqual(zulu, datetime(2026, 8, 20, 12, 0, tzinfo=timezone.utc))
+        self.assertEqual(naive, datetime(2026, 8, 20, 12, 0, tzinfo=timezone.utc))
 
 
 if __name__ == "__main__":
