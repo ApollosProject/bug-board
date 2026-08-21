@@ -34,9 +34,15 @@ from linear.issues import (
 from linear.projects import get_projects
 from openai_client import get_chat_function_call
 from person_stats import issue_card_values, performance_outliers
-from project_dates import format_project_target_status, get_project_planned_weeks, parse_iso_date
+from project_dates import (
+    format_project_target_status,
+    get_project_planned_weeks,
+    parse_iso_date,
+    project_completed_in_window,
+)
 from regression_cache import refresh_regression_summary_cache
 from support import get_support_slugs
+from time_window import TimeWindow
 
 load_dotenv()
 
@@ -764,7 +770,13 @@ def _person_led_projects(projects: list[dict], person_key: str, person: dict) ->
 
 
 def _person_card_metrics(
-    completed: list[dict], prs_merged: int, prs_reviewed: int, led: list[dict]
+    completed: list[dict],
+    prs_merged: int,
+    prs_reviewed: int,
+    led: list[dict],
+    *,
+    window_start: datetime,
+    window_end: datetime,
 ) -> dict:
     current = incomplete = weeks = 0
     variances: list[int] = []
@@ -774,7 +786,7 @@ def _person_card_metrics(
         done = status not in {"incomplete", "canceled", "cancelled"} and (
             bool(project.get("completedAt")) or status in {"completed", "released"}
         )
-        if done:
+        if done and project_completed_in_window(project, window_start, window_end):
             weeks += get_project_planned_weeks(project)
             target = parse_iso_date(project.get("targetDate"))
             finished = parse_iso_date(project.get("completedAt"))
@@ -827,6 +839,7 @@ def format_performance_outlier_markdown(
 def post_performance_outliers():
     """Send weekly ±1.5σ outliers so managers know who to praise and coach."""
     days = PERFORMANCE_OUTLIER_DAYS
+    window = TimeWindow.from_days(days)
     people = get_team_members(ENGINEERING_TEAM_SLUG)
     projects = get_projects()
     metrics = {}
@@ -835,16 +848,21 @@ def post_performance_outliers():
         if not login:
             continue
         try:
-            completed = get_completed_issues_for_person(login, days)
+            completed = get_completed_issues_for_person(login, days, window)
         except Exception as exc:
             logging.error("Failed to fetch completed issues for %s: %s", login, exc)
             continue
         prs_merged = prs_reviewed = 0
         github_username = person.get("github_username")
         if github_username:
-            prs_merged, prs_reviewed = get_merged_pr_counts_for_user(github_username, days)
+            prs_merged, prs_reviewed = get_merged_pr_counts_for_user(github_username, days, window)
         metrics[slug] = _person_card_metrics(
-            completed, prs_merged, prs_reviewed, _person_led_projects(projects, slug, person)
+            completed,
+            prs_merged,
+            prs_reviewed,
+            _person_led_projects(projects, slug, person),
+            window_start=window.start,
+            window_end=window.end,
         )
     markdown = format_performance_outlier_markdown(
         performance_outliers(metrics),

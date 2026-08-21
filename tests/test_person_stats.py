@@ -1,6 +1,7 @@
 import base64
 import json
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
@@ -29,15 +30,18 @@ def _project(
     *,
     status: str,
     completed: bool = False,
+    completed_at: str | None = None,
     start_date: str | None = None,
     target_date: str | None = None,
 ) -> dict:
+    if completed and completed_at is None:
+        completed_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
     return {
         "id": project_id,
         "name": f"Project {project_id}",
         "url": f"https://linear.example/project/{project_id}",
         "status": {"name": status},
-        "completedAt": "2026-08-01T00:00:00.000Z" if completed else None,
+        "completedAt": completed_at if completed else None,
         "startDate": start_date,
         "targetDate": target_date,
         "lead": {"displayName": lead_name},
@@ -412,6 +416,61 @@ class PersonStatsTest(unittest.TestCase):
             body = app_module.render_template("partials/person_content.html", **context)
         self.assertEqual(body.count("linear.app/differential/projects/all?filter="), 4)
         self.assertNotIn('href="https://linear.app/differential/projects/all"', body)
+
+    def test_completed_project_metrics_follow_selected_time_window(self):
+        app_module._build_person_context.cache_clear()
+        self.addCleanup(app_module._build_person_context.cache_clear)
+        config = {
+            "people": {
+                "alice": {
+                    "team": "engineering",
+                    "linear_username": "alice",
+                }
+            }
+        }
+        projects = [
+            _project(
+                "Alice",
+                "alice-in-window",
+                status="Completed",
+                completed=True,
+                completed_at="2026-08-20T12:00:00.000Z",
+                start_date="2026-08-10",
+                target_date="2026-08-18",
+            ),
+            _project(
+                "Alice",
+                "alice-outside-window",
+                status="Completed",
+                completed=True,
+                completed_at="2026-07-26T22:26:30.129Z",
+                start_date="2026-07-01",
+                target_date="2026-07-24",
+            ),
+            _project("Alice", "alice-current", status="In Progress"),
+        ]
+
+        with (
+            patch.object(app_module, "load_config", return_value=config),
+            patch.object(app_module, "get_open_issues_for_person", return_value=[]),
+            patch.object(app_module, "get_completed_issues_for_person", return_value=[]),
+            patch.object(app_module, "get_projects", return_value=projects),
+            patch.object(app_module, "get_support_slugs", return_value=set()),
+            patch.object(app_module, "get_cached_regression_summary", return_value=None),
+        ):
+            context = app_module._build_person_context("alice", 7, 1, "2026-08-14", "2026-08-21")
+
+        self.assertEqual(context["lead_current_projects"], 1)
+        self.assertEqual(context["lead_completed_projects"], 1)
+        self.assertEqual(context["lead_completed_projects_avg_early_late"], "2d late")
+        _, _, completed_ids = _linear_id_link_details(
+            context["project_metric_urls"]["lead_completed_projects"]
+        )
+        _, _, early_late_ids = _linear_id_link_details(
+            context["project_metric_urls"]["lead_completed_projects_avg_early_late"]
+        )
+        self.assertEqual(completed_ids, ["alice-in-window"])
+        self.assertEqual(early_late_ids, ["alice-in-window"])
 
     def test_issue_metric_cards_link_to_their_exact_linear_issue_lists(self):
         app_module._build_person_context.cache_clear()

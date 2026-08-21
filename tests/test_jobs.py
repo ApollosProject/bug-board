@@ -1,7 +1,7 @@
 import sys
 import types
 import unittest
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, cast
 from unittest.mock import patch
 
@@ -1294,7 +1294,7 @@ class PostPerformanceOutliersTest(unittest.TestCase):
             patch.object(
                 jobs_module,
                 "get_merged_pr_counts_for_user",
-                side_effect=lambda username, days=7: pr_counts[username],
+                side_effect=lambda username, days=7, window=None: pr_counts[username],
             ),
             patch.dict(
                 jobs_module.os.environ,
@@ -1335,6 +1335,34 @@ class PostPerformanceOutliersTest(unittest.TestCase):
             "bob": {"linear_username": "bob", "github_username": "bob-gh"},
         }
         self._run(people, {"alice-gh": (5, 0), "bob-gh": (5, 0)}).assert_not_called()
+
+
+class PersonCardMetricsWindowTest(unittest.TestCase):
+    def test_completed_project_metrics_ignore_projects_outside_window(self):
+        metrics = jobs_module._person_card_metrics(
+            [],
+            0,
+            0,
+            [
+                {
+                    "status": {"name": "Completed"},
+                    "completedAt": "2026-08-20T12:00:00.000Z",
+                    "startDate": "2026-08-10",
+                    "targetDate": "2026-08-18",
+                },
+                {
+                    "status": {"name": "Completed"},
+                    "completedAt": "2026-07-26T22:26:30.129Z",
+                    "startDate": "2026-07-01",
+                    "targetDate": "2026-07-24",
+                },
+            ],
+            window_start=datetime(2026, 8, 14, tzinfo=timezone.utc),
+            window_end=datetime(2026, 8, 22, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(metrics["lead_completed_projects"], 1)
+        self.assertEqual(metrics["lead_completed_projects_avg_early_late"], 2)
 
 
 if __name__ == "__main__":

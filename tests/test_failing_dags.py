@@ -946,7 +946,9 @@ class TeamContextProjectFilteringTest(unittest.TestCase):
                                 return_value=[released_project],
                             ):
                                 with patch.object(app_module, "get_support_slugs", return_value=[]):
-                                    context = app_module._build_person_context("darryl", 7, 1)
+                                    context = app_module._build_person_context(
+                                        "darryl", 7, 1, "2025-11-01", "2025-11-30"
+                                    )
 
         self.assertEqual(context["lead_current_projects"], 0)
         self.assertEqual(context["lead_completed_projects"], 2)
@@ -1006,7 +1008,9 @@ class TeamContextProjectFilteringTest(unittest.TestCase):
                                 return_value=completed_projects,
                             ):
                                 with patch.object(app_module, "get_support_slugs", return_value=[]):
-                                    context = app_module._build_person_context("darryl", 7, 1)
+                                    context = app_module._build_person_context(
+                                        "darryl", 7, 1, "2025-11-01", "2025-11-30"
+                                    )
 
         self.assertEqual(context["lead_completed_projects"], 3)
         self.assertEqual(context["lead_completed_projects_avg_early_late"], "1d late")
