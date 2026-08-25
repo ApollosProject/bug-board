@@ -81,7 +81,7 @@ class TimeWindow:
         start = self.start.date().isoformat()
         if self.preset_days is not None:
             return f"merged:>={start}"
-        return f"merged:>={start} merged:<={self.inclusive_end_date.isoformat()}"
+        return f"merged:{start}..{self.inclusive_end_date.isoformat()}"
 
     def query_args(self) -> dict[str, str | int]:
         if self.preset_days is not None:

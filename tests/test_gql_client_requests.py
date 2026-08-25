@@ -1,11 +1,12 @@
 import unittest
-from datetime import datetime
+from datetime import date, datetime
 from unittest.mock import patch
 
 from gql import GraphQLRequest, gql
 
 import github
 from linear import client as linear_client
+from time_window import TimeWindow
 
 
 class _RecordingClient:
@@ -76,7 +77,12 @@ class GraphQLClientRequestTests(unittest.TestCase):
         prs = [
             {
                 "author": {"login": "alice"},
-                "reviews": {"nodes": [{"author": {"login": "bob"}, "state": "APPROVED"}]},
+                "reviews": {
+                    "nodes": [
+                        {"author": {"login": "bob"}, "state": "APPROVED"},
+                        {"author": {"login": "BOB"}, "state": "APPROVED"},
+                    ]
+                },
             },
             {
                 "author": {"login": "bob"},
@@ -96,6 +102,47 @@ class GraphQLClientRequestTests(unittest.TestCase):
         self.assertEqual(list(reviewed), ["bob", "alice"])
         self.assertEqual((len(authored["alice"]), len(authored["CARA"])), (2, 2))
         self.assertEqual(len(reviewed["bob"]), 1)
+
+    def test_merged_pr_search_splits_date_ranges_above_github_limit(self):
+        window = TimeWindow.from_dates(date(2026, 1, 1), date(2026, 1, 4))
+        searches = []
+
+        def execute(_query, variable_values):
+            search = variable_values["query"]
+            searches.append(search)
+            if "merged:2026-01-01..2026-01-04" in search:
+                return {
+                    "search": {
+                        "issueCount": 1500,
+                        "nodes": [],
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    }
+                }
+            author = "alice" if "merged:2026-01-01..2026-01-02" in search else "bob"
+            return {
+                "search": {
+                    "issueCount": 1,
+                    "nodes": [{"author": {"login": author}, "reviews": {"nodes": []}}],
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                }
+            }
+
+        with (
+            patch.object(github, "token", "token"),
+            patch.object(github, "get_github_orgs", return_value=["apollosproject"]),
+            patch.object(github, "_execute", side_effect=execute),
+        ):
+            prs = github._get_merged_prs(window=window)
+
+        self.assertEqual([pr["author"]["login"] for pr in prs], ["alice", "bob"])
+        self.assertEqual(len(searches), 3)
+        self.assertTrue(any("merged:2026-01-01..2026-01-02" in q for q in searches))
+        self.assertTrue(any("merged:2026-01-03..2026-01-04" in q for q in searches))
+
+    def test_complete_merged_pr_search_fails_closed_on_api_error(self):
+        with patch.object(github, "_execute", side_effect=RuntimeError("boom")):
+            with self.assertRaisesRegex(github.GitHubDataError, "boom"):
+                github._search_prs(None, "query", require_complete=True)
 
     @staticmethod
     def _cursor_pr(*coauthors):
