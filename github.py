@@ -355,7 +355,11 @@ def _search_prs(
     for _ in range(10):
         try:
             data = _execute(query, variable_values={"query": search_query, "cursor": cursor})
-        except Exception:
+        except Exception as exc:
+            if require_complete:
+                raise GitHubDataError(
+                    f"GitHub merged PR search failed: {_format_exception(exc)}"
+                ) from exc
             return []
         payload = data.get("search", {}) or {}
         if require_complete and (payload.get("issueCount", 0) or 0) > 1000:

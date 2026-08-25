@@ -139,6 +139,11 @@ class GraphQLClientRequestTests(unittest.TestCase):
         self.assertTrue(any("merged:2026-01-01..2026-01-02" in q for q in searches))
         self.assertTrue(any("merged:2026-01-03..2026-01-04" in q for q in searches))
 
+    def test_complete_merged_pr_search_fails_closed_on_api_error(self):
+        with patch.object(github, "_execute", side_effect=RuntimeError("boom")):
+            with self.assertRaisesRegex(github.GitHubDataError, "boom"):
+                github._search_prs(None, "query", require_complete=True)
+
     @staticmethod
     def _cursor_pr(*coauthors):
         return {
