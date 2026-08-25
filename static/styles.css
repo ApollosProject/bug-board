@@ -223,6 +223,10 @@ details.dropdown.site-menu > summary + ul {
   right: 0;
 }
 
+.logout-form {
+  margin: 0;
+}
+
 .logout-trigger {
   background: transparent;
   border: 0;
@@ -250,8 +254,7 @@ details.dropdown.site-menu > summary + ul {
   justify-content: flex-end;
 }
 
-.logout-dialog-actions button,
-.logout-confirm-form {
+.logout-dialog-actions button {
   margin: 0;
 }
 

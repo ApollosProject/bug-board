@@ -36,13 +36,20 @@
         <ul>
           {% if session.get('github_login') %}
             <li>
-              <button
-                type="button"
-                class="logout-trigger"
-                aria-haspopup="dialog"
-                aria-controls="logout-dialog"
-                data-logout-dialog-trigger
-              >@{{ session.get('github_login') }}</button>
+              <form
+                id="logout-form"
+                class="logout-form"
+                method="post"
+                action="{{ url_for('github_logout') }}"
+              >
+                <button
+                  type="submit"
+                  class="logout-trigger"
+                  aria-haspopup="dialog"
+                  aria-controls="logout-dialog"
+                  data-logout-dialog-trigger
+                >@{{ session.get('github_login') }}</button>
+              </form>
             </li>
           {% endif %}
           <li>
@@ -85,13 +92,7 @@
           <p id="logout-dialog-description">Are you sure you want to log out of Bug Board?</p>
           <footer class="logout-dialog-actions">
             <button type="button" class="secondary" data-logout-dialog-close>Cancel</button>
-            <form
-              class="logout-confirm-form"
-              method="post"
-              action="{{ url_for('github_logout') }}"
-            >
-              <button type="submit">Log out</button>
-            </form>
+            <button type="submit" form="logout-form">Log out</button>
           </footer>
         </article>
       </dialog>
@@ -128,7 +129,13 @@
         const logoutDialog = document.getElementById('logout-dialog');
         const logoutDialogTrigger = document.querySelector('[data-logout-dialog-trigger]');
 
-        logoutDialogTrigger?.addEventListener('click', () => logoutDialog?.showModal?.());
+        logoutDialogTrigger?.addEventListener('click', (event) => {
+          if (typeof logoutDialog?.showModal !== 'function') {
+            return;
+          }
+          event.preventDefault();
+          logoutDialog.showModal();
+        });
         logoutDialog?.querySelectorAll('[data-logout-dialog-close]').forEach((button) => {
           button.addEventListener('click', () => logoutDialog?.close?.());
         });
