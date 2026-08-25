@@ -45,8 +45,10 @@
                 <button
                   type="submit"
                   class="logout-trigger"
+                  aria-label="Log out @{{ session.get('github_login') }}"
                   aria-haspopup="dialog"
                   aria-controls="logout-dialog"
+                  title="Log out"
                   data-logout-dialog-trigger
                 >@{{ session.get('github_login') }}</button>
               </form>

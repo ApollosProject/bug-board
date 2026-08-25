@@ -295,6 +295,7 @@ class GitHubOAuthTest(unittest.TestCase):
         self.assertIn('class="logout-trigger"', page)
         self.assertIn('id="logout-form"', page)
         self.assertRegex(page, r'type="submit"\s+class="logout-trigger"')
+        self.assertIn('aria-label="Log out @octocat"', page)
         self.assertIn('aria-haspopup="dialog"', page)
         self.assertIn('aria-controls="logout-dialog"', page)
         self.assertIn("<dialog", page)
