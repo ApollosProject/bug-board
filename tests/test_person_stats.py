@@ -184,6 +184,16 @@ class PersonStatsTest(unittest.TestCase):
                 self.assertEqual(high_stdevs[key]["tone"], "high")
                 self.assertEqual(low_stdevs[key]["tone"], "low")
 
+    def test_one_sigma_color_tolerates_floating_point_drift(self):
+        key = "lead_completed_projects_avg_early_late"
+        team_metrics = [{key: 0.1}, {key: 0.2}]
+
+        better = person_stats.metric_stdevs_for_person({key: 0.1}, team_metrics)[key]
+        worse = person_stats.metric_stdevs_for_person({key: 0.2}, team_metrics)[key]
+
+        self.assertEqual((better["label"], better["tone"]), ("+1.0σ", "high"))
+        self.assertEqual((worse["label"], worse["tone"]), ("−1.0σ", "low"))
+
     def test_person_cards_color_headings_beyond_stdev_threshold(self):
         app_module._build_person_context.cache_clear()
         self.addCleanup(app_module._build_person_context.cache_clear)

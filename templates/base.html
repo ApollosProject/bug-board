@@ -76,8 +76,8 @@
           <header>
             <button
               type="button"
+              class="close"
               aria-label="Close logout dialog"
-              rel="prev"
               data-logout-dialog-close
             ></button>
             <h2 id="logout-dialog-title">Log out?</h2>
@@ -128,9 +128,9 @@
         const logoutDialog = document.getElementById('logout-dialog');
         const logoutDialogTrigger = document.querySelector('[data-logout-dialog-trigger]');
 
-        logoutDialogTrigger?.addEventListener('click', () => logoutDialog?.showModal());
+        logoutDialogTrigger?.addEventListener('click', () => logoutDialog?.showModal?.());
         logoutDialog?.querySelectorAll('[data-logout-dialog-close]').forEach((button) => {
-          button.addEventListener('click', () => logoutDialog.close());
+          button.addEventListener('click', () => logoutDialog?.close?.());
         });
       </script>
     {% endif %}

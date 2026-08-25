@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import statistics
 from collections.abc import Iterable, Mapping
 
@@ -120,9 +121,9 @@ def format_stdev_label(z: float) -> str:
 
 
 def stdev_tone(z: float, *, threshold: float = STDEV_COLOR_THRESHOLD) -> str | None:
-    if z >= threshold:
+    if z >= threshold or math.isclose(z, threshold):
         return "high"
-    if z <= -threshold:
+    if z <= -threshold or math.isclose(z, -threshold):
         return "low"
     return None
 
