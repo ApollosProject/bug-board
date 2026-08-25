@@ -29,6 +29,7 @@ def get_cached_leaderboard(days: int) -> dict[str, Any] | None:
     if (
         not isinstance(payload, dict)
         or not isinstance(payload.get("leaderboard_entries"), list)
+        or not isinstance(payload.get("leaderboard_export_entries"), list)
         or payload.get("days") != days
     ):
         return None
@@ -65,6 +66,7 @@ def refresh_leaderboard_cache(days: int = DEFAULT_LEADERBOARD_DAYS) -> dict[str,
         return get_cached_leaderboard(days) or {
             "days": days,
             "leaderboard_entries": [],
+            "leaderboard_export_entries": [],
         }
 
     store_cached_leaderboard(days, context)

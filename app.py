@@ -620,9 +620,7 @@ def _build_leaderboard_entries(
 ) -> list[LeaderboardEntry]:
     config_data = load_config()
     people_config = config_data.get("people", {})
-    engineering_team_slugs = {
-        slug for slug, info in people_config.items() if info.get("team") == ENGINEERING_TEAM_SLUG
-    }
+    configured_slugs = set(people_config)
 
     alias_to_slug = {}
     github_to_slug = {}
@@ -858,7 +856,7 @@ def _build_leaderboard_entries(
     leaderboard_entries = [
         entry
         for entry in leaderboard_entries
-        if (slug := entry.get("slug")) is not None and slug in engineering_team_slugs
+        if (slug := entry.get("slug")) is not None and slug in configured_slugs
     ]
 
     leaderboard_entries.sort(key=lambda entry: entry["score"], reverse=True)
@@ -1001,17 +999,25 @@ def compute_leaderboard_context(
         cycle_points_future, ({}, {})
     )
 
-    leaderboard_entries = _build_leaderboard_entries(
+    leaderboard_export_entries = _build_leaderboard_entries(
         completed_work=completed_work,
         merged_reviews=merged_reviews,
         merged_authored_prs=merged_authored_prs,
         cycle_lead_points=cycle_lead_points,
         cycle_member_points=cycle_member_points,
     )
+    people_config = load_config().get("people", {})
+    engineering_team_slugs = {
+        slug for slug, info in people_config.items() if info.get("team") == ENGINEERING_TEAM_SLUG
+    }
+    leaderboard_entries = [
+        entry for entry in leaderboard_export_entries if entry.get("slug") in engineering_team_slugs
+    ]
 
     return {
         **window.template_vars(),
         "leaderboard_entries": leaderboard_entries,
+        "leaderboard_export_entries": leaderboard_export_entries,
     }
 
 
@@ -1124,7 +1130,11 @@ def leaderboard_csv():
     )
     return Response(
         render_leaderboard_csv(
-            build_leaderboard_export_rows(context.get("leaderboard_entries") or [])
+            build_leaderboard_export_rows(
+                context.get("leaderboard_export_entries")
+                or context.get("leaderboard_entries")
+                or []
+            )
         ),
         mimetype="text/csv; charset=utf-8",
         headers={
