@@ -3,7 +3,7 @@ import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any, Dict, List
 
@@ -37,6 +37,10 @@ _cursor_pr_cache_lock = threading.Lock()
 
 class GitHubDataError(RuntimeError):
     """Raised when GitHub data would otherwise be silently incomplete."""
+
+
+class _GitHubSearchLimitExceeded(RuntimeError):
+    """Raised when a search must be partitioned to stay below GitHub's result cap."""
 
 
 _thread_local = threading.local()
@@ -343,7 +347,9 @@ def _merged_search_qualifier(days: int = 30, window: TimeWindow | None = None) -
     return TimeWindow.resolve(days, window=window).github_merged_qualifier()
 
 
-def _search_prs(query, search_query: str) -> List[Dict[str, Any]]:
+def _search_prs(
+    query, search_query: str, *, require_complete: bool = False
+) -> List[Dict[str, Any]]:
     prs: List[Dict[str, Any]] = []
     cursor = None
     for _ in range(10):
@@ -352,6 +358,8 @@ def _search_prs(query, search_query: str) -> List[Dict[str, Any]]:
         except Exception:
             return []
         payload = data.get("search", {}) or {}
+        if require_complete and (payload.get("issueCount", 0) or 0) > 1000:
+            raise _GitHubSearchLimitExceeded
         prs.extend(node for node in payload.get("nodes", []) or [] if node)
         page_info = payload.get("pageInfo", {}) or {}
         next_cursor = page_info.get("endCursor") if page_info.get("hasNextPage") else None
@@ -359,6 +367,48 @@ def _search_prs(query, search_query: str) -> List[Dict[str, Any]]:
             break
         cursor = next_cursor
     return prs
+
+
+def _search_complete_merged_pr_range(
+    query,
+    org_filter: str,
+    start: date,
+    end: date,
+    *,
+    parallel_depth: int = 0,
+) -> List[Dict[str, Any]]:
+    date_filter = f"merged:{start.isoformat()}..{end.isoformat()}"
+    search_query = f"{org_filter} is:pr is:merged {date_filter}"
+    try:
+        return _search_prs(query, search_query, require_complete=True)
+    except _GitHubSearchLimitExceeded:
+        if start >= end:
+            raise GitHubDataError(
+                f"GitHub merged PR search exceeds the 1,000-result limit for {start.isoformat()}"
+            ) from None
+        midpoint = start + timedelta(days=(end - start).days // 2)
+        if parallel_depth > 0:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                earlier = executor.submit(
+                    _search_complete_merged_pr_range,
+                    query,
+                    org_filter,
+                    start,
+                    midpoint,
+                    parallel_depth=parallel_depth - 1,
+                )
+                later = executor.submit(
+                    _search_complete_merged_pr_range,
+                    query,
+                    org_filter,
+                    midpoint + timedelta(days=1),
+                    end,
+                    parallel_depth=parallel_depth - 1,
+                )
+            return earlier.result() + later.result()
+        return _search_complete_merged_pr_range(
+            query, org_filter, start, midpoint
+        ) + _search_complete_merged_pr_range(query, org_filter, midpoint + timedelta(days=1), end)
 
 
 @lru_cache(maxsize=32)
@@ -451,15 +501,15 @@ def _get_merged_prs(days: int = 30, window: TimeWindow | None = None):
     if not orgs:
         return []
     org_filter = " ".join(f"org:{org}" for org in orgs)
-    search_query = f"{org_filter} is:pr is:merged {_merged_search_qualifier(days, window)}"
     query = gql(
         """
         query SearchMergedPRs($query: String!, $cursor: String) {
           search(type: ISSUE, query: $query, first: 100, after: $cursor) {
+            issueCount
             nodes {
               ... on PullRequest {
                 author { login }
-                reviews(first: 10, states: [APPROVED]) {
+                reviews(first: 100, states: [APPROVED]) {
                   nodes {
                     author { login }
                     state
@@ -475,7 +525,14 @@ def _get_merged_prs(days: int = 30, window: TimeWindow | None = None):
         }
         """
     )
-    return _search_prs(query, search_query)
+    resolved_window = TimeWindow.resolve(days, window=window)
+    return _search_complete_merged_pr_range(
+        query,
+        org_filter,
+        resolved_window.start.date(),
+        resolved_window.inclusive_end_date,
+        parallel_depth=2,
+    )
 
 
 def get_merged_pr_counts_for_user(
@@ -569,11 +626,19 @@ def _group_merged_prs_by_author(prs: List[Dict[str, Any]]) -> Dict[str, List[Dic
 
 def _group_merged_prs_by_reviewer(prs: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
     prs_by_reviewer: Dict[str, List[Dict[str, Any]]] = {}
+    canonical_logins: Dict[str, str] = {}
     for pr in prs:
+        seen_reviewers = set()
         for review in pr.get("reviews", {}).get("nodes", []):
-            if review.get("author") and review.get("state") == "APPROVED":
-                reviewer = review["author"]["login"]
-                prs_by_reviewer.setdefault(reviewer, []).append(pr)
+            reviewer = ((review.get("author") or {}).get("login") or "").strip()
+            if not reviewer or review.get("state") != "APPROVED":
+                continue
+            normalized_reviewer = reviewer.casefold()
+            if normalized_reviewer in seen_reviewers:
+                continue
+            seen_reviewers.add(normalized_reviewer)
+            reviewer = canonical_logins.setdefault(normalized_reviewer, reviewer)
+            prs_by_reviewer.setdefault(reviewer, []).append(pr)
     return prs_by_reviewer
 
 

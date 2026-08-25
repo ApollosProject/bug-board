@@ -16,7 +16,7 @@ class TimeWindowTest(unittest.TestCase):
         self.assertEqual(custom.linear_bounds()["before"], "2026-02-01T00:00:00.000Z")
         self.assertEqual(
             custom.github_merged_qualifier(),
-            "merged:>=2026-01-01 merged:<=2026-01-31",
+            "merged:2026-01-01..2026-01-31",
         )
         self.assertEqual(swapped.start.date().isoformat(), "2026-02-01")
         self.assertEqual(
