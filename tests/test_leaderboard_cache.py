@@ -8,7 +8,11 @@ import leaderboard_cache
 
 class LeaderboardCacheTest(unittest.TestCase):
     def test_roundtrip_rejects_mismatch_and_keeps_cache_on_refresh_failure(self):
-        payload = {"days": 30, "leaderboard_entries": [{"slug": "michael", "score": 10}]}
+        payload = {
+            "days": 30,
+            "leaderboard_entries": [{"slug": "michael", "score": 10}],
+            "leaderboard_export_entries": [{"slug": "michael", "score": 10}],
+        }
         values: dict[str, str] = {}
         client = MagicMock()
         client.get.side_effect = values.get
@@ -19,6 +23,10 @@ class LeaderboardCacheTest(unittest.TestCase):
                 self.assertTrue(leaderboard_cache.store_cached_leaderboard(30, payload))
                 self.assertEqual(leaderboard_cache.get_cached_leaderboard(30), payload)
                 values["leaderboard:index:30"] = json.dumps({"payload": {**payload, "days": 7}})
+                self.assertIsNone(leaderboard_cache.get_cached_leaderboard(30))
+                values["leaderboard:index:30"] = json.dumps(
+                    {"payload": {"days": 30, "leaderboard_entries": []}}
+                )
                 self.assertIsNone(leaderboard_cache.get_cached_leaderboard(30))
 
         with patch.object(leaderboard_cache, "get_cached_leaderboard", return_value=payload):
@@ -33,8 +41,11 @@ class LeaderboardCacheTest(unittest.TestCase):
             "leaderboard_entries": [
                 {"slug": "michael", "display_name": "Michael", "score": 1257, "breakdown": None}
             ],
+            "leaderboard_export_entries": [
+                {"slug": "michael", "display_name": "Michael", "score": 1257, "breakdown": None}
+            ],
         }
-        live = {"days": 7, "leaderboard_entries": []}
+        live = {"days": 7, "leaderboard_entries": [], "leaderboard_export_entries": []}
         client = app_module.app.test_client()
         app_module._build_leaderboard_context.cache_clear()
         self.addCleanup(app_module._build_leaderboard_context.cache_clear)
@@ -59,6 +70,9 @@ class LeaderboardCacheTest(unittest.TestCase):
         live = {
             "days": 30,
             "leaderboard_entries": [
+                {"slug": "michael", "display_name": "Michael", "score": 42, "breakdown": None}
+            ],
+            "leaderboard_export_entries": [
                 {"slug": "michael", "display_name": "Michael", "score": 42, "breakdown": None}
             ],
         }

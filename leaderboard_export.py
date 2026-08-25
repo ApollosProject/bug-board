@@ -81,18 +81,25 @@ def build_leaderboard_export_rows(
         people = {
             slug: info
             for slug, info in load_config().get("people", {}).items()
-            if isinstance(info, Mapping) and info.get("team") == ENGINEERING_TEAM_SLUG
+            if isinstance(info, Mapping)
         }
     seen = {row["slug"] for row in rows if row["slug"]}
     for slug, info in people.items():
         if slug not in seen:
             rows.append(_row({"slug": slug, "score": 0}, _name(slug, info)))
     rows.sort(key=lambda row: (-int(row["score"]), str(row["person"])))
+    engineering_slugs = {
+        slug for slug, info in people.items() if info.get("team") == ENGINEERING_TEAM_SLUG
+    }
+    engineering_rows = [row for row in rows if row["slug"] in engineering_slugs]
     for column in ["score", *POINT_COLS]:
-        values = [float(row[column] or 0) for row in rows]
-        for row, value in zip(rows, values, strict=True):
+        stdev_column = f"{column}_stdev"
+        for row in rows:
+            row[stdev_column] = ""
+        values = [float(row[column] or 0) for row in engineering_rows]
+        for row, value in zip(engineering_rows, values, strict=True):
             z_value = z_score(value, values)
-            row[f"{column}_stdev"] = "" if z_value is None else f"{z_value:.1f}"
+            row[stdev_column] = "" if z_value is None else f"{z_value:.1f}"
     if regression_summary is None:
         regression_summary = get_cached_regression_summary()
     ready = bool(regression_summary and regression_summary.get("configured"))
