@@ -1323,6 +1323,7 @@ class PostPerformanceOutliersTest(unittest.TestCase):
         )
         post.assert_called_once()
         message = post.call_args.args[0]
+        self.assertIn("(±1σ, last 7 days)", message)
         self.assertIn("*Praise*", message)
         self.assertIn("*Coach*", message)
         self.assertIn("PRs Merged +1.6σ", message)

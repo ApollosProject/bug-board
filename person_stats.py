@@ -44,7 +44,7 @@ STDEV_DIRECTION_HINTS = {
     "lead_completed_projects_avg_early_late": "earlier is better",
 }
 
-STDEV_COLOR_THRESHOLD = 1.5
+STDEV_COLOR_THRESHOLD = 1.0
 STDEV_TRIM_PROPORTION = 0.2
 
 MetricValue = float | int | None

@@ -36,11 +36,13 @@
         <ul>
           {% if session.get('github_login') %}
             <li>
-              <form class="logout-form" method="post" action="{{ url_for('github_logout') }}">
-                <button type="submit" title="Sign out">
-                  @{{ session.get('github_login') }}
-                </button>
-              </form>
+              <button
+                type="button"
+                class="logout-trigger"
+                aria-haspopup="dialog"
+                aria-controls="logout-dialog"
+                data-logout-dialog-trigger
+              >@{{ session.get('github_login') }}</button>
             </li>
           {% endif %}
           <li>
@@ -63,6 +65,37 @@
         {% block header_nav %}{% endblock %}
       </nav>
     </header>
+    {% if session.get('github_login') %}
+      <dialog
+        id="logout-dialog"
+        class="logout-dialog"
+        aria-labelledby="logout-dialog-title"
+        aria-describedby="logout-dialog-description"
+      >
+        <article>
+          <header>
+            <button
+              type="button"
+              aria-label="Close logout dialog"
+              rel="prev"
+              data-logout-dialog-close
+            ></button>
+            <h2 id="logout-dialog-title">Log out?</h2>
+          </header>
+          <p id="logout-dialog-description">Are you sure you want to log out of Bug Board?</p>
+          <footer class="logout-dialog-actions">
+            <button type="button" class="secondary" data-logout-dialog-close>Cancel</button>
+            <form
+              class="logout-confirm-form"
+              method="post"
+              action="{{ url_for('github_logout') }}"
+            >
+              <button type="submit">Log out</button>
+            </form>
+          </footer>
+        </article>
+      </dialog>
+    {% endif %}
     <main class="container">{% block content %}{% endblock %}</main>
     <footer class="container site-footer">
       <div class="grid">
@@ -90,6 +123,17 @@
         </div>
       </div>
     </footer>
+    {% if session.get('github_login') %}
+      <script>
+        const logoutDialog = document.getElementById('logout-dialog');
+        const logoutDialogTrigger = document.querySelector('[data-logout-dialog-trigger]');
+
+        logoutDialogTrigger?.addEventListener('click', () => logoutDialog?.showModal());
+        logoutDialog?.querySelectorAll('[data-logout-dialog-close]').forEach((button) => {
+          button.addEventListener('click', () => logoutDialog.close());
+        });
+      </script>
+    {% endif %}
     {% block extra_scripts %}{% endblock %}
   </body>
 </html>
