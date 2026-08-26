@@ -72,6 +72,10 @@ class PersonStatsTest(unittest.TestCase):
         self.assertIsNone(person_stats.z_score(9, [4, 4]))
         self.assertEqual(person_stats.z_score(10, [10, 2]), 1.0)
         self.assertEqual(person_stats.format_stdev_tooltip([10, 2]), "eng avg 6.0 · σ 4.0")
+        self.assertEqual(
+            person_stats.format_stdev_tooltip([10, 2], cohort="all people"),
+            "all people avg 6.0 · σ 4.0",
+        )
 
     def test_z_scores_trim_extremes_without_clipping_exceptional_people(self):
         prs_merged = [378, 77, 9, 81, 0, 99, 60, 26]

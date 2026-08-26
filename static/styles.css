@@ -513,6 +513,52 @@ a.leaderboard-export:is(:hover, :focus) { color: var(--pico-primary); }
   opacity: 0.7;
 }
 
+.metric-stdev.high {
+  color: #3b3;
+  opacity: 1;
+}
+
+.metric-stdev.low {
+  color: #b33;
+  opacity: 1;
+}
+
+.people-stats-wrap {
+  overflow-x: auto;
+}
+
+.people-stats th.numeric,
+.people-stats td.numeric {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.people-stats th[aria-sort] a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.people-stats th[aria-sort="ascending"] a::after {
+  content: " \2191";
+}
+
+.people-stats th[aria-sort="descending"] a::after {
+  content: " \2193";
+}
+
+.people-stats-note {
+  color: var(--pico-muted-color);
+}
+
+.agent-note {
+  color: var(--pico-muted-color);
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
 .metric-stdev[data-tooltip]::before {
   max-width: min(12rem, calc(100vw - 2rem));
   overflow: hidden;

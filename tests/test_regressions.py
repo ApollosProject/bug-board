@@ -15,6 +15,7 @@ from regressions import (
     extract_fixing_pr_urls,
     load_regression_overrides,
     merge_issue_attributions,
+    tally_regressions_by_login,
 )
 from time_window import TimeWindow
 
@@ -353,6 +354,67 @@ class RegressionAttributionTest(unittest.TestCase):
         self.assertFalse(second["analysis_complete"])
         self.assertEqual(reviewers[1]["attributions"], authors[0]["attributions"])
         self.assertEqual(authors[1]["attributions"], [])
+
+    def test_tally_regressions_by_login_uses_inducing_pr_window(self):
+        window = TimeWindow.from_dates(date(2026, 8, 1), date(2026, 8, 31))
+        records = [
+            {
+                "identifier": "APO-2",
+                "issue_url": "https://linear.app/apollos/issue/APO-2/example",
+                "attribution": {
+                    "url": " https://github.com/example/zeta/pull/3/ ",
+                    "merged_at": "2026-08-10T00:00:00Z",
+                    "author": "Alice",
+                    "reviewers": ["bob"],
+                },
+            },
+            {
+                "identifier": "APO-1",
+                "issue_url": "https://linear.app/apollos/issue/APO-1/example",
+                "attribution": {
+                    "url": "https://github.com/example/alpha/pull/12",
+                    "merged_at": "2026-08-11T00:00:00Z",
+                    "author": "alice",
+                    "reviewers": ["Bob"],
+                },
+            },
+            {
+                "identifier": "APO-old",
+                "attribution": {
+                    "url": "https://github.com/example/repo/pull/11",
+                    "merged_at": "2025-08-10T00:00:00Z",
+                    "author": "alice",
+                    "reviewers": ["bob"],
+                },
+            },
+            {
+                "identifier": "APO-reviewer-only",
+                "issue_url": "https://linear.app/apollos/issue/APO-reviewer-only/example",
+                "attribution": {
+                    "url": "https://github.com/example/repo/pull/20",
+                    "merged_at": "2026-08-12T00:00:00Z",
+                    "author": "carol",
+                    "reviewers": ["alice"],
+                },
+            },
+            {"identifier": "APO-missing"},
+        ]
+        tallies = tally_regressions_by_login(records, window)
+        self.assertEqual(tallies["alice"].authored_count, 2)
+        self.assertEqual(tallies["alice"].approved_count, 1)
+        self.assertEqual(tallies["bob"].authored_count, 0)
+        self.assertEqual(tallies["bob"].approved_count, 2)
+        self.assertEqual(tallies["carol"].authored_count, 1)
+        self.assertEqual(tallies["carol"].approved_count, 0)
+        self.assertEqual(
+            [ref.identifier for ref in tallies["alice"].authored],
+            ["APO-2", "APO-1"],
+        )
+        self.assertEqual(
+            tallies["alice"].authored[0].inducing_pr_url,
+            "https://github.com/example/zeta/pull/3/",
+        )
+        self.assertNotIn("APO-old", [ref.identifier for ref in tallies["alice"].authored])
 
     def test_unconfigured_summary_skips_external_work(self):
         with patch.dict("os.environ", {}, clear=True):

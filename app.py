@@ -42,6 +42,7 @@ from linear.issues import (
     get_time_data,
 )
 from linear.projects import get_projects
+from people_table import build_people_stats, parse_sort
 from person_stats import issue_card_values, metric_stdevs_for_person
 from project_dates import (
     format_project_start_status,
@@ -1184,6 +1185,26 @@ def projects_content_partial():
     cache_epoch = int(time.time() / INDEX_CACHE_TTL_SECONDS)
     context = _build_team_context(cache_epoch)
     return render_template("partials/team_content.html", **context)
+
+
+@app.route("/people")
+def people():
+    window = _request_time_window()
+    order = parse_sort(request.args.get("sort"))
+    return render_template(
+        "people.html",
+        extra_query={"sort": order.token},
+        sort_token=order.token,
+        **window.template_vars(),
+    )
+
+
+@app.route("/partials/people/table")
+def people_table_partial():
+    window = _request_time_window()
+    order = parse_sort(request.args.get("sort"))
+    stats = build_people_stats(window, order)
+    return render_template("partials/people_table.html", stats=stats)
 
 
 @app.route("/partials/team/<slug>/content")

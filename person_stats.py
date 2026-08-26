@@ -128,11 +128,14 @@ def stdev_tone(z: float, *, threshold: float = STDEV_COLOR_THRESHOLD) -> str | N
     return None
 
 
-def format_stdev_tooltip(values: list[float], *, hint: str | None = None) -> str:
+def format_stdev_tooltip(
+    values: list[float], *, hint: str | None = None, cohort: str = "eng"
+) -> str:
     baseline, trimmed = _stdev_baseline(values)
     qualifier = " trimmed" if trimmed else ""
     tooltip = (
-        f"eng{qualifier} avg {statistics.fmean(baseline):.1f} · σ {statistics.pstdev(baseline):.1f}"
+        f"{cohort}{qualifier} avg {statistics.fmean(baseline):.1f}"
+        f" · σ {statistics.pstdev(baseline):.1f}"
     )
     return f"{tooltip} · {hint}" if hint else tooltip
 

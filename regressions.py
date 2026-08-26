@@ -3,9 +3,10 @@ from __future__ import annotations
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Final
 
 import yaml
 
@@ -25,6 +26,30 @@ REGRESSION_DAYS = 30
 REGRESSION_OVERRIDES_PATH = Path(__file__).with_name("regression_overrides.yml")
 FIXING_LINK_KINDS = {"closes", "contributes"}
 MAX_ATTRIBUTION_WORKERS = 2
+
+
+@dataclass(frozen=True, slots=True)
+class RegressionRef:
+    identifier: str
+    issue_url: str | None
+    inducing_pr_url: str
+
+
+@dataclass(frozen=True, slots=True)
+class RegressionTally:
+    authored: tuple[RegressionRef, ...] = ()
+    approved: tuple[RegressionRef, ...] = ()
+
+    @property
+    def authored_count(self) -> int:
+        return len(self.authored)
+
+    @property
+    def approved_count(self) -> int:
+        return len(self.approved)
+
+
+EMPTY_REGRESSION_TALLY: Final = RegressionTally()
 
 
 def extract_fixing_pr_urls(issue: dict[str, Any]) -> list[str]:
@@ -280,6 +305,41 @@ def _sorted_regression_attributions(
             item["inducing_pr"]["url"],
         ),
     )
+
+
+def tally_regressions_by_login(
+    records: list[dict[str, Any]], window: TimeWindow
+) -> dict[str, RegressionTally]:
+    authored: dict[str, list[RegressionRef]] = {}
+    approved: dict[str, list[RegressionRef]] = {}
+    for record in records:
+        attribution = record.get("attribution")
+        if not isinstance(attribution, dict):
+            continue
+        merged_at = _parse_datetime(attribution.get("merged_at"))
+        if merged_at is None or not window.start <= merged_at < window.end:
+            continue
+        raw_url = attribution.get("url")
+        inducing_pr_url = raw_url.strip() if isinstance(raw_url, str) else ""
+        issue_url = record.get("issue_url")
+        ref = RegressionRef(
+            identifier=str(record.get("identifier") or "Regression"),
+            issue_url=issue_url if isinstance(issue_url, str) else None,
+            inducing_pr_url=inducing_pr_url,
+        )
+        author = attribution.get("author")
+        if isinstance(author, str) and author:
+            authored.setdefault(author.casefold(), []).append(ref)
+        for reviewer in attribution.get("reviewers") or []:
+            if isinstance(reviewer, str) and reviewer:
+                approved.setdefault(reviewer.casefold(), []).append(ref)
+    return {
+        login: RegressionTally(
+            authored=tuple(authored.get(login, ())),
+            approved=tuple(approved.get(login, ())),
+        )
+        for login in set(authored) | set(approved)
+    }
 
 
 def _person_metrics(

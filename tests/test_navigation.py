@@ -28,12 +28,16 @@ class NavigationTest(unittest.TestCase):
         self.assertIn('class="dropdown site-menu"', header)
         self.assertIn('aria-label="Open local pages menu"', header)
         self.assertIn('href="/apps"', header)
+        self.assertIn(">Apps</a>", header)
+        self.assertIn('href="/people"', header)
+        self.assertIn(">People</a>", header)
         self.assertIn('href="/projects"', header)
         self.assertIn(">Projects</a>", header)
         self.assertIn('href="/dags"', header)
         self.assertIn(">DAGs</a>", header)
 
         self.assertNotIn('href="/apps"', footer)
+        self.assertNotIn('href="/people"', footer)
         self.assertNotIn('href="/projects"', footer)
         self.assertNotIn('href="/dags"', footer)
 
@@ -337,6 +341,45 @@ class NavigationTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("<title>Projects</title>", response.get_data(as_text=True))
+
+    def test_people_page_returns_200_and_lists_unfiltered_roster(self):
+        import people_table as people_table_module
+        from constants import ENGINEERING_TEAM_SLUG
+        from people_table import load_roster
+
+        page = self.client.get("/people")
+        body = page.get_data(as_text=True)
+        self.assertEqual(page.status_code, 200)
+        header = body.split("</header>", 1)[0]
+        footer = body.split("<footer", 1)[1]
+        self.assertIn("<title>People</title>", body)
+        self.assertIn('href="/people"', header)
+        self.assertIn(">People</a>", header)
+        self.assertNotIn('href="/people"', footer)
+        self.assertIn("`/partials/people/table?", body)
+
+        with patch.object(app_module, "datetime", FixedDateTime):
+            sorted_page = self.client.get("/people?days=7&sort=prs_merged")
+        sorted_body = sorted_page.get_data(as_text=True)
+        self.assertEqual(sorted_page.status_code, 200)
+        self.assertIn('name="sort" value="prs_merged"', sorted_body)
+
+        roster = load_roster()
+        engineering = [person for person in roster if person.team == ENGINEERING_TEAM_SLUG]
+        self.assertGreater(len(roster), len(engineering))
+
+        people_table_module._gather.cache_clear()
+        with (
+            patch.object(app_module, "datetime", FixedDateTime),
+            patch("people_table.get_merged_pr_activity", return_value=({}, {})),
+            patch("people_table.collect_regression_attributions", return_value=([], 0)),
+        ):
+            partial = self.client.get("/partials/people/table")
+        people_table_module._gather.cache_clear()
+        partial_body = partial.get_data(as_text=True)
+        self.assertEqual(partial.status_code, 200)
+        for person in roster:
+            self.assertIn(person.display_name, partial_body)
 
 
 if __name__ == "__main__":

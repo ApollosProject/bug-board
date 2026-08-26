@@ -1,0 +1,49 @@
+{% if stats.notes %}
+<div class="people-stats-notes">
+  {% for note in stats.notes %}
+  <p class="people-stats-note">{{ note }}</p>
+  {% endfor %}
+</div>
+{% endif %}
+<div class="people-stats-wrap">
+  <table class="people-stats">
+    <thead>
+      <tr>
+        {% for header in stats.headers %}
+        <th
+          {% if header.numeric %}class="numeric"{% endif %}
+          aria-sort="{{ header.aria_sort }}"
+        >
+          <a href="{{ url_for('people', **header.sort_query) }}">{{ header.label }}</a>
+        </th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in stats.rows %}
+      <tr>
+        <th scope="row">
+          <a href="{{ url_for('team_slug', slug=row.person.slug, **stats.window_query) }}">{{ row.person.display_name }}</a>
+        </th>
+        {% for cell in row.cells %}
+        <td class="numeric">
+          {% if cell.href %}
+          <a href="{{ cell.href }}">{{ cell.text }}</a>
+          {% else %}
+          {{ cell.text }}
+          {% endif %}
+          {% if cell.note %}<small class="agent-note">{{ cell.note }}</small>{% endif %}
+          {% if cell.stdev %}
+          <small
+            class="metric-stdev{% if cell.stdev.tone %} {{ cell.stdev.tone }}{% endif %}"
+            data-tooltip="{{ cell.stdev.tooltip }}"
+            data-placement="bottom"
+          >{{ cell.stdev.label }}</small>
+          {% endif %}
+        </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
