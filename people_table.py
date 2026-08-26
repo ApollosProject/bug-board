@@ -5,7 +5,7 @@ import os
 import re
 import time
 from collections.abc import Callable, Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import lru_cache
@@ -25,6 +25,8 @@ from regressions import (
 from time_window import TimeWindow
 
 PEOPLE_STATS_TTL_SECONDS: Final = 60
+# Heroku's router kills the request at 30s. Return whatever source finished.
+PEOPLE_STATS_FETCH_TIMEOUT_SECONDS: Final = 20
 STDEV_COHORT_LABEL: Final = "all people"
 MISSING_TEXT: Final = "—"
 CURSOR_APP_LOGIN: Final = "cursor"
@@ -364,6 +366,22 @@ def _cache_epoch() -> int:
 
 
 @lru_cache(maxsize=8)
+def _cached_github_counts(
+    days: int | None, start: str | None, end: str | None, _cache_epoch: int
+) -> tuple[dict[str, int], dict[str, int], dict[str, AgentCredit]]:
+    window = TimeWindow.resolve(days, start=start, end=end)
+    return _counts_from_activity(*get_merged_pr_activity(window.duration_days, window))
+
+
+@lru_cache(maxsize=8)
+def _cached_regression_tallies(
+    days: int | None, start: str | None, end: str | None, _cache_epoch: int
+) -> dict[str, RegressionTally]:
+    window = TimeWindow.resolve(days, start=start, end=end)
+    records, _failed = collect_regression_attributions(window)
+    return tally_regressions_by_login(records, window)
+
+
 def _gather(
     days: int | None, start: str | None, end: str | None, _cache_epoch: int
 ) -> PeopleStatsInputs:
@@ -384,33 +402,53 @@ def _gather(
     github_available = False
     regressions_available = False
 
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        github_future = (
-            executor.submit(get_merged_pr_activity, window.duration_days, window)
-            if github_ok
-            else None
+    if not github_ok and not linear_ok:
+        return PeopleStatsInputs(
+            window=window,
+            roster=roster,
+            merged_by_login=merged_by_login,
+            reviewed_by_login=reviewed_by_login,
+            agent_by_login=agent_by_login,
+            regressions_by_login=regressions_by_login,
+            notes=tuple(notes),
+            github_available=github_available,
+            regressions_available=regressions_available,
         )
-        regression_future = (
-            executor.submit(collect_regression_attributions, window) if linear_ok else None
+
+    executor = ThreadPoolExecutor(max_workers=2)
+    github_future = None
+    if github_ok:
+        github_future = executor.submit(_cached_github_counts, days, start, end, _cache_epoch)
+    regression_future = None
+    if linear_ok:
+        regression_future = executor.submit(
+            _cached_regression_tallies, days, start, end, _cache_epoch
         )
-        if github_future is not None:
+    pending: list[Future[Any]] = [
+        future for future in (github_future, regression_future) if future is not None
+    ]
+    try:
+        done, not_done = wait(pending, timeout=PEOPLE_STATS_FETCH_TIMEOUT_SECONDS)
+        if github_future is not None and github_future in not_done:
+            notes.append("GitHub PR stats took too long to load.")
+        elif github_future is not None:
             try:
-                prs_by_author, prs_by_reviewer = github_future.result()
-                merged_by_login, reviewed_by_login, agent_by_login = _counts_from_activity(
-                    prs_by_author, prs_by_reviewer
-                )
+                merged_by_login, reviewed_by_login, agent_by_login = github_future.result()
                 github_available = True
             except Exception:
                 logging.exception("Failed to load GitHub PR activity for people stats")
                 notes.append("Unable to load GitHub PR stats.")
-        if regression_future is not None:
+        if regression_future is not None and regression_future in not_done:
+            notes.append("Regression attributions took too long to load.")
+        elif regression_future is not None:
             try:
-                records, _failed = regression_future.result()
-                regressions_by_login = tally_regressions_by_login(records, window)
+                regressions_by_login = regression_future.result()
                 regressions_available = True
             except Exception:
                 logging.exception("Failed to load regression attributions for people stats")
                 notes.append("Unable to load regression attributions.")
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
     return PeopleStatsInputs(
         window=window,

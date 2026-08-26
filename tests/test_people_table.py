@@ -1,4 +1,5 @@
 import os
+import time
 import unittest
 from datetime import date
 from unittest.mock import patch
@@ -84,8 +85,10 @@ def _row(stats, slug: str):
 
 class PeopleTableTest(unittest.TestCase):
     def setUp(self):
-        people_table._gather.cache_clear()
-        self.addCleanup(people_table._gather.cache_clear)
+        people_table._cached_github_counts.cache_clear()
+        people_table._cached_regression_tallies.cache_clear()
+        self.addCleanup(people_table._cached_github_counts.cache_clear)
+        self.addCleanup(people_table._cached_regression_tallies.cache_clear)
         env = patch.dict(os.environ, {"GITHUB_TOKEN": "test-token", "LINEAR_API_KEY": "test-key"})
         env.start()
         self.addCleanup(env.stop)
@@ -304,7 +307,8 @@ class PeopleTableTest(unittest.TestCase):
             patch.object(people_table, "get_merged_pr_activity") as activity,
             patch.object(people_table, "collect_regression_attributions") as collect,
         ):
-            people_table._gather.cache_clear()
+            people_table._cached_github_counts.cache_clear()
+            people_table._cached_regression_tallies.cache_clear()
             stats = build_people_stats(_window(), DEFAULT_SORT)
         activity.assert_not_called()
         collect.assert_not_called()
@@ -313,6 +317,32 @@ class PeopleTableTest(unittest.TestCase):
         self.assertEqual(_cell(alice, ColumnKey.REGRESSIONS_AUTHORED).text, "—")
         self.assertIn("GitHub credentials are not configured.", stats.notes)
         self.assertIn("Linear credentials are not configured.", stats.notes)
+
+    def test_slow_regressions_do_not_block_github_rows(self):
+        roster = (_person("alice"),)
+
+        def hang_regressions(*args, **kwargs):
+            time.sleep(1)
+            return {}
+
+        started = time.monotonic()
+        with (
+            patch.object(people_table, "PEOPLE_STATS_FETCH_TIMEOUT_SECONDS", 0.05),
+            patch.object(people_table, "load_roster", return_value=roster),
+            patch.object(
+                people_table,
+                "get_merged_pr_activity",
+                return_value=({"alice": [{"author": {"login": "alice"}}]}, {}),
+            ),
+            patch.object(people_table, "_cached_regression_tallies", side_effect=hang_regressions),
+        ):
+            stats = build_people_stats(_window(), DEFAULT_SORT)
+        elapsed = time.monotonic() - started
+        self.assertLess(elapsed, 0.5)
+        alice = _row(stats, "alice")
+        self.assertEqual(_cell(alice, ColumnKey.PRS_MERGED).text, "1")
+        self.assertEqual(_cell(alice, ColumnKey.REGRESSIONS_AUTHORED).text, "—")
+        self.assertIn("Regression attributions took too long to load.", stats.notes)
 
     def test_stdev_tooltip_uses_all_people_and_includes_zeros(self):
         roster = (

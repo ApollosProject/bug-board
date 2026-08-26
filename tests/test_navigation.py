@@ -368,14 +368,16 @@ class NavigationTest(unittest.TestCase):
         engineering = [person for person in roster if person.team == ENGINEERING_TEAM_SLUG]
         self.assertGreater(len(roster), len(engineering))
 
-        people_table_module._gather.cache_clear()
+        people_table_module._cached_github_counts.cache_clear()
+        people_table_module._cached_regression_tallies.cache_clear()
         with (
             patch.object(app_module, "datetime", FixedDateTime),
             patch("people_table.get_merged_pr_activity", return_value=({}, {})),
             patch("people_table.collect_regression_attributions", return_value=([], 0)),
         ):
             partial = self.client.get("/partials/people/table")
-        people_table_module._gather.cache_clear()
+        people_table_module._cached_github_counts.cache_clear()
+        people_table_module._cached_regression_tallies.cache_clear()
         partial_body = partial.get_data(as_text=True)
         self.assertEqual(partial.status_code, 200)
         for person in roster:
