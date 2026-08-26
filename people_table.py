@@ -298,10 +298,12 @@ class Row:
     person: Person
     cells: tuple[Cell, ...]
 
-    def sort_key(self, order: SortOrder) -> tuple[float, str]:
+    def sort_key(self, order: SortOrder) -> tuple[float, str, str]:
+        name = self.person.display_name.casefold()
         if order.key is ColumnKey.PERSON:
-            return (0.0, self.person.display_name.casefold())
-        return self.cells[_COLUMN_INDEX[order.key]].sort_key
+            return (0.0, name, self.person.team)
+        magnitude, _name = self.cells[_COLUMN_INDEX[order.key]].sort_key
+        return (magnitude, name, self.person.team)
 
 
 @dataclass(frozen=True, slots=True)
@@ -481,15 +483,16 @@ def _column_cells(
     cells: list[Cell] = []
     for fact, value, badge in zip(facts, values, badges, strict=True):
         magnitude = value if value is not None else float("-inf")
-        cells.append(
-            Cell(
-                text=column.render(fact, value),
-                sort_key=(magnitude, fact.person.display_name.casefold()),
-                href=column.link(fact, window) if value else None,
-                note=column.note(fact),
-                stdev=badge,
-            )
+        cell = Cell(
+            text=column.render(fact, value),
+            sort_key=(magnitude, fact.person.display_name.casefold()),
+            href=column.link(fact, window) if value else None,
+            note=column.note(fact),
+            stdev=badge,
         )
+        if not value and cell.href is not None:
+            raise RuntimeError("zero and unavailable cells cannot link")
+        cells.append(cell)
     return tuple(cells)
 
 
@@ -535,7 +538,16 @@ def _headers(order: SortOrder, window: TimeWindow) -> tuple[ColumnHeader, ...]:
         )
         for column in STAT_COLUMNS
     )
-    return (person, *rest)
+    headers = (person, *rest)
+    allowed_aria = {"none", "ascending", "descending"}
+    for header in headers:
+        if header.aria_sort not in allowed_aria:
+            raise RuntimeError("invalid aria-sort")
+        if "sort" not in header.sort_query:
+            raise RuntimeError("sort query missing token")
+        if header.numeric is (header.key is ColumnKey.PERSON):
+            raise RuntimeError("only metric columns are numeric")
+    return headers
 
 
 def _aria_sort(order: SortOrder, key: ColumnKey) -> str:
