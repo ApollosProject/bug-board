@@ -204,6 +204,10 @@ def _team_pr_counts(
                 person["github_username"],
                 window.duration_days,
                 window,
+                # Escape rate is "regressions I approved / PRs I approved", so
+                # this denominator must stay approval-only even though the
+                # displayed "PRs Reviewed" metric counts every review state.
+                approvals_only=True,
             ): username
             for username, person in people.items()
         }

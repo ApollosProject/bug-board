@@ -539,10 +539,40 @@ def _get_merged_prs(days: int = 30, window: TimeWindow | None = None):
     )
 
 
+# Submitted review states that count as "reviewed". PENDING is excluded: it is
+# an unsubmitted draft only its author can see.
+COUNTED_REVIEW_STATES = ("APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED")
+
+
+def _user_reviewed_pr(
+    pr: Dict[str, Any], normalized_username: str, *, approvals_only: bool
+) -> bool:
+    """Whether the user submitted a qualifying review on this pull request."""
+    own_states = [
+        review.get("state")
+        for review in (pr.get("reviews") or {}).get("nodes", []) or []
+        if ((review.get("author") or {}).get("login") or "").casefold() == normalized_username
+    ]
+    if approvals_only:
+        return "APPROVED" in own_states
+    return bool(own_states)
+
+
 def get_merged_pr_counts_for_user(
-    username: str, days: int = 30, window: TimeWindow | None = None
+    username: str,
+    days: int = 30,
+    window: TimeWindow | None = None,
+    *,
+    approvals_only: bool = False,
 ) -> tuple[int, int]:
-    """Return credited-author and approved-review PR counts for one GitHub user."""
+    """Return credited-author and reviewed PR counts for one GitHub user.
+
+    A PR counts as reviewed when the user submitted any review on it —
+    approving, requesting changes, or commenting. Pass ``approvals_only=True``
+    to count only PRs the user approved; the reviewer escape rate needs that
+    stricter denominator, since you can only "let a regression through" on a
+    PR you actually approved.
+    """
     if not token or not username:
         return 0, 0
     orgs = get_github_orgs()
@@ -555,13 +585,18 @@ def get_merged_pr_counts_for_user(
     reviewed_query = f"{base_query} reviewed-by:{username}"
     query = gql(
         """
-        query MergedPRCounts($authored: String!, $reviewed: String!, $cursor: String) {
+        query MergedPRCounts(
+          $authored: String!
+          $reviewed: String!
+          $cursor: String
+          $states: [PullRequestReviewState!]
+        ) {
           authored: search(type: ISSUE, query: $authored, first: 1) { issueCount }
           reviewed: search(type: ISSUE, query: $reviewed, first: 100, after: $cursor) {
             nodes {
               ... on PullRequest {
-                reviews(first: 100, states: [APPROVED]) {
-                  nodes { author { login } }
+                reviews(first: 100, states: $states) {
+                  nodes { author { login } state }
                 }
               }
             }
@@ -583,6 +618,7 @@ def get_merged_pr_counts_for_user(
                     "authored": authored_query,
                     "reviewed": reviewed_query,
                     "cursor": cursor,
+                    "states": list(COUNTED_REVIEW_STATES),
                 },
             )
         except Exception:
@@ -593,10 +629,7 @@ def get_merged_pr_counts_for_user(
         authored_count = authored.get("issueCount", 0) or 0
         reviewed = data.get("reviewed", {}) or {}
         reviewed_count += sum(
-            any(
-                ((review.get("author") or {}).get("login") or "").casefold() == normalized_username
-                for review in (pr.get("reviews") or {}).get("nodes", []) or []
-            )
+            _user_reviewed_pr(pr, normalized_username, approvals_only=approvals_only)
             for pr in reviewed.get("nodes", []) or []
             if pr
         )

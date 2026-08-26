@@ -19,14 +19,34 @@ class _RecordingClient:
 
 
 class GraphQLClientRequestTests(unittest.TestCase):
-    def test_person_pr_counts_use_scoped_searches_and_only_count_approvals(self):
+    def test_person_pr_counts_use_scoped_searches_and_count_all_review_states(self):
         github._get_cursor_authored_merged_prs_cached.cache_clear()
         response = {
             "authored": {"issueCount": 60},
             "reviewed": {
                 "nodes": [
-                    {"reviews": {"nodes": [{"author": {"login": "Bkraeling"}}]}},
-                    {"reviews": {"nodes": [{"author": {"login": "someone-else"}}]}},
+                    {
+                        "reviews": {
+                            "nodes": [{"author": {"login": "Bkraeling"}, "state": "APPROVED"}]
+                        }
+                    },
+                    {
+                        "reviews": {
+                            "nodes": [{"author": {"login": "bkraeling"}, "state": "COMMENTED"}]
+                        }
+                    },
+                    {
+                        "reviews": {
+                            "nodes": [
+                                {"author": {"login": "bkraeling"}, "state": "CHANGES_REQUESTED"}
+                            ]
+                        }
+                    },
+                    {
+                        "reviews": {
+                            "nodes": [{"author": {"login": "someone-else"}, "state": "APPROVED"}]
+                        }
+                    },
                 ],
                 "pageInfo": {"hasNextPage": False, "endCursor": None},
             },
@@ -41,13 +61,55 @@ class GraphQLClientRequestTests(unittest.TestCase):
             counts = github.get_merged_pr_counts_for_user("bkraeling", 30)
             self.assertEqual(github.get_merged_pr_counts_for_user("bkraeling", 30), counts)
 
-        self.assertEqual(counts, (60, 1))
+        # Approved + commented + changes-requested all count; someone else's does not.
+        self.assertEqual(counts, (60, 3))
         variables = execute.call_args_list[0].kwargs["variable_values"]
         self.assertIn("author:bkraeling", variables["authored"])
         self.assertIn("reviewed-by:bkraeling", variables["reviewed"])
+        self.assertEqual(variables["states"], list(github.COUNTED_REVIEW_STATES))
         delegated_variables = execute.call_args_list[1].kwargs["variable_values"]
         self.assertIn("author:app/cursor", delegated_variables["query"])
         self.assertEqual(execute.call_count, 3)
+
+    def test_person_pr_counts_approvals_only_excludes_non_approving_reviews(self):
+        github._get_cursor_authored_merged_prs_cached.cache_clear()
+        response = {
+            "authored": {"issueCount": 7},
+            "reviewed": {
+                "nodes": [
+                    {
+                        "reviews": {
+                            "nodes": [{"author": {"login": "bkraeling"}, "state": "APPROVED"}]
+                        }
+                    },
+                    {
+                        "reviews": {
+                            "nodes": [{"author": {"login": "bkraeling"}, "state": "COMMENTED"}]
+                        }
+                    },
+                    {
+                        "reviews": {
+                            "nodes": [
+                                {"author": {"login": "bkraeling"}, "state": "CHANGES_REQUESTED"},
+                                {"author": {"login": "bkraeling"}, "state": "APPROVED"},
+                            ]
+                        }
+                    },
+                ],
+                "pageInfo": {"hasNextPage": False, "endCursor": None},
+            },
+        }
+
+        with (
+            patch.object(github, "token", "token"),
+            patch.object(github, "get_github_orgs", return_value=["apollosproject"]),
+            patch.object(github, "_execute", return_value=response),
+            patch.object(github, "_get_cursor_authored_merged_prs", return_value=[]),
+        ):
+            counts = github.get_merged_pr_counts_for_user("bkraeling", 30, approvals_only=True)
+
+        # Only the two PRs carrying an APPROVED review from this user count.
+        self.assertEqual(counts, (7, 2))
 
     def test_person_pr_counts_include_cursor_coauthored_prs_once_each(self):
         response = {
