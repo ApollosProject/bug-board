@@ -2,18 +2,6 @@
 
 {% block title %}Apollos Bug Board{% endblock %}
 
-{% block extra_head %}
-<style>
-  #score-tooltip[data-tooltip]::before,
-  td.score-breakdown[data-tooltip]::before {
-    font-size: 0.7em;
-    white-space: pre;
-    font-weight: 400;
-    width: max-content;
-  }
-</style>
-{% endblock %}
-
 {% block header_nav %}{% endblock %}
 
 {% block content %}
@@ -26,7 +14,6 @@
     <section id="regressions" aria-busy="true"></section>
     <section id="resolution-by-priority" aria-busy="true"></section>
     <section id="open-items" aria-busy="true"></section>
-    <section id="leaderboard" aria-busy="true"></section>
 {% endblock %}
 
 {% block extra_scripts %}
@@ -120,6 +107,5 @@
     `/partials/index/resolution-by-priority?${windowQs}`
   );
   loadSection('open-items', `/partials/index/open-items?${windowQs}`);
-  loadSection('leaderboard', `/partials/index/leaderboard?${windowQs}`);
 </script>
 {% endblock %}

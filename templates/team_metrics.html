@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Team{% endblock %}
+{% block content %}
+  <h1>Team</h1>
+  {% include "partials/time_window_controls.html" %}
+  <form method="get" class="team-options">
+    {% for key, value in window_query.items() %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
+    <input type="hidden" name="sort" value="{{ sort }}">
+    <label><input type="checkbox" name="everyone" value="1" {% if everyone %}checked{% endif %} onchange="this.form.submit()"> Show everyone</label>
+  </form>
+  <section id="team-metrics" aria-busy="true"></section>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+  const teamMetrics = document.getElementById('team-metrics');
+  fetch({{ url_for("team_metrics_partial", **table_query) | tojson }})
+    .then((response) => response.ok ? response.text() : Promise.reject())
+    .then((html) => { teamMetrics.innerHTML = html; teamMetrics.removeAttribute('aria-busy'); })
+    .catch(() => { teamMetrics.innerHTML = '<article>Unable to load team metrics.</article>'; teamMetrics.removeAttribute('aria-busy'); });
+</script>
+{% endblock %}
