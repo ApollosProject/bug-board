@@ -144,9 +144,10 @@ class PersonStatsTest(unittest.TestCase):
             with self.subTest(key=key):
                 self.assertTrue(better_stdevs[key]["label"].startswith("+"), better_stdevs[key])
                 self.assertTrue(worse_stdevs[key]["label"].startswith("−"), worse_stdevs[key])
+                self.assertEqual(better_stdevs[key]["tone"], "high")
+                self.assertEqual(worse_stdevs[key]["tone"], "low")
 
         self.assertEqual(better_stdevs["prs_merged"]["label"], "+1.0σ")
-        self.assertNotIn("tone", better_stdevs["prs_merged"])
         self.assertEqual(better_stdevs["priority_bug_avg_time_to_fix"]["label"], "+1.0σ")
         self.assertEqual(worse_stdevs["avg_all_time_to_fix"]["label"], "−1.0σ")
         self.assertEqual(better_stdevs["lead_incomplete_projects"]["label"], "+1.0σ")
@@ -160,11 +161,11 @@ class PersonStatsTest(unittest.TestCase):
             )
         )
 
-    def test_all_card_metrics_color_at_one_and_a_half_sigma(self):
-        self.assertEqual(person_stats.stdev_tone(1.5), "high")
-        self.assertEqual(person_stats.stdev_tone(-1.5), "low")
-        self.assertIsNone(person_stats.stdev_tone(1.49))
-        self.assertIsNone(person_stats.stdev_tone(-1.49))
+    def test_all_card_metrics_color_at_one_sigma(self):
+        self.assertEqual(person_stats.stdev_tone(1.0), "high")
+        self.assertEqual(person_stats.stdev_tone(-1.0), "low")
+        self.assertIsNone(person_stats.stdev_tone(0.99))
+        self.assertIsNone(person_stats.stdev_tone(-0.99))
 
         high_person = _outlier_metrics(better=True)
         clustered_low = _outlier_metrics(better=False)
@@ -182,6 +183,16 @@ class PersonStatsTest(unittest.TestCase):
             with self.subTest(key=key):
                 self.assertEqual(high_stdevs[key]["tone"], "high")
                 self.assertEqual(low_stdevs[key]["tone"], "low")
+
+    def test_one_sigma_color_tolerates_floating_point_drift(self):
+        key = "lead_completed_projects_avg_early_late"
+        team_metrics = [{key: 0.1}, {key: 0.2}]
+
+        better = person_stats.metric_stdevs_for_person({key: 0.1}, team_metrics)[key]
+        worse = person_stats.metric_stdevs_for_person({key: 0.2}, team_metrics)[key]
+
+        self.assertEqual((better["label"], better["tone"]), ("+1.0σ", "high"))
+        self.assertEqual((worse["label"], worse["tone"]), ("−1.0σ", "low"))
 
     def test_person_cards_color_headings_beyond_stdev_threshold(self):
         app_module._build_person_context.cache_clear()
@@ -283,12 +294,11 @@ class PersonStatsTest(unittest.TestCase):
             context = app_module._build_person_context("alice", 30, 1)
 
         self.assertEqual(context["metric_stdevs"]["prs_merged"]["tooltip"], "eng avg 6.0 · σ 4.0")
-        self.assertNotIn("tone", context["metric_stdevs"]["prs_merged"])
+        self.assertEqual(context["metric_stdevs"]["prs_merged"]["tone"], "high")
         with app_module.app.test_request_context():
             body = app_module.render_template("partials/person_content.html", **context)
-        self.assertIn("<h1>10</h1>", body)
-        self.assertIn("<h1>8</h1>", body)
-        self.assertNotIn('<h1 class="high">10</h1>', body)
+        self.assertIn('<h1 class="high">10</h1>', body)
+        self.assertIn('<h1 class="high">8</h1>', body)
         self.assertNotIn('class="low"', body)
         self.assertNotIn("2/week", body)
         self.assertIn('data-placement="bottom"', body)

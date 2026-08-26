@@ -33,7 +33,7 @@ from linear.issues import (
 )
 from linear.projects import get_projects
 from openai_client import get_chat_function_call
-from person_stats import issue_card_values, performance_outliers
+from person_stats import STDEV_COLOR_THRESHOLD, issue_card_values, performance_outliers
 from project_dates import (
     format_project_target_status,
     get_project_planned_weeks,
@@ -825,7 +825,7 @@ def format_performance_outlier_markdown(
     praise, coach = lines("high"), lines("low")
     if not praise and not coach:
         return None
-    sections = [f"*Who to praise and coach (±1.5σ, last {days} days)*"]
+    sections = [f"*Who to praise and coach (±{STDEV_COLOR_THRESHOLD:g}σ, last {days} days)*"]
     if praise:
         sections.append("*Praise*\n\n" + "\n".join(praise))
     if coach:
@@ -837,7 +837,7 @@ def format_performance_outlier_markdown(
 
 @with_retries
 def post_performance_outliers():
-    """Send weekly ±1.5σ outliers so managers know who to praise and coach."""
+    """Send weekly standard-deviation outliers so managers know who to praise and coach."""
     days = PERFORMANCE_OUTLIER_DAYS
     window = TimeWindow.from_days(days)
     people = get_team_members(ENGINEERING_TEAM_SLUG)
