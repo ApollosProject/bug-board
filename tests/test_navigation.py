@@ -336,8 +336,7 @@ class NavigationTest(unittest.TestCase):
     def test_team_page_loads_metrics_and_everyone_toggle(self):
         body = self.client.get("/team?days=7&everyone=1&sort=bogus").get_data(as_text=True)
 
-        self.assertIn("'HX-Request': 'true'", body)
-        self.assertIn("Show everyone", body)
+        self.assertTrue(all(text in body for text in ("Show everyone", "'HX-Request': 'true'")))
         self.assertIn('name="sort" value="-prs_merged"', body)
 
 

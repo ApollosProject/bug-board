@@ -1135,8 +1135,9 @@ def _team_table_context() -> dict:
         rows = [row for row in rows if row["slug"] in engineering]
     sort = _team_sort(request.args.get("sort") or "-prs_merged")
     sort_key = sort.removeprefix("-")
-    rows.sort(key=lambda row: str(row["person"]).casefold())
-    rows.sort(key=lambda row: row[sort_key], reverse=sort.startswith("-"))
+    rows.sort(key=lambda row: str(row["person"]).casefold(), reverse=sort == "-person")
+    if sort_key != "person":
+        rows.sort(key=lambda row: row[sort_key], reverse=sort.startswith("-"))
     query = dict(context.get("window_query") or {})
     if everyone:
         query["everyone"] = "1"

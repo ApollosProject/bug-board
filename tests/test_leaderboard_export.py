@@ -122,13 +122,13 @@ class LeaderboardExportTest(unittest.TestCase):
         }
         with patch.object(app_module, "_leaderboard_page_context", return_value=ctx):
             csv_text = client.get("/team.csv?days=30&everyone=1").get_data(as_text=True)
-            html = client.get("/partials/team/metrics?days=30&everyone=1").get_data(as_text=True)
+            html = client.get("/partials/team/metrics?everyone=1&sort=person").get_data(True)
         self.assertTrue(csv_text.startswith("person,slug,prs_merged"))
         exported = {row["slug"]: row for row in csv.DictReader(io.StringIO(csv_text))}
         self.assertEqual(exported["andy"]["prs_merged"], "5")
-        self.assertIn("Andy", html)
-        self.assertIn("/team.csv?sort=-prs_merged&amp;days=30&amp;everyone=1", html)
-        self.assertIn('aria-sort="descending"', html)
+        self.assertLess(html.index("Andy"), html.index("Michael"))
+        self.assertIn("/team.csv?sort=person&amp;days=30&amp;everyone=1", html)
+        self.assertIn('aria-sort="ascending"', html)
         self.assertIn(">Export CSV</a>", html)
         self.assertNotIn("Leaderboard", html)
         with patch.object(
