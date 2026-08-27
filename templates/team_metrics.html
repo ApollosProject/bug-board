@@ -13,8 +13,12 @@
 {% block extra_scripts %}
 <script>
   const teamMetrics = document.getElementById('team-metrics');
-  fetch({{ url_for("team_metrics_partial", **table_query) | tojson }})
-    .then((response) => response.ok ? response.text() : Promise.reject())
+  fetch({{ url_for("team_metrics_partial", **table_query) | tojson }}, { headers: { 'HX-Request': 'true', 'HX-Current-URL': window.location.href }})
+    .then((response) => {
+      const redirect = response.headers.get('HX-Redirect');
+      if (redirect) window.location.assign(redirect);
+      return response.ok ? response.text() : Promise.reject();
+    })
     .then((html) => { teamMetrics.innerHTML = html; teamMetrics.removeAttribute('aria-busy'); })
     .catch(() => { teamMetrics.innerHTML = '<article>Unable to load team metrics.</article>'; teamMetrics.removeAttribute('aria-busy'); });
 </script>
