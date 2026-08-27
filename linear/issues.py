@@ -42,6 +42,9 @@ def get_open_issues(priority, label):
                   name
                 }
               }
+              state {
+                name
+              }
               createdAt
               updatedAt
               priority

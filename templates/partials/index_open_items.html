@@ -1,9 +1,11 @@
 <h2>Open Items</h2>
+<input type="checkbox" id="hide-merged-done-issues" class="hide-merged-done-toggle" />
+<label for="hide-merged-done-issues">Hide Merged/Done</label>
 <details open>
   <summary>Priority</summary>
   {% if priority_issues %}
     {% for issue in priority_issues %}
-    <div class="card">
+    <div class="card" data-status="{{ issue.state.name if issue.state else '' }}">
       <article>
         <a href="{{ issue.url }}">{{ issue.title }}</a>
         <small
@@ -23,7 +25,7 @@
   <summary>Non-priority</summary>
   {% if open_assigned_work %}
     {% for issue in open_assigned_work %}
-    <div class="card">
+    <div class="card" data-status="{{ issue.state.name if issue.state else '' }}">
       <article>
         <a href="{{ issue.url }}">{{ issue.title }}</a>
         <small
@@ -38,3 +40,14 @@
   {% endif %}
 </details>
 <hr />
+<style>
+  .hide-merged-done-toggle:checked ~ details .card[data-status="Merged"],
+  .hide-merged-done-toggle:checked ~ details .card[data-status="Done"] {
+    display: none;
+  }
+  .hide-merged-done-toggle,
+  label[for="hide-merged-done-issues"] {
+    display: inline-block;
+    margin-bottom: 1rem;
+  }
+</style>
