@@ -27,6 +27,7 @@ class NavigationTest(unittest.TestCase):
 
         self.assertIn('class="dropdown site-menu"', header)
         self.assertIn('aria-label="Open local pages menu"', header)
+        self.assertIn('href="/team"', header)
         self.assertIn('href="/apps"', header)
         self.assertIn('href="/projects"', header)
         self.assertIn(">Projects</a>", header)
@@ -332,11 +333,11 @@ class NavigationTest(unittest.TestCase):
         )
         self.assertNotIn("Current Focus", partial_body)
 
-    def test_legacy_team_url_renders_the_projects_page(self):
-        response = self.client.get("/team")
+    def test_team_page_loads_metrics_and_everyone_toggle(self):
+        body = self.client.get("/team?days=7&everyone=1&sort=bogus").get_data(as_text=True)
 
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("<title>Projects</title>", response.get_data(as_text=True))
+        self.assertTrue(all(text in body for text in ("Show everyone", "'HX-Request': 'true'")))
+        self.assertIn('name="sort" value="-prs_merged"', body)
 
 
 if __name__ == "__main__":

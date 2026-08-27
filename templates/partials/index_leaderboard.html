@@ -1,59 +1,30 @@
-{% set score_rules_tooltip = [
-  "Urgent issues: 20 pts",
-  "High issues: 10 pts",
-  "Medium issues: 5 pts",
-  "Low issues: 1 pt",
-  "PR reviews: 1 pt each",
-  "Merged PRs: 1 pt each",
-  "Completed project lead: 30 pts/week",
-  "Completed project member: 15 pts/week"
-] | join('\n') %}
-<div class="leaderboard-heading">
-  <h2>Leaderboard ({{ window_label or (days ~ 'd') }})</h2>
-  <a
-    class="leaderboard-export"
-    href="{{ url_for('leaderboard_csv', **(window_query or {'days': days})) }}"
-  >Export CSV</a>
+<div class="team-metrics-heading">
+  <div><h2>Activity ({{ window_label or (days ~ 'd') }})</h2><small>{{ "Everyone" if everyone else "Engineering" }}</small></div>
+  <a class="team-metrics-export" href="{{ url_for('team_csv', sort=sort, **query) }}">Export CSV</a>
 </div>
-<h4>
-  Scores
-  <small
-    id="score-tooltip"
-    data-tooltip="{{ score_rules_tooltip }}"
-    style="font-size: 0.8em;"
-    >ⓘ</small>
-</h4>
-<table>
-  <thead>
-    <tr>
-      <th scope="col">Person</th>
-      <th scope="col">Score</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% if leaderboard_unavailable %}
-      <tr>
-        <td colspan="2">Leaderboard is refreshing.</td>
-      </tr>
-    {% elif leaderboard_entries %}
-      {% for entry in leaderboard_entries %}
-      <tr>
-        <td>
-          {% if entry.slug %}
-            <a href="{{ url_for('team_slug', slug=entry.slug, **(window_query or {'days': days})) }}">
-              {{ entry.display_name|first_name }}
-            </a>
-          {% else %}
-            {{ entry.display_name|first_name }}
-          {% endif %}
-        </td>
-        <td class="score-breakdown" {% if entry.breakdown %}data-tooltip="{{ entry.breakdown }}"{% endif %}>{{ entry.score }}</td>
-      </tr>
-      {% endfor %}
-    {% else %}
-      <tr>
-        <td colspan="2">No leaderboard activity yet.</td>
-      </tr>
-    {% endif %}
-  </tbody>
-</table>
+{% if leaderboard_unavailable %}
+  <article>Team metrics are refreshing.</article>
+{% else %}
+  <div class="team-metrics-table" role="region" aria-label="Sortable team metrics" tabindex="0">
+    <table>
+      <thead><tr>
+        {% for key, label in columns %}
+          {% set active = key == sort_key %}
+          {% set direction = "descending" if active and sort.startswith("-") else "ascending" if active else "none" %}
+          {% set next_sort = key if active and sort.startswith("-") else ("-" ~ key) if active else key if key == "person" else ("-" ~ key) %}
+          <th scope="col" aria-sort="{{ direction }}"><a href="{{ url_for('team', sort=next_sort, **query) }}">{{ label }}{% if direction == "ascending" %} ↑{% elif direction == "descending" %} ↓{% endif %}</a></th>
+        {% endfor %}
+      </tr></thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            <th scope="row"><a href="{{ url_for('team_slug', slug=row.slug, **(window_query or {'days': days})) }}">{{ row.person }}</a></th>
+            {% for key, _label in columns[1:] %}<td>{{ row[key] }}</td>{% endfor %}
+          </tr>
+        {% else %}
+          <tr><td colspan="{{ columns|length }}">No team activity yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}

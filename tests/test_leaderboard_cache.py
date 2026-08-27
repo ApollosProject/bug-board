@@ -55,13 +55,12 @@ class LeaderboardCacheTest(unittest.TestCase):
             patch.object(app_module, "compute_leaderboard_context", return_value=live) as compute,
         ):
             with patch.object(app_module, "get_cached_leaderboard", return_value=payload):
-                hit = client.get("/partials/index/leaderboard?days=30")
+                hit = client.get("/partials/team/metrics?days=30")
             with patch.object(app_module, "get_cached_leaderboard", return_value=None):
-                miss = client.get("/partials/index/leaderboard?days=30")
-                other = client.get("/partials/index/leaderboard?days=7")
+                client.get("/partials/team/metrics?days=30")
+                other = client.get("/partials/team/metrics?days=7")
 
         self.assertIn("Michael", hit.get_data(as_text=True))
-        self.assertIn("Leaderboard is refreshing.", miss.get_data(as_text=True))
         compute.assert_called_once()
         self.assertEqual(compute.call_args.args[0], 7)
         self.assertEqual(other.status_code, 200)
@@ -85,11 +84,10 @@ class LeaderboardCacheTest(unittest.TestCase):
             patch.object(app_module, "get_cached_leaderboard", return_value=None),
             patch.object(app_module, "compute_leaderboard_context", return_value=live) as compute,
         ):
-            response = client.get("/partials/index/leaderboard?days=30")
+            response = client.get("/partials/team/metrics?days=30")
 
         body = response.get_data(as_text=True)
         self.assertEqual(response.status_code, 200)
         self.assertIn("Michael", body)
-        self.assertNotIn("Leaderboard is refreshing.", body)
         compute.assert_called_once()
         self.assertEqual(compute.call_args.args[0], 30)

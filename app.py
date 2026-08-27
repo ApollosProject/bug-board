@@ -28,7 +28,11 @@ from github import (
 from github_oauth import register_github_oauth
 from leaderboard import calculate_cycle_project_points
 from leaderboard_cache import DEFAULT_LEADERBOARD_DAYS, get_cached_leaderboard
-from leaderboard_export import build_leaderboard_export_rows, render_leaderboard_csv
+from leaderboard_export import (
+    TEAM_METRIC_COLUMNS,
+    build_team_metric_rows,
+    render_team_metrics_csv,
+)
 from linear.issues import (
     by_platform,
     by_project,
@@ -1112,30 +1116,60 @@ def _leaderboard_page_context() -> dict:
     return _cached_window_context(_build_leaderboard_context, window)
 
 
-@app.route("/partials/index/leaderboard")
-def index_leaderboard_partial():
-    return render_template("partials/index_leaderboard.html", **_leaderboard_page_context())
+def _team_sort(value: str) -> str:
+    valid_keys = {"person", *dict(TEAM_METRIC_COLUMNS)}
+    return value if value.removeprefix("-") in valid_keys else "-prs_merged"
 
 
-@app.route("/leaderboard.csv")
-def leaderboard_csv():
+def _team_table_context() -> dict:
     context = _leaderboard_page_context()
+    rows = build_team_metric_rows(
+        context.get("leaderboard_export_entries") or context.get("leaderboard_entries") or []
+    )
+    everyone = request.args.get("everyone") == "1"
+    if not everyone:
+        people = load_config().get("people", {})
+        engineering = {
+            slug for slug, info in people.items() if info.get("team") == ENGINEERING_TEAM_SLUG
+        }
+        rows = [row for row in rows if row["slug"] in engineering]
+    sort = _team_sort(request.args.get("sort") or "-prs_merged")
+    sort_key = sort.removeprefix("-")
+    rows.sort(key=lambda row: str(row["person"]).casefold(), reverse=sort == "-person")
+    if sort_key != "person":
+        rows.sort(key=lambda row: row[sort_key], reverse=sort.startswith("-"))
+    query = dict(context.get("window_query") or {})
+    if everyone:
+        query["everyone"] = "1"
+    return {
+        **context,
+        "rows": rows,
+        "columns": (("person", "Person"), *TEAM_METRIC_COLUMNS),
+        "everyone": everyone,
+        "sort": sort,
+        "sort_key": sort_key,
+        "query": query,
+    }
+
+
+@app.route("/partials/team/metrics")
+def team_metrics_partial():
+    return render_template("partials/index_leaderboard.html", **_team_table_context())
+
+
+@app.route("/team.csv")
+def team_csv():
+    context = _team_table_context()
     if context.get("leaderboard_unavailable"):
-        return Response("Leaderboard is refreshing.\n", status=503, mimetype="text/plain")
+        return Response("Team metrics are refreshing.\n", status=503, mimetype="text/plain")
     preset = context.get("preset_days")
     filename = (
-        f"leaderboard-{preset}d.csv"
+        f"team-metrics-{preset}d.csv"
         if isinstance(preset, int)
-        else f"leaderboard-{context.get('start') or 'start'}-to-{context.get('end') or 'end'}.csv"
+        else f"team-metrics-{context.get('start') or 'start'}-to-{context.get('end') or 'end'}.csv"
     )
     return Response(
-        render_leaderboard_csv(
-            build_leaderboard_export_rows(
-                context.get("leaderboard_export_entries")
-                or context.get("leaderboard_entries")
-                or []
-            )
-        ),
+        render_team_metrics_csv(context["rows"]),
         mimetype="text/csv; charset=utf-8",
         headers={
             "Cache-Control": "no-store",
@@ -1172,10 +1206,26 @@ def team_slug(slug):
     )
 
 
-@app.route("/team")
 @app.route("/projects")
 def projects():
     return render_template("team.html")
+
+
+@app.route("/team")
+def team():
+    window = _request_time_window()
+    sort = _team_sort(request.args.get("sort") or "-prs_merged")
+    everyone = request.args.get("everyone") == "1"
+    table_query = {**window.template_vars()["window_query"], "sort": sort}
+    if everyone:
+        table_query["everyone"] = "1"
+    return render_template(
+        "team_metrics.html",
+        **window.template_vars(),
+        extra_query={"sort": sort, **({"everyone": "1"} if everyone else {})},
+        everyone=everyone,
+        table_query=table_query,
+    )
 
 
 @app.route("/partials/team/content")

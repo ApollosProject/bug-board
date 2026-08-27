@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 import app as app_module
-from leaderboard_export import build_leaderboard_export_rows, render_leaderboard_csv
+from leaderboard_export import build_team_metric_rows, render_team_metrics_csv
 
 
 class LeaderboardExportTest(unittest.TestCase):
@@ -45,20 +45,20 @@ class LeaderboardExportTest(unittest.TestCase):
         self.assertEqual(set(export_entries), {"eng", "other"})
         self.assertEqual(export_entries["other"]["counts"]["prs"], 2)
 
-    def test_csv_lists_score_parameters_and_route(self):
+    def test_csv_and_team_table_list_raw_metrics_without_scores(self):
         people = {
             "a": {"team": "engineering"},
             "b": {"team": "engineering"},
             "c": {"team": "engineering"},
             "d": {"team": "unassigned"},
         }
-        rows = build_leaderboard_export_rows(
+        rows = build_team_metric_rows(
             [
                 {
                     "slug": "d",
                     "display_name": "D",
                     "score": 50,
-                    "points": {"prs": 50},
+                    "points": {"prs": 50, "cycle_lead": 60},
                     "counts": {"prs": 50},
                 },
                 {
@@ -77,28 +77,18 @@ class LeaderboardExportTest(unittest.TestCase):
                 },
             ],
             people=people,
-            regression_summary={
-                "configured": True,
-                "author_metrics": [{"slug": "c", "regression_count": 2, "rate": 4.0}],
-            },
         )
         self.assertEqual([row["slug"] for row in rows], ["d", "a", "b", "c"])
         self.assertEqual(
             (
                 rows[0]["prs_merged"],
-                rows[0]["score_stdev"],
+                rows[0]["project_lead_weeks"],
                 rows[1]["urgent_issues"],
-                rows[1]["score_stdev"],
-                rows[3]["regressions_authored"],
             ),
-            (50, "", 1, "1.4", 2),
+            (50, 2, 1),
         )
-        self.assertEqual(
-            (rows[0]["pr_points_stdev"], rows[0]["urgent_points_stdev"]),
-            ("", ""),
-        )
-        self.assertEqual(rows[1]["pr_points_stdev"], "1.4")
-        self.assertIn("person,slug,score,score_stdev,urgent_issues", render_leaderboard_csv(rows))
+        self.assertNotIn("score", rows[0])
+        self.assertIn("person,slug,prs_merged,prs_reviewed", render_team_metrics_csv(rows))
         client = app_module.app.test_client()
         ctx = {
             "days": 30,
@@ -131,27 +121,17 @@ class LeaderboardExportTest(unittest.TestCase):
             ],
         }
         with patch.object(app_module, "_leaderboard_page_context", return_value=ctx):
-            csv_text = client.get("/leaderboard.csv").get_data(as_text=True)
-            html = client.get("/partials/index/leaderboard").get_data(as_text=True)
-        self.assertTrue(csv_text.startswith("person,slug,score"))
+            csv_text = client.get("/team.csv?days=30&everyone=1").get_data(as_text=True)
+            html = client.get("/partials/team/metrics?everyone=1&sort=person").get_data(True)
+        self.assertTrue(csv_text.startswith("person,slug,prs_merged"))
         exported = {row["slug"]: row for row in csv.DictReader(io.StringIO(csv_text))}
         self.assertEqual(exported["andy"]["prs_merged"], "5")
-        self.assertEqual(exported["andy"]["score_stdev"], "")
-        self.assertIn("Michael", html)
-        self.assertNotIn("Andy", html)
-        self.assertIn("/leaderboard.csv?days=30", html)
-        self.assertIn('class="leaderboard-export"', html)
+        self.assertLess(html.index("Andy"), html.index("Michael"))
+        self.assertIn("/team.csv?sort=person&amp;days=30&amp;everyone=1", html)
+        self.assertIn('aria-sort="ascending"', html)
         self.assertIn(">Export CSV</a>", html)
-        self.assertNotIn("<h2>\n  Leaderboard", html)
-        with open("static/styles.css") as styles_file:
-            styles = styles_file.read()
-        heading = styles.split(".leaderboard-heading {", 1)[1].split("}", 1)[0]
-        export = styles.split("a.leaderboard-export {", 1)[1].split("}", 1)[0]
-        self.assertIn("display: flex;", heading)
-        self.assertIn("justify-content: space-between;", heading)
-        self.assertIn("font-size: 0.8rem;", export)
-        self.assertIn("text-decoration: none;", export)
+        self.assertNotIn("Leaderboard", html)
         with patch.object(
             app_module, "_leaderboard_page_context", return_value={"leaderboard_unavailable": True}
         ):
-            self.assertEqual(client.get("/leaderboard.csv").status_code, 503)
+            self.assertEqual(client.get("/team.csv").status_code, 503)

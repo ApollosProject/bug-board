@@ -135,17 +135,17 @@ class GitHubOAuthTest(unittest.TestCase):
 
     def test_htmx_requests_receive_a_full_page_redirect_instruction(self):
         response = self.client.get(
-            "/partials/index/leaderboard",
+            "/partials/team/metrics",
             headers={
                 "HX-Request": "true",
-                "HX-Current-URL": "https://bug-board.example/?days=30",
+                "HX-Current-URL": "https://bug-board.example/team?days=30",
             },
         )
 
         self.assertEqual(response.status_code, 401)
         self.assertEqual(
             response.headers["HX-Redirect"],
-            "/login?next=%2F%3Fdays%3D30",
+            "/login?next=%2Fteam%3Fdays%3D30",
         )
 
     def test_login_uses_state_pkce_and_a_safe_return_path(self):
