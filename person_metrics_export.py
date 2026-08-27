@@ -27,6 +27,8 @@ from pathlib import Path
 from typing import Any
 
 from app import _build_person_context
+from config import load_config
+from github import get_github_orgs
 from person_stats import (
     CARD_METRIC_KEYS,
     CARD_METRIC_LABELS,
@@ -37,6 +39,11 @@ from person_stats import (
 # time"); rewritten to a compact signed form (+ late, − early, 0 on time).
 _EARLY_LATE_KEY = "lead_completed_projects_avg_early_late"
 _EARLY_LATE_RE = re.compile(r"([\d.]+)d\s+(late|early)", re.IGNORECASE)
+# The engineering baseline the σ is measured against is rendered into the card
+# tooltip by ``format_stdev_tooltip`` ("eng trimmed avg 12.3 · σ 4.5 · hint").
+# Pull it back out so consumers can compare against the team average directly
+# instead of only seeing their own distance from it.
+_BASELINE_RE = re.compile(r"avg\s+([\d.]+)\s*·\s*σ\s+([\d.]+)")
 
 
 def _parse_sigma(label: str | None) -> float | None:
@@ -52,6 +59,16 @@ def _parse_sigma(label: str | None) -> float | None:
         return float(cleaned)
     except ValueError:
         return None
+
+
+def _parse_baseline(tooltip: str | None) -> tuple[float | None, float | None]:
+    """Extract (team mean, team σ) from a σ tooltip; (None, None) if absent."""
+    if not tooltip:
+        return None, None
+    match = _BASELINE_RE.search(tooltip)
+    if not match:
+        return None, None
+    return float(match.group(1)), float(match.group(2))
 
 
 def _compact_early_late(formatted: Any) -> Any:
@@ -70,8 +87,13 @@ def _compact_early_late(formatted: Any) -> Any:
 
 def export_person_metrics(slug: str, windows: list[int]) -> dict[str, Any]:
     """Build the JSON payload of {window: {metric: {value, sigma, z}}}."""
+    person_cfg = load_config().get("people", {}).get(slug) or {}
     payload: dict[str, Any] = {
         "slug": slug,
+        # Identity + org scope so consumers can query the same GitHub surface
+        # (e.g. today-so-far counts) without re-deriving this config.
+        "github_username": person_cfg.get("github_username"),
+        "orgs": list(get_github_orgs()),
         "generated_at": time.time(),
         "order": list(CARD_METRIC_KEYS),
         "labels": {key: CARD_METRIC_LABELS[key] for key in CARD_METRIC_KEYS},
@@ -89,10 +111,13 @@ def export_person_metrics(slug: str, windows: list[int]) -> dict[str, Any]:
             value = context.get(key)
             if key == _EARLY_LATE_KEY:
                 value = _compact_early_late(value)
+            team_mean, team_sigma = _parse_baseline(stat.get("tooltip"))
             window_metrics[key] = {
                 "value": value,
                 "sigma": label,
                 "z": _parse_sigma(label),
+                "team_mean": team_mean,
+                "team_sigma": team_sigma,
             }
         payload["windows"][str(days)] = window_metrics
     return payload
