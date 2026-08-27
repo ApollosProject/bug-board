@@ -1116,6 +1116,11 @@ def _leaderboard_page_context() -> dict:
     return _cached_window_context(_build_leaderboard_context, window)
 
 
+def _team_sort(value: str) -> str:
+    valid_keys = {"person", *dict(TEAM_METRIC_COLUMNS)}
+    return value if value.removeprefix("-") in valid_keys else "-prs_merged"
+
+
 def _team_table_context() -> dict:
     context = _leaderboard_page_context()
     rows = build_team_metric_rows(
@@ -1128,10 +1133,7 @@ def _team_table_context() -> dict:
             slug for slug, info in people.items() if info.get("team") == ENGINEERING_TEAM_SLUG
         }
         rows = [row for row in rows if row["slug"] in engineering]
-    valid_sort_keys = {"person", *(key for key, _label in TEAM_METRIC_COLUMNS)}
-    sort = request.args.get("sort") or "-prs_merged"
-    if sort.removeprefix("-") not in valid_sort_keys:
-        sort = "-prs_merged"
+    sort = _team_sort(request.args.get("sort") or "-prs_merged")
     sort_key = sort.removeprefix("-")
     rows.sort(key=lambda row: str(row["person"]).casefold())
     rows.sort(key=lambda row: row[sort_key], reverse=sort.startswith("-"))
@@ -1211,7 +1213,7 @@ def projects():
 @app.route("/team")
 def team():
     window = _request_time_window()
-    sort = request.args.get("sort") or "-prs_merged"
+    sort = _team_sort(request.args.get("sort") or "-prs_merged")
     everyone = request.args.get("everyone") == "1"
     table_query = {**window.template_vars()["window_query"], "sort": sort}
     if everyone:
@@ -1221,7 +1223,6 @@ def team():
         **window.template_vars(),
         extra_query={"sort": sort, **({"everyone": "1"} if everyone else {})},
         everyone=everyone,
-        sort=sort,
         table_query=table_query,
     )
 

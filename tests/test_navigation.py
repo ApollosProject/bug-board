@@ -334,11 +334,11 @@ class NavigationTest(unittest.TestCase):
         self.assertNotIn("Current Focus", partial_body)
 
     def test_team_page_loads_metrics_and_everyone_toggle(self):
-        body = self.client.get("/team?days=7&everyone=1").get_data(as_text=True)
+        body = self.client.get("/team?days=7&everyone=1&sort=bogus").get_data(as_text=True)
 
         self.assertIn("<title>Team</title>", body)
         self.assertIn("Show everyone", body)
-        self.assertIn("/partials/team/metrics", body)
+        self.assertIn('name="sort" value="-prs_merged"', body)
 
 
 if __name__ == "__main__":
