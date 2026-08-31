@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import statistics
 from collections.abc import Iterable, Mapping
+from typing import Any
 
 CARD_METRIC_KEYS = (
     "prs_merged",
@@ -140,9 +141,9 @@ def format_stdev_tooltip(values: list[float], *, hint: str | None = None) -> str
 def metric_stdevs_for_person(
     person_metrics: Mapping[str, MetricValue],
     team_metrics: Iterable[Mapping[str, MetricValue]],
-) -> dict[str, dict[str, str]]:
+) -> dict[str, dict[str, Any]]:
     team_list = list(team_metrics)
-    result: dict[str, dict[str, str]] = {}
+    result: dict[str, dict[str, Any]] = {}
     for key in CARD_METRIC_KEYS:
         person_value = person_metrics.get(key)
         if person_value is None:
@@ -153,9 +154,15 @@ def metric_stdevs_for_person(
             continue
         if key in LOWER_IS_BETTER_METRIC_KEYS:
             z = -z
-        entry: dict[str, str] = {
+        baseline, _trimmed = _stdev_baseline(values)
+        entry: dict[str, Any] = {
             "label": format_stdev_label(z),
             "tooltip": format_stdev_tooltip(values, hint=STDEV_DIRECTION_HINTS.get(key)),
+            # Numeric form of the badge, for the JSON API. ``z`` carries the same
+            # "positive is better" orientation as the label.
+            "z": round(z, 2),
+            "eng_avg": round(statistics.fmean(baseline), 2),
+            "eng_stdev": round(statistics.pstdev(baseline), 2),
         }
         tone = stdev_tone(z)
         if tone is not None:

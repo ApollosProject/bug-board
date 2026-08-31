@@ -11,6 +11,8 @@ from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 import requests
 from flask import Flask, Response, current_app, redirect, render_template, request, session
 
+from api import API_KEY_ENDPOINTS
+
 GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
 GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
 GITHUB_API_URL = "https://api.github.com"
@@ -322,6 +324,9 @@ def register_github_oauth(app: Flask) -> None:
         if not current_app.config.get("GITHUB_OAUTH_ENABLED"):
             return None
         if request.endpoint in PUBLIC_ENDPOINTS:
+            return None
+        # API-key endpoints do their own authentication in ``require_api_key``.
+        if request.endpoint in API_KEY_ENDPOINTS:
             return None
         if _public_static_filename() is not None:
             return None

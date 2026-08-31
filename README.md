@@ -40,6 +40,7 @@ python -m unittest discover -s tests -p 'test_*.py'
 - `GITHUB_OAUTH_CALLBACK_URL` – OAuth callback URL (for example, `https://your-app.example/auth/github/callback`); when omitted, the app uses `APP_URL` plus `/auth/github/callback`
 - `GITHUB_OAUTH_ORG` – GitHub organization whose active members can sign in (default: `ApollosProject`)
 - `FLASK_SECRET_KEY` – Random value of at least 32 characters used to sign login sessions
+- `BUG_BOARD_API_KEY` – Static key that authenticates the JSON API (see [JSON API](#json-api)); leave unset to keep the API disabled
 - `SLACK_WEBHOOK_URL` – Webhook URL used by the worker to post messages
 - `MANAGER_SLACK_WEBHOOK_URL` – Webhook URL used for manager-facing summaries
 - `APP_URL` – Public URL where the app is hosted
@@ -112,6 +113,55 @@ python jobs.py
 
 
 The `Procfile` defines both commands for platforms such as Heroku.
+
+## JSON API
+
+The dashboard is gated by GitHub OAuth, which scripts cannot complete. Read-only JSON endpoints
+authenticate with a static key instead. Generate one and set `BUG_BOARD_API_KEY`:
+
+```bash
+python -c 'import secrets; print(secrets.token_urlsafe(32))'
+```
+
+While `BUG_BOARD_API_KEY` is unset the API answers `503`, so the endpoints stay closed by default.
+Callers pass the key as either `Authorization: Bearer <key>` or `X-API-Key: <key>`; anything else
+gets a `401`.
+
+### `GET /api/team/<slug>`
+
+The JSON form of the `/team/<slug>` page. It accepts the same window parameters as the page —
+either `days=<n>` or `start=YYYY-MM-DD&end=YYYY-MM-DD` (defaults to the last 30 days).
+
+```bash
+curl -sS -H "Authorization: Bearer $BUG_BOARD_API_KEY" \
+  "https://engineering.apollos.app/api/team/zach?start=2026-08-31&end=2026-09-25"
+```
+
+Each entry in `metrics` carries the raw `value`, the `display` string the dashboard renders, and a
+`vs_team` comparison against the other engineers — `null` when there is no cohort to compare with.
+`z` is oriented so positive is better than the engineering average even for metrics where a lower
+raw value is better, and `eng_avg`/`eng_stdev` describe the (outlier-trimmed) cohort baseline.
+
+```json
+{
+  "person": { "slug": "zach", "name": "Zach", "github_username": "solideo-gloria" },
+  "window": { "start": "2026-08-31", "end": "2026-09-25", "days": 26, "preset_days": null },
+  "metrics": {
+    "prs_merged": {
+      "label": "PRs Merged",
+      "value": 32,
+      "display": "32",
+      "vs_team": { "z": 2.41, "label": "+2.4σ", "tone": "high", "eng_avg": 12.0, "eng_stdev": 8.3 }
+    }
+  },
+  "regressions": { "status": "ready", "authored": 1, "authored_rate": 3.1 },
+  "links": { "github_merged_prs": "https://github.com/pulls?q=..." }
+}
+```
+
+Adding an endpoint under `/api/` does not by itself exempt it from the OAuth gate: only views
+decorated with `require_api_key` (`api.py`) are exempted, and `tests/test_api.py` fails if an
+`/api/` route skips the decorator.
 
 ## Airflow fleet outage heartbeat
 
