@@ -19,7 +19,7 @@ TEAM_METRIC_COLUMNS = tuple(
             "low_issues project_lead_weeks project_contributor_weeks"
         ).split(),
         (
-            "PRs merged|PRs reviewed|Urgent issues|High issues|Medium issues|"
+            "PRs merged|PRs approved|Urgent issues|High issues|Medium issues|"
             "Low issues|Project lead weeks|Project contributor weeks"
         ).split("|"),
         strict=True,
