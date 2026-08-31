@@ -130,6 +130,8 @@ class LeaderboardExportTest(unittest.TestCase):
         self.assertIn("/team.csv?sort=person&amp;days=30&amp;everyone=1", html)
         self.assertIn('aria-sort="ascending"', html)
         self.assertIn(">Export CSV</a>", html)
+        self.assertIn("PRs approved", html)
+        self.assertNotIn("PRs reviewed", html)
         self.assertNotIn("Leaderboard", html)
         with patch.object(
             app_module, "_leaderboard_page_context", return_value={"leaderboard_unavailable": True}

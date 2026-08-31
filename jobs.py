@@ -644,7 +644,7 @@ def post_leaderboard():
     markdown += "\n\n"
     markdown += (
         "_scores - 20pts for urgent, 10pts for high, 5pts for medium, 1pt for low, "
-        "1pt per merged PR, 1pt per PR review, 30pts/week for completed cycle project leads, "
+        "1pt per merged PR, 1pt per PR approval, 30pts/week for completed cycle project leads, "
         "15pts/week for completed cycle project contributors_\n\n"
     )
     markdown += f"<{os.getenv('APP_URL')}?days={days}|View Bug Board>"

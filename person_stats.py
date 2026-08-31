@@ -18,7 +18,7 @@ CARD_METRIC_KEYS = (
 )
 CARD_METRIC_LABELS = {
     "prs_merged": "PRs Merged",
-    "prs_reviewed": "PRs Reviewed",
+    "prs_reviewed": "PRs Approved",
     "priority_bugs_fixed": "Priority Bugs Fixed",
     "priority_bug_avg_time_to_fix": "Priority Bug Time to Fix",
     "all_work_done": "All Work Done",

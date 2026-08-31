@@ -535,7 +535,7 @@ BREAKDOWN_CATEGORIES: list[BreakdownCategory] = [
     {"key": "high", "label": "High issues", "count_label": "issue"},
     {"key": "medium", "label": "Medium issues", "count_label": "issue"},
     {"key": "low", "label": "Low issues", "count_label": "issue"},
-    {"key": "reviews", "label": "PR reviews", "count_label": "review"},
+    {"key": "reviews", "label": "PRs approved", "count_label": "approval"},
     {"key": "prs", "label": "PRs merged", "count_label": "PR"},
     {"key": "cycle_lead", "label": "Completed project lead", "count_label": None},
     {"key": "cycle_member", "label": "Completed project contributor", "count_label": None},

@@ -299,6 +299,8 @@ class PersonStatsTest(unittest.TestCase):
             body = app_module.render_template("partials/person_content.html", **context)
         self.assertIn('<h1 class="high">10</h1>', body)
         self.assertIn('<h1 class="high">8</h1>', body)
+        self.assertIn("PRs Approved", body)
+        self.assertNotIn("PRs Reviewed", body)
         self.assertNotIn('class="low"', body)
         self.assertNotIn("2/week", body)
         self.assertIn('data-placement="bottom"', body)
