@@ -683,9 +683,10 @@ class PostPriorityBugsTest(unittest.TestCase):
 
         with patch.object(jobs_module, "load_config", return_value={"people": {}, "platforms": {}}):
             with patch.object(jobs_module, "get_open_issues", return_value=bugs):
-                with patch.object(jobs_module, "post_to_slack", side_effect=posted.append):
-                    with patch.object(jobs_module, "datetime", FixedDateTime):
-                        jobs_module.post_priority_bugs()
+                with patch.object(jobs_module, "get_support_slugs", return_value=set()):
+                    with patch.object(jobs_module, "post_to_slack", side_effect=posted.append):
+                        with patch.object(jobs_module, "datetime", FixedDateTime):
+                            jobs_module.post_priority_bugs()
 
         self.assertEqual(len(posted), 1)
         self.assertIn("Unassigned bug", posted[0])

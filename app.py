@@ -14,6 +14,7 @@ from flask import Flask, Response, abort, jsonify, render_template, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from airflow_fleet_health import AirflowFleetHealthError, evaluate_fleet_health
+from api import person_metrics_payload, require_api_key
 from app_versions import get_app_versions_context
 from config import get_linear_team_key, load_config
 from constants import ENGINEERING_TEAM_SLUG, PRIORITY_TO_SCORE
@@ -1206,6 +1207,22 @@ def team_slug(slug):
     )
 
 
+@app.route("/api/team/<slug>")
+@require_api_key
+def api_team_person(slug):
+    """Return the /team/<slug> metrics as JSON for API-key callers."""
+    window = _request_time_window()
+    config = load_config()
+    if not config.get("people", {}).get(slug):
+        return jsonify({"error": "unknown_person", "slug": slug}), 404
+    days, start, end = window.cache_parts()
+    cache_epoch = int(time.time() / INDEX_CACHE_TTL_SECONDS)
+    context = _build_person_context(slug, days or window.duration_days, cache_epoch, start, end)
+    response = jsonify(person_metrics_payload(context))
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @app.route("/projects")
 def projects():
     return render_template("team.html")
@@ -1813,6 +1830,7 @@ def _build_person_context(
         "lead_completed_projects_avg_early_late": format_average_project_schedule_variance(
             average_completed_project_variance
         ),
+        "lead_completed_projects_avg_early_late_days": average_completed_project_variance,
         "project_metric_urls": {
             "lead_current_projects": linear_project_list_url(current_led_projects),
             "lead_completed_projects": linear_project_list_url(completed_led_projects),
