@@ -11,6 +11,7 @@ from constants import (
     CYCLE_PROJECT_LEAD_POINTS_PER_WEEK,
     CYCLE_PROJECT_MEMBER_POINTS_PER_WEEK,
 )
+from person_stats import z_score
 
 TEAM_METRIC_COLUMNS = tuple(
     zip(
@@ -25,7 +26,12 @@ TEAM_METRIC_COLUMNS = tuple(
         strict=True,
     )
 )
-CSV_COLUMNS = ["person", "slug", *(key for key, _label in TEAM_METRIC_COLUMNS)]
+TEAM_METRIC_KEYS = tuple(key for key, _label in TEAM_METRIC_COLUMNS)
+CSV_COLUMNS = [
+    "person",
+    "slug",
+    *(name for key in TEAM_METRIC_KEYS for name in (key, f"{key}_z")),
+]
 
 
 def _name(slug: str, info: Mapping[str, Any] | None = None) -> str:
@@ -33,11 +39,26 @@ def _name(slug: str, info: Mapping[str, Any] | None = None) -> str:
     return re.sub(r"[._-]+", " ", raw if isinstance(raw, str) else slug).title()
 
 
+def _format_z(z_value: float | None) -> str:
+    return "" if z_value is None else f"{z_value:.1f}"
+
+
+def _attach_team_metric_z_scores(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    result = [dict(row) for row in rows]
+    for key in TEAM_METRIC_KEYS:
+        values = [float(row.get(key) or 0) for row in result]
+        for row, value in zip(result, values, strict=True):
+            row[f"{key}_z"] = _format_z(z_score(value, values))
+    return result
+
+
 def render_team_metrics_csv(rows: Sequence[Mapping[str, Any]]) -> str:
     buf = io.StringIO()
     writer = csv.DictWriter(buf, fieldnames=CSV_COLUMNS, lineterminator="\n")
     writer.writeheader()
-    writer.writerows({col: row.get(col, "") for col in CSV_COLUMNS} for row in rows)
+    writer.writerows(
+        {col: row.get(col, "") for col in CSV_COLUMNS} for row in _attach_team_metric_z_scores(rows)
+    )
     return buf.getvalue()
 
 
