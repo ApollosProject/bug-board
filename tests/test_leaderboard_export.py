@@ -171,3 +171,20 @@ class LeaderboardExportTest(unittest.TestCase):
         self.assertEqual(exported["b"]["prs_merged_z"], "-1.0")
         self.assertEqual(exported["a"]["urgent_issues_z"], "")
         self.assertEqual(exported["b"]["urgent_issues_z"], "")
+
+    def test_csv_leaves_z_scores_blank_for_a_single_person(self):
+        rows = build_team_metric_rows(
+            [
+                {
+                    "slug": "a",
+                    "display_name": "A",
+                    "points": {},
+                    "counts": {"prs": 10},
+                },
+            ],
+            people={"a": {"team": "engineering"}},
+        )
+        exported = list(csv.DictReader(io.StringIO(render_team_metrics_csv(rows))))
+        self.assertEqual(len(exported), 1)
+        self.assertEqual(exported[0]["prs_merged"], "10")
+        self.assertEqual(exported[0]["prs_merged_z"], "")
