@@ -88,7 +88,10 @@ class LeaderboardExportTest(unittest.TestCase):
             (50, 2, 1),
         )
         self.assertNotIn("score", rows[0])
-        self.assertIn("person,slug,prs_merged,prs_reviewed", render_team_metrics_csv(rows))
+        self.assertIn(
+            "person,slug,prs_merged,prs_merged_z,prs_reviewed,prs_reviewed_z",
+            render_team_metrics_csv(rows),
+        )
         client = app_module.app.test_client()
         ctx = {
             "days": 30,
@@ -123,9 +126,10 @@ class LeaderboardExportTest(unittest.TestCase):
         with patch.object(app_module, "_leaderboard_page_context", return_value=ctx):
             csv_text = client.get("/team.csv?days=30&everyone=1").get_data(as_text=True)
             html = client.get("/partials/team/metrics?everyone=1&sort=person").get_data(True)
-        self.assertTrue(csv_text.startswith("person,slug,prs_merged"))
+        self.assertTrue(csv_text.startswith("person,slug,prs_merged,prs_merged_z"))
         exported = {row["slug"]: row for row in csv.DictReader(io.StringIO(csv_text))}
         self.assertEqual(exported["andy"]["prs_merged"], "5")
+        self.assertIn("prs_merged_z", exported["andy"])
         self.assertLess(html.index("Andy"), html.index("Michael"))
         self.assertIn("/team.csv?sort=person&amp;days=30&amp;everyone=1", html)
         self.assertIn('aria-sort="ascending"', html)
@@ -137,3 +141,33 @@ class LeaderboardExportTest(unittest.TestCase):
             app_module, "_leaderboard_page_context", return_value={"leaderboard_unavailable": True}
         ):
             self.assertEqual(client.get("/team.csv").status_code, 503)
+
+    def test_csv_includes_z_scores_for_each_metric(self):
+        rows = build_team_metric_rows(
+            [
+                {
+                    "slug": "a",
+                    "display_name": "A",
+                    "points": {},
+                    "counts": {"prs": 10},
+                },
+                {
+                    "slug": "b",
+                    "display_name": "B",
+                    "points": {},
+                    "counts": {"prs": 2},
+                },
+            ],
+            people={
+                "a": {"team": "engineering"},
+                "b": {"team": "engineering"},
+            },
+        )
+        exported = {
+            row["slug"]: row for row in csv.DictReader(io.StringIO(render_team_metrics_csv(rows)))
+        }
+        self.assertEqual(exported["a"]["prs_merged"], "10")
+        self.assertEqual(exported["a"]["prs_merged_z"], "1.0")
+        self.assertEqual(exported["b"]["prs_merged_z"], "-1.0")
+        self.assertEqual(exported["a"]["urgent_issues_z"], "")
+        self.assertEqual(exported["b"]["urgent_issues_z"], "")
