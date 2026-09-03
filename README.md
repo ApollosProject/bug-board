@@ -93,6 +93,16 @@ python -c 'import secrets; print(secrets.token_hex(32))'
 
 3. Edit `config.yml` to configure team members and platform ownership.
 
+`config.yml` also decides which Linear teams and labels feed the person metrics:
+
+- `linear_team_key` – the primary Linear team (default `APO`). Team-wide pages (homepage stats,
+  leaderboard, projects, regressions) query this team only.
+- `linear_team_keys` – optional list of teams whose issues count toward each person's All Work
+  Done, Time to Completion, and Priority Bugs Fixed cards, e.g. `[APO, SUP]`. The primary team is
+  always included.
+- `bug_labels` – label names that mark an issue as a bug for Priority Bugs Fixed (default
+  `[Bug]`; `[Bug, Issue]` covers both the engineering and Support teams).
+
 ## Running
 
 Start the web server with:

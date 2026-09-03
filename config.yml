@@ -1,5 +1,15 @@
 ---
 linear_team_key: APO
+# Additional Linear teams whose issues count toward each person's metrics
+# (All Work Done, Time to Completion, Priority Bugs Fixed). Team-wide pages
+# (homepage stats, leaderboard, projects, regressions) stay on linear_team_key.
+linear_team_keys:
+  - APO
+  - SUP
+# Label names that mark an issue as a bug for Priority Bugs Fixed.
+bug_labels:
+  - Bug
+  - Issue
 github_orgs:
   - apollosproject
   - differential

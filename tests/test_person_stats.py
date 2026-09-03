@@ -657,3 +657,23 @@ class PersonStatsTest(unittest.TestCase):
         self.assertIn("<details>", current_work)
         self.assertNotIn("<details open>", current_work)
         self.assertIn("<h2>Other Work</h2>", body)
+
+
+class IssueCardValuesTest(unittest.TestCase):
+    def test_priority_bugs_use_the_configured_bug_labels(self):
+        support_issue = {**_issue(priority=1), "labels": {"nodes": [{"name": "Issue"}]}}
+        medium_support_issue = {**support_issue, "priority": 3}
+
+        with patch.object(person_stats, "get_bug_label_names", return_value=["Bug", "Issue"]):
+            values = person_stats.issue_card_values([support_issue, medium_support_issue])
+        self.assertEqual(values["priority_bugs_fixed"], 1)
+        self.assertEqual(values["all_work_done"], 2)
+
+        with patch.object(person_stats, "get_bug_label_names", return_value=["Bug"]):
+            values = person_stats.issue_card_values([support_issue])
+        self.assertEqual(values["priority_bugs_fixed"], 0)
+
+    def test_is_priority_bug_keeps_existing_bug_label_behaviour(self):
+        self.assertTrue(person_stats.is_priority_bug(_issue(priority=2, bug=True), ["Bug"]))
+        self.assertFalse(person_stats.is_priority_bug(_issue(priority=3, bug=True), ["Bug"]))
+        self.assertFalse(person_stats.is_priority_bug(_issue(priority=1, bug=False), ["Bug"]))

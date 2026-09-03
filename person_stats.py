@@ -5,6 +5,8 @@ import statistics
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+from config import get_bug_label_names
+
 CARD_METRIC_KEYS = (
     "prs_merged",
     "prs_reviewed",
@@ -52,13 +54,18 @@ STDEV_TRIM_PROPORTION = 0.2
 MetricValue = float | int | None
 
 
+def is_priority_bug(issue: Mapping[str, Any], bug_labels: Iterable[str] | None = None) -> bool:
+    """Return True for an Urgent/High issue carrying one of the configured bug labels."""
+    labels = set(bug_labels) if bug_labels is not None else set(get_bug_label_names())
+    if issue.get("priority", 5) > 2:
+        return False
+    nodes = (issue.get("labels") or {}).get("nodes", []) or []
+    return any(lbl.get("name") in labels for lbl in nodes)
+
+
 def issue_card_values(items: list[dict]) -> dict[str, MetricValue]:
-    bugs = [
-        issue
-        for issue in items
-        if issue.get("priority", 5) <= 2
-        and any(lbl.get("name") == "Bug" for lbl in issue.get("labels", {}).get("nodes", []))
-    ]
+    bug_labels = set(get_bug_label_names())
+    bugs = [issue for issue in items if is_priority_bug(issue, bug_labels)]
     bug_times = [
         i["assignee_time_to_fix"] for i in bugs if i.get("assignee_time_to_fix") is not None
     ]

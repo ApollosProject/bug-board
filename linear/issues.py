@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from gql import gql
 
-from config import get_linear_team_key, get_platforms
+from config import get_linear_team_key, get_linear_team_keys, get_platforms
 from issue_timing import format_issue_sla_text
 from time_window import TimeWindow
 
@@ -599,16 +599,16 @@ def get_time_data(issues):
 
 
 def get_open_issues_for_person(login: str):
-    """Return open issues assigned to a given Linear username across all projects."""
-    team_key = get_linear_team_key()
+    """Return open issues assigned to a Linear username across the configured teams."""
+    team_keys = get_linear_team_keys()
     query = gql(
         """
-        query OpenIssues($login: String!, $team_key: String!, $cursor: String) {
+        query OpenIssues($login: String!, $team_keys: [String!]!, $cursor: String) {
           issues(
             first: 50
             after: $cursor
             filter: {
-              team: { key: { eq: $team_key } }
+              team: { key: { in: $team_keys } }
               assignee: { displayName: { eq: $login } }
               state: { type: { in: ["triage", "backlog", "unstarted", "started"] } }
             }
@@ -639,7 +639,7 @@ def get_open_issues_for_person(login: str):
     cursor = None
     issues = []
     while True:
-        params = {"login": login, "team_key": team_key, "cursor": cursor}
+        params = {"login": login, "team_keys": team_keys, "cursor": cursor}
         data = _execute(query, variable_values=params)
         issues += data["issues"]["nodes"]
         if not data["issues"]["pageInfo"]["hasNextPage"]:
@@ -663,13 +663,13 @@ def get_open_issues_for_person(login: str):
 
 
 def get_completed_issues_for_person(login: str, days=30, window: TimeWindow | None = None):
-    """Return completed issues for a user over the last `days` days, filtered by Linear username."""
-    team_key = get_linear_team_key()
+    """Return completed issues for a Linear username across the configured teams in the window."""
+    team_keys = get_linear_team_keys()
     query = gql(
         """
         query CompletedIssues(
           $login: String!,
-          $team_key: String!,
+          $team_keys: [String!]!,
           $after: DateTimeOrDuration,
           $before: DateTimeOrDuration,
           $cursor: String
@@ -678,7 +678,7 @@ def get_completed_issues_for_person(login: str, days=30, window: TimeWindow | No
             first: 50
             after: $cursor
             filter: {
-              team: { key: { eq: $team_key } }
+              team: { key: { in: $team_keys } }
               assignee: { displayName: { eq: $login } }
               state: { type: { in: ["completed"] } }
               completedAt: { gte: $after, lt: $before }
@@ -723,7 +723,7 @@ def get_completed_issues_for_person(login: str, days=30, window: TimeWindow | No
     while True:
         params = {
             "login": login,
-            "team_key": team_key,
+            "team_keys": team_keys,
             "cursor": cursor,
             **_datetime_bounds(days, window),
         }

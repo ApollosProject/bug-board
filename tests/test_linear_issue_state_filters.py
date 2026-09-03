@@ -206,7 +206,7 @@ class LinearIssueStateFiltersTest(unittest.TestCase):
             return response
 
         with patch.object(issues_module, "_execute", side_effect=fake_execute):
-            with patch.object(issues_module, "get_linear_team_key", return_value="APO"):
+            with patch.object(issues_module, "get_linear_team_keys", return_value=["APO"]):
                 with patch.object(issues_module, "get_platforms", return_value={"mobile"}):
                     with patch.object(issues_module, "datetime", FixedDateTime):
                         issues = issues_module.get_open_issues_for_person("michael.neeley")
@@ -260,7 +260,7 @@ class LinearIssueStateFiltersTest(unittest.TestCase):
             return responses[len(execute_calls) - 1]
 
         with patch.object(issues_module, "_execute", side_effect=fake_execute):
-            with patch.object(issues_module, "get_linear_team_key", return_value="APO"):
+            with patch.object(issues_module, "get_linear_team_keys", return_value=["APO"]):
                 with patch.object(issues_module, "get_platforms", return_value={"ios"}):
                     with patch.object(
                         issues_module,

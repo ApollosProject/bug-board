@@ -47,7 +47,7 @@ from linear.issues import (
     get_time_data,
 )
 from linear.projects import get_projects
-from person_stats import issue_card_values, metric_stdevs_for_person
+from person_stats import is_priority_bug, issue_card_values, metric_stdevs_for_person
 from project_dates import (
     format_project_start_status,
     format_project_target_status,
@@ -1604,12 +1604,7 @@ def _build_person_context(
         else:
             prs_merged = prs_reviewed = 0
 
-    priority_bugs = [
-        issue
-        for issue in completed_items
-        if issue.get("priority", 5) <= 2
-        and any(lbl.get("name") == "Bug" for lbl in issue.get("labels", {}).get("nodes", []))
-    ]
+    priority_bugs = [issue for issue in completed_items if is_priority_bug(issue)]
     priority_bugs_fixed = len(priority_bugs)
     priority_fix_times = [
         issue["assignee_time_to_fix"]
