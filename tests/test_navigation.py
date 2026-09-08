@@ -350,10 +350,19 @@ class NavigationTest(unittest.TestCase):
             partial_body,
         )
         self.assertNotIn("Current Focus", partial_body)
-        self.assertIn(">No priority · Add Tap Feed to Shortcuts</a>", partial_body)
-        for priority in ("Urgent", "High", "Medium", "Low", "No priority"):
-            self.assertIn(f">{priority} · Project &lt;name&gt;</a>", partial_body)
-            self.assertIn(f"Priority: {priority}", partial_body)
+        self.assertIn('class="project-name">Add Tap Feed to Shortcuts</span>', partial_body)
+        self.assertIn('class="project-name">Project &lt;name&gt;</span>', partial_body)
+        self.assertEqual(partial_body.count('class="project-priority"'), 7)
+        for priority, path in {
+            "Urgent": "M7 2h2v8H7zM7 12h2v2H7z",
+            "High": "M2 10h3v4H2zM6.5 6h3v8h-3zM11 2h3v12h-3z",
+            "Medium": "M2 10h3v4H2zM6.5 6h3v8h-3z",
+            "Low": "M2 10h3v4H2z",
+            "No priority": "M3 7h10v2H3z",
+        }.items():
+            self.assertIn(f'role="img" aria-label="Priority: {priority}"', partial_body)
+            self.assertIn(f'<path d="{path}"/>', partial_body)
+            self.assertNotIn(f">{priority} ·", partial_body)
 
     def test_team_page_loads_metrics_and_everyone_toggle(self):
         body = self.client.get("/team?days=7&everyone=1&sort=bogus").get_data(as_text=True)
