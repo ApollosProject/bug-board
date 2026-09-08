@@ -86,6 +86,7 @@ def get_projects():
                   name
                   url
                   health
+                  priorityLabel
                   status {
                     name
                     type

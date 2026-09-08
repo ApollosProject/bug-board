@@ -20,6 +20,7 @@ class GetProjectsTest(unittest.TestCase):
                                     {
                                         "id": "project-1",
                                         "name": "Web Giving",
+                                        "priorityLabel": "High",
                                         "status": {"type": "started"},
                                         "members": {"nodes": [{"displayName": "Nathan Lewis"}]},
                                     }
@@ -81,6 +82,8 @@ class GetProjectsTest(unittest.TestCase):
         self.assertEqual(projects[0]["members"], ["Austin Witherow"])
         self.assertEqual(projects[1]["members"], ["Nathan Lewis"])
         self.assertIn("lastUpdate", queries[0])
+        self.assertIn("priorityLabel", queries[0])
+        self.assertEqual(projects[1]["priorityLabel"], "High")
 
 
 class GetCompletedProjectIssueAssigneesTest(unittest.TestCase):

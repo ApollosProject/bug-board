@@ -435,6 +435,10 @@ a.team-metrics-export:is(:hover, :focus) { color: var(--pico-primary); }
   text-overflow: ellipsis; white-space: nowrap;
 }
 .project-ready-project:hover { color: #fff; }
+.project-priority {
+  flex: 0 0 1em; height: 1em; margin-right: 0.4em; opacity: 0.8; width: 1em;
+}
+.project-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .project-timeline-scroll {
   border: 1px solid var(--pico-muted-border-color); border-radius: 0.5rem; overflow-x: auto;
 }
