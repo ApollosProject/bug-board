@@ -301,7 +301,25 @@ class NavigationTest(unittest.TestCase):
         context = {
             "project_timeline": {
                 "weeks": [],
-                "rows": [],
+                "rows": [
+                    {
+                        "slug": "brandon",
+                        "name": "Brandon",
+                        "lane_count": 1,
+                        "projects": [
+                            {
+                                "name": "Project <name>",
+                                "url": "https://linear.example/project/example",
+                                "priorityLabel": priority,
+                                "health_class": "neutral",
+                                "start_day": 1,
+                                "span_days": 7,
+                                "lane": 1,
+                            }
+                            for priority in ("Urgent", "High", "Medium", "Low", "No priority", None)
+                        ],
+                    }
+                ],
                 "unassigned_ready_projects": [
                     {
                         "name": "Add Tap Feed to Shortcuts",
@@ -332,6 +350,10 @@ class NavigationTest(unittest.TestCase):
             partial_body,
         )
         self.assertNotIn("Current Focus", partial_body)
+        self.assertIn(">No priority · Add Tap Feed to Shortcuts</a>", partial_body)
+        for priority in ("Urgent", "High", "Medium", "Low", "No priority"):
+            self.assertIn(f">{priority} · Project &lt;name&gt;</a>", partial_body)
+            self.assertIn(f"Priority: {priority}", partial_body)
 
     def test_team_page_loads_metrics_and_everyone_toggle(self):
         body = self.client.get("/team?days=7&everyone=1&sort=bogus").get_data(as_text=True)

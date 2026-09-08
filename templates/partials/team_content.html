@@ -18,7 +18,7 @@
     </div>
     <div class="project-ready-projects">
       {% for project in project_timeline.unassigned_ready_projects %}
-        <a href="{{ project.url }}" class="project-ready-project" title="{{ project.name }}">{{ project.name }}</a>
+        <a href="{{ project.url }}" class="project-ready-project" title="{{ project.name }} · Priority: {{ project.priorityLabel or 'No priority' }}">{{ project.priorityLabel or 'No priority' }} · {{ project.name }}</a>
       {% endfor %}
     </div>
   </section>
@@ -38,7 +38,7 @@
           <i class="project-timeline-today" aria-hidden="true"></i>
           {% if developer.projects or developer.ooo_events %}
             {% for project in developer.projects %}
-              <a href="{{ project.url }}" class="project-timeline-bar project-timeline-bar--{{ project.health_class }}" style="--start: {{ project.start_day }}; --span: {{ project.span_days }}; --lane: {{ project.lane }};" title="{{ project.name }}{% if project.startDate or project.targetDate %}: {{ project.startDate or 'Earlier' }} – {{ project.targetDate or 'Ongoing' }}{% endif %}">{{ project.name }}</a>
+              <a href="{{ project.url }}" class="project-timeline-bar project-timeline-bar--{{ project.health_class }}" style="--start: {{ project.start_day }}; --span: {{ project.span_days }}; --lane: {{ project.lane }};" title="{{ project.name }} · Priority: {{ project.priorityLabel or 'No priority' }}{% if project.startDate or project.targetDate %} · {{ project.startDate or 'Earlier' }} – {{ project.targetDate or 'Ongoing' }}{% endif %}">{{ project.priorityLabel or 'No priority' }} · {{ project.name }}</a>
             {% endfor %}
             {% for event in developer.ooo_events %}
               <span class="project-timeline-bar project-timeline-bar--ooo{% if event.is_partial_day %} project-timeline-bar--ooo-partial{% endif %}" style="--start: {{ event.start_day }}; --span: {{ event.span_days }}; --lane: {{ event.lane }};" title="{{ event.title }}" aria-label="{{ event.title }}" role="img">{% if event.span_days > 1 %}OOO{% endif %}</span>
