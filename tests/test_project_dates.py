@@ -63,10 +63,6 @@ class ProjectPlannedWeeksTest(unittest.TestCase):
 
         self.assertEqual(get_project_planned_weeks(two_week), 2)
         self.assertEqual(get_project_planned_weeks(four_week), 4)
-        self.assertEqual(
-            get_project_planned_weeks(two_week) + get_project_planned_weeks(two_week),
-            get_project_planned_weeks(four_week),
-        )
 
     def test_missing_dates_count_as_one_week(self):
         self.assertEqual(get_project_planned_weeks({}), 1)
