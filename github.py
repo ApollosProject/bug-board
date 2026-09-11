@@ -10,6 +10,7 @@ from typing import Any, Dict, List
 from dotenv import load_dotenv
 from gql import Client, GraphQLRequest, gql
 from gql.transport.aiohttp import AIOHTTPTransport
+from tenacity import Retrying, before_sleep_log, stop_after_attempt, wait_exponential
 
 from config import get_github_orgs
 from time_window import TimeWindow
@@ -138,7 +139,7 @@ def get_prs(repo_id, pr_states, repo_name=None):
             node(id: $repo_id) {
                 ... on Repository {
                     pullRequests(
-                        first: 100,
+                        first: 20,
                         after: $cursor,
                         states: $pr_states,
                         orderBy: {field: UPDATED_AT, direction: DESC}
@@ -210,10 +211,16 @@ def get_prs(repo_id, pr_states, repo_name=None):
     while True:
         params = {"repo_id": repo_id, "pr_states": pr_states, "cursor": cursor}
         try:
-            data = _execute(query, variable_values=params)
+            # Retry this page, not every repository and already-fetched page.
+            data = Retrying(
+                reraise=True,
+                stop=stop_after_attempt(3),
+                wait=wait_exponential(max=4),
+                before_sleep=before_sleep_log(logging.getLogger(__name__), logging.WARNING),
+            )(_execute, query, variable_values=params)
         except Exception as exc:
             raise GitHubDataError(
-                f"Failed to fetch GitHub pull requests for {repo_context}"
+                f"Failed to fetch GitHub pull requests for {repo_context}: {_format_exception(exc)}"
             ) from exc
         node = data.get("node") if data else None
         payload = node.get("pullRequests") if node else None
