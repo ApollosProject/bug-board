@@ -33,6 +33,5 @@ ignore_decorators = [
 ignore_names = [
     "breakdown",
     "permanent",
-    "post_weekly_changelog",
 ]
 min_confidence = 60
