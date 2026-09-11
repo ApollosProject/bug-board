@@ -64,14 +64,17 @@ python -m unittest discover -s tests -p 'test_jobs.py'
 Smoke the web app without secrets:
 
 ```bash
-gunicorn app:app --bind 127.0.0.1:8000 --workers 1
+gunicorn app:app --bind 127.0.0.1:8000 --workers 1 &
+server_pid=$!
+trap 'kill "$server_pid"' EXIT
+sleep 1
 curl -fsS http://127.0.0.1:8000/healthz
 curl -fsS http://127.0.0.1:8000/
 ```
 
 The shell should show `/healthz` returning `{"status":"ok"}`. Pages can render without API keys; HTMX partials that need Linear, GitHub, or Airflow credentials may show empty/error states instead of live data.
 
-For JSON API changes, use `tests/test_api.py` as the contract. Only routes decorated with `require_api_key` escape OAuth. With `BUG_BOARD_API_KEY` unset the API returns `503`; with a key configured, callers authenticate via `Authorization: Bearer <key>` or `X-API-Key: <key>`. When adding `/api/` routes, add `@require_api_key` or `tests/test_api.py` should fail.
+For JSON API changes, use `tests/test_api.py` as the contract. JSON API routes decorated with `require_api_key` escape OAuth and use API-key authentication. With `BUG_BOARD_API_KEY` unset the API returns `503`; with a key configured, callers authenticate via `Authorization: Bearer <key>` or `X-API-Key: <key>`. When adding `/api/` routes, add `@require_api_key` or `tests/test_api.py` should fail.
 
 For OAuth changes, use `README.md` and `tests/test_github_oauth.py` as the contract. When OAuth is enabled or partially configured, dashboard routes fail closed with `503` until all required settings are present. `/healthz` remains public for platform checks.
 
