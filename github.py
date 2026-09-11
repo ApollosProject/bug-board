@@ -7,7 +7,6 @@ from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any, Dict, List
 
-import requests
 from dotenv import load_dotenv
 from gql import Client, GraphQLRequest, gql
 from gql.transport.aiohttp import AIOHTTPTransport
@@ -69,15 +68,6 @@ def _execute(query, variable_values=None):
         return client.execute(query)
     request = GraphQLRequest(query, variable_values=variable_values)
     return client.execute(request)
-
-
-# headers used for REST API requests
-rest_headers = {
-    "Authorization": f"bearer {token}",
-    "Accept": "application/vnd.github.v3.diff",
-    # Use the latest stable REST API version
-    "X-GitHub-Api-Version": "2022-11-28",
-}
 
 
 def _format_failure(name: str, exc: Exception) -> str:
@@ -718,11 +708,3 @@ def get_prs_waiting_for_review_by_reviewer():
                 stuck_prs[reviewer] = []
             stuck_prs[reviewer].append(pr)
     return stuck_prs
-
-
-def get_pr_diff(owner: str, repo: str, number: int) -> str:
-    """Return the diff for a pull request."""
-    url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}"
-    resp = requests.get(url, headers=rest_headers)
-    resp.raise_for_status()
-    return resp.text

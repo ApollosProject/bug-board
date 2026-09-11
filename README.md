@@ -45,7 +45,6 @@ python -m unittest discover -s tests -p 'test_*.py'
 - `MANAGER_SLACK_WEBHOOK_URL` – Webhook URL used for manager-facing summaries
 - `APP_URL` – Public URL where the app is hosted
 - `DEBUG` – set to `true` to run the scheduled jobs immediately
-- `OPENAI_API_KEY` – API key used to generate weekly changelogs
 - `AIRFLOW_API_BASE_URL` – Base URL for Airflow REST API (for example: `https://airflow.example.com`)
 - `AIRFLOW_API_TOKEN` – Bearer token for Airflow API
 - `AIRFLOW_FLEET_HEARTBEAT_URL` – Optional Better Stack heartbeat URL for worker-reported Airflow fleet health

@@ -53,7 +53,6 @@ def _install_import_shims() -> None:
 
     github_module = cast(Any, types.ModuleType("github"))
     github_module.GitHubDataError = type("GitHubDataError", (RuntimeError,), {})
-    github_module.get_pr_diff = lambda *args, **kwargs: ""
     github_module.get_prs_waiting_for_review_by_reviewer = lambda *args, **kwargs: {}
     github_module.get_merged_pr_activity = lambda *args, **kwargs: ({}, {})
     github_module.get_merged_pr_counts_for_user = lambda *args, **kwargs: (0, 0)
@@ -80,10 +79,6 @@ def _install_import_shims() -> None:
     linear_projects_module.get_projects = lambda *args, **kwargs: []
     sys.modules.setdefault("linear.projects", linear_projects_module)
 
-    openai_module = cast(Any, types.ModuleType("openai_client"))
-    openai_module.get_chat_function_call = lambda *args, **kwargs: {}
-    sys.modules.setdefault("openai_client", openai_module)
-
     support_module = cast(Any, types.ModuleType("support"))
     support_module.get_support_slugs = lambda: []
     sys.modules.setdefault("support", support_module)
@@ -104,7 +99,6 @@ for module_name in [
     "linear",
     "linear.issues",
     "linear.projects",
-    "openai_client",
     "support",
 ]:
     sys.modules.pop(module_name, None)

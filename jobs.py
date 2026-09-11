@@ -18,7 +18,6 @@ from github import (
     GitHubDataError,
     get_merged_pr_activity,
     get_merged_pr_counts_for_user,
-    get_pr_diff,
     get_prs_waiting_for_review_by_reviewer,
 )
 from issue_timing import format_issue_sla_text, parse_linear_dt
@@ -32,7 +31,6 @@ from linear.issues import (
     get_stale_issues_by_assignee,
 )
 from linear.projects import get_projects
-from openai_client import get_chat_function_call
 from person_stats import STDEV_COLOR_THRESHOLD, issue_card_values, performance_outliers
 from project_dates import (
     format_project_target_status,
@@ -49,8 +47,6 @@ load_dotenv()
 # Retry configuration for the with_retries decorator.
 MAX_RETRY_COUNT = 3
 RETRY_SLEEP_SECONDS = 5
-MAX_DIFF_CHARS = 12000
-MAX_DIFF_FILES = 20
 FLEET_HEALTH_REFRESH_DEFAULT_SECONDS = 60
 REGRESSION_CACHE_REFRESH_HOURS = 6
 AIRFLOW_FLEET_HEARTBEAT_TIMEOUT_SECONDS = 10
@@ -390,58 +386,6 @@ def _person_matches_any_unassigned_platform(person: dict, bugs: list[dict]) -> b
         return True
 
     return any(_normalize_platform_name(bug.get("platform")) in allowed_platforms for bug in bugs)
-
-
-def _get_pr_diffs(issue):
-    """Return a list of diffs for PRs linked in the issue attachments."""
-
-    def summarize_diff(diff_text: str) -> str:
-        files = []
-        for line in diff_text.splitlines():
-            if not line.startswith("diff --git "):
-                continue
-            parts = line.split(" ")
-            if len(parts) < 4:
-                continue
-            path = parts[2]
-            if path.startswith("a/"):
-                path = path[2:]
-            if path and path not in files:
-                files.append(path)
-        total_files = len(files)
-        shown_files = files[:MAX_DIFF_FILES]
-        file_list = ", ".join(shown_files)
-        if total_files > MAX_DIFF_FILES:
-            file_list += f", +{total_files - MAX_DIFF_FILES} more"
-        if not file_list:
-            file_list = "File list unavailable"
-        return f"Diff too large ({len(diff_text)} chars). Files ({total_files}): {file_list}"
-
-    diffs = []
-    for attachment in issue.get("attachments", {}).get("nodes", []):
-        metadata = attachment.get("metadata", {})
-        url = metadata.get("url")
-        if not url:
-            continue
-        match = re.search(r"github.com/([^/]+)/([^/]+)/pull/(\d+)", url)
-        if not match:
-            continue
-        owner, repo, number = match.groups()
-        try:
-            diff = get_pr_diff(owner, repo, int(number))
-            if len(diff) > MAX_DIFF_CHARS:
-                diffs.append(summarize_diff(diff))
-            else:
-                diffs.append(diff)
-        except Exception as e:  # pragma: no cover - network errors are ignored
-            logging.error(
-                "Failed to fetch diff for %s/%s#%s (error type: %s)",
-                owner,
-                repo,
-                number,
-                type(e).__name__,
-            )
-    return diffs
 
 
 @with_retries
@@ -967,119 +911,6 @@ def post_project_updates():
         post_to_slack("\n\n".join(sections))
 
 
-@with_retries
-def post_weekly_changelog():
-    """Generate a customer changelog from completed issues."""
-
-    issues = (
-        get_completed_issues(5, "Bug", 7)
-        + get_completed_issues(5, "Feature Request", 7)
-        + get_completed_issues(5, "Technical Change", 7)
-    )
-    if not issues:
-        return
-
-    # remove any duplicate issues by id to avoid repeated entries in changelog
-    seen_ids = set()
-    unique = []
-    for issue in issues:
-        if issue.get("id") and issue["id"] not in seen_ids:
-            seen_ids.add(issue["id"])
-            unique.append(issue)
-    issues = unique
-
-    if not issues:
-        return
-
-    chunks = []
-    for issue in issues:
-        desc = issue.get("description") or ""
-        comments = " ".join(c.get("body", "") for c in issue.get("comments", {}).get("nodes", []))
-        diffs = _get_pr_diffs(issue)
-        chunk_parts = [
-            f"ID: {issue['id']}",
-            f"Title: {issue['title']}",
-            f"Platform: {issue.get('platform', '')}",
-            f"Description: {desc}",
-            f"Comments: {comments}",
-        ]
-        if diffs:
-            chunk_parts.append("Diff:\n" + "\n".join(diffs))
-        chunks.append("\n".join(chunk_parts))
-
-    instructions = (
-        "Create a short customer-facing changelog from the provided issues. "
-        "Each issue chunk begins with 'ID: <issue id>'. "
-        "Group items under 'New Features', 'Bug Fixes', and 'Improvements'. "
-        "List each change as a short sentence with no markdown or bullet characters. "
-        "Ignore technical tasks, internal changes, and unfinished work. "
-        "Ensure each change appears only once in the changelog. "
-        "When a chunk includes a 'Diff:' section, use that diff as additional context. "
-        "Return a JSON object with keys 'New Features', 'Bug Fixes', and 'Improvements'. "
-        "Each item should be an object with fields 'id' (the issue id)"
-        "and 'summary' (the changelog text)."
-    )
-    input_text = "\n\n".join(chunks)
-
-    # Use OpenAI function calling to generate a structured changelog
-    item_schema = {
-        "type": "object",
-        "properties": {
-            "id": {"type": "string"},
-            "summary": {"type": "string"},
-        },
-        "required": ["id", "summary"],
-    }
-
-    function_spec = {
-        "name": "generate_changelog",
-        "description": "Generate a customer-facing changelog.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "New Features": {"type": "array", "items": item_schema},
-                "Bug Fixes": {"type": "array", "items": item_schema},
-                "Improvements": {"type": "array", "items": item_schema},
-            },
-            "required": ["New Features", "Bug Fixes", "Improvements"],
-        },
-    }
-    try:
-        changelog_data = get_chat_function_call(
-            instructions,
-            user_input=input_text,
-            functions=function_spec,
-            function_call_name="generate_changelog",
-        )
-    except Exception as e:
-        logging.error(
-            "Failed to generate changelog via function call. Error: %s",
-            e,
-        )
-        changelog_data = {}
-
-    url_by_id = {issue["id"]: issue["url"] for issue in issues}
-
-    sections = []
-    for heading in ["New Features", "Bug Fixes", "Improvements"]:
-        items = changelog_data.get(heading, [])
-        if items:
-            sections.append(f"*{heading}*")
-            for item in items:
-                summary = item.get("summary", "")
-                issue_id = item.get("id")
-                url = url_by_id.get(issue_id)
-                if url:
-                    sections.append(f"- <{url}|{summary}>")
-                else:
-                    sections.append(f"- {summary}")
-            sections.append("")
-
-    changelog_text = "*Changelog (Experimental)*\n\n" + "\n".join(sections).rstrip()
-    changelog_text += f"\n\n<{os.getenv('APP_URL')}|View Bug Board>"
-    post_to_slack(changelog_text)
-
-
 def run_debug_jobs() -> None:
     if should_use_redis_cache():
         refresh_airflow_fleet_health_cache_job()
@@ -1088,7 +919,6 @@ def run_debug_jobs() -> None:
     post_performance_outliers()
     post_priority_bugs()
     post_leaderboard()
-    # post_weekly_changelog()
     post_stale()
     post_project_updates()
 
@@ -1121,7 +951,6 @@ def configure_scheduled_jobs() -> None:
     schedule.every().friday.at("13:00").do(post_performance_outliers)
     schedule.every().day.at("12:00").do(post_priority_bugs)
     # schedule.every().friday.at("16:00", "America/New_York").do(post_leaderboard)
-    # schedule.every().thursday.at("19:00").do(post_weekly_changelog)
     schedule.every().day.at("10:00", "America/New_York").do(post_stale)
     schedule.every().day.at("14:00", "America/New_York").do(post_project_updates)
 
