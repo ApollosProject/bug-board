@@ -23,6 +23,7 @@ headers = {"Authorization": f"bearer {token}"}
 
 TRACKED_REPOSITORIES = (
     "apollosproject/apollos-platforms",
+    "apollosproject/apollos-plugin",
     "apollosproject/apollos-cluster",
     "apollosproject/apollos-admin",
     "apollosproject/admin-transcriptions",
@@ -240,10 +241,10 @@ def get_prs(repo_id, pr_states, repo_name=None):
 
 
 def has_failing_required_checks(pr):
-    """Return True if the PR has any failing required checks."""
+    """Return True if configured checks have not all passed; no checks is allowed."""
 
-    rollup = pr.get("statusCheckRollup") or {}
-    return rollup.get("state") != "SUCCESS"
+    rollup = pr.get("statusCheckRollup")
+    return rollup is not None and rollup.get("state") != "SUCCESS"
 
 
 def has_known_merge_conflicts(pr):

@@ -265,6 +265,7 @@ class GraphQLClientRequestTests(unittest.TestCase):
                         repos = github.get_repo_ids_by_name()
 
             self.assertEqual(set(repos), set(github.TRACKED_REPOSITORIES))
+            self.assertIn("apollosproject/apollos-plugin", repos)
         finally:
             github.get_repo_ids_by_name.cache_clear()
 
@@ -350,12 +351,19 @@ class GraphQLClientRequestTests(unittest.TestCase):
             "statusCheckRollup": {"state": "SUCCESS"},
         }
 
-        with patch.object(github, "_get_all_prs", return_value=[pr]):
-            with patch.object(github, "datetime", FixedDateTime):
-                waiting = github.get_prs_waiting_for_review_by_reviewer()
+        for state in (None, "SUCCESS", "PENDING", "FAILURE", "ERROR", "EXPECTED"):
+            with self.subTest(state=state):
+                pr["statusCheckRollup"] = {"state": state} if state else None
+                with (
+                    patch.object(github, "_get_all_prs", return_value=[pr]),
+                    patch.object(github, "datetime", FixedDateTime),
+                ):
+                    waiting = github.get_prs_waiting_for_review_by_reviewer()
 
-        self.assertEqual(waiting["darrylyip"], [pr])
-        self.assertEqual(waiting["vitlelis"], [pr])
+                expected = (
+                    {"darrylyip": [pr], "vitlelis": [pr]} if state in (None, "SUCCESS") else {}
+                )
+                self.assertEqual(waiting, expected)
 
     def test_waiting_for_review_allows_unknown_mergeability(self):
         class FixedDateTime(datetime):
