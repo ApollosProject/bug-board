@@ -3,6 +3,7 @@ from datetime import date, datetime
 from unittest.mock import patch
 
 from gql import GraphQLRequest, gql
+from graphql import print_ast
 
 import github
 from linear import client as linear_client
@@ -282,14 +283,52 @@ class GraphQLClientRequestTests(unittest.TestCase):
         finally:
             github.get_repo_ids_by_name.cache_clear()
 
+    def test_get_prs_retries_only_failed_page_and_keeps_complete_results(self):
+        first_page = {
+            "node": {
+                "pullRequests": {
+                    "nodes": [{"number": 1}, {"number": 2, "isDraft": True}],
+                    "pageInfo": {"hasNextPage": True, "endCursor": "next"},
+                }
+            }
+        }
+        last_page = {
+            "node": {
+                "pullRequests": {
+                    "nodes": [{"number": 3}],
+                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                }
+            }
+        }
+        with (
+            patch.object(github, "token", "token"),
+            patch("time.sleep") as sleep,
+            patch.object(
+                github, "_execute", side_effect=[first_page, TimeoutError(), last_page]
+            ) as execute,
+        ):
+            prs = github.get_prs("repo-id", ["OPEN"])
+
+        self.assertEqual(prs, [{"number": 1}, {"number": 3}])
+        self.assertEqual(
+            [call.kwargs["variable_values"]["cursor"] for call in execute.call_args_list],
+            [None, "next", "next"],
+        )
+        sleep.assert_called_once_with(1)
+        query = print_ast(execute.call_args.args[0].document)
+        self.assertIn("first: 20", query)
+
     def test_get_prs_raises_when_repo_fetch_fails(self):
-        with patch.object(github, "token", "token"):
-            with patch.object(github, "_execute", side_effect=RuntimeError("rate limited")):
-                with self.assertRaisesRegex(
-                    github.GitHubDataError,
-                    "apollosproject/apollos-cluster",
-                ):
-                    github.get_prs("repo-id", ["OPEN"], "apollosproject/apollos-cluster")
+        with (
+            patch.object(github, "token", "token"),
+            patch("time.sleep"),
+            patch.object(github, "_execute", side_effect=TimeoutError()) as execute,
+        ):
+            with self.assertRaisesRegex(
+                github.GitHubDataError, "apollosproject/apollos-cluster: TimeoutError"
+            ):
+                github.get_prs("repo-id", ["OPEN"], "apollosproject/apollos-cluster")
+        self.assertEqual(execute.call_count, 3)
 
     def test_get_all_prs_raises_when_any_repo_fetch_fails(self):
         def fake_get_prs(repo_id, pr_states, repo_name=None):
