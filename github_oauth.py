@@ -294,7 +294,7 @@ def register_github_oauth(app: Flask) -> None:
         GITHUB_OAUTH_CALLBACK_URL=callback_url,
         GITHUB_OAUTH_ORG=os.getenv("GITHUB_OAUTH_ORG", DEFAULT_GITHUB_ORG).strip()
         or DEFAULT_GITHUB_ORG,
-        PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
+        PERMANENT_SESSION_LIFETIME=timedelta(days=30),
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=callback_url.startswith("https://"),

@@ -71,7 +71,7 @@ These can be placed in a `.env` file or exported in your shell.
 Create an OAuth app owned by the `ApollosProject` GitHub organization and set its authorization
 callback URL to the same value as `GITHUB_OAUTH_CALLBACK_URL`. The application requests only the
 `read:org` scope, validates both the signed-in GitHub identity and active organization membership,
-and keeps the resulting login session for at most eight hours. The temporary GitHub access token is
+and keeps the resulting login session for at most 30 days. The temporary GitHub access token is
 not stored in the session.
 
 Production uses `https://engineering.apollos.app` as `APP_URL` and
