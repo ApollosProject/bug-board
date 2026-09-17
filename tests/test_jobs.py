@@ -390,7 +390,11 @@ class PostStaleTest(unittest.TestCase):
 
         message = post.call_args.args[0]
         self.assertIn("<200 implementation lines added", message)
-        self.assertIn("exclude tests, snapshots, docs, lockfiles and generated files", message)
+        self.assertIn(
+            "exclude tests, fixtures, snapshots, docs, lockfiles, generated code, "
+            "localization files and assets",
+            message,
+        )
         self.assertIn("(+0d, 118 impl lines)", message)
 
     def test_continues_with_linear_stale_issues_when_github_pr_fetch_fails(self):

@@ -1,10 +1,3 @@
-"""Count the lines a pull request adds to implementation files.
-
-Tests, snapshots, fixtures, docs, lockfiles, generated code, localization
-files, agent guidance and binary assets are excluded so size checks measure
-the code a reviewer has to reason about.
-"""
-
 from __future__ import annotations
 
 import fnmatch
@@ -87,7 +80,6 @@ EXCLUDED_FILENAME_PATTERNS = (
 
 
 def is_implementation_path(path: str) -> bool:
-    """Return True when ``path`` holds code a reviewer has to reason about."""
     normalized = path.strip().lower()
     if not normalized:
         return False

@@ -650,8 +650,8 @@ def post_stale():
         markdown += (
             "*PRs - Checks Passing, Waiting for Review "
             f"(+24h, <{REVIEW_REMINDER_MAX_IMPLEMENTATION_ADDITIONS} implementation lines added)*\n"
-            "_Implementation lines exclude tests, snapshots, docs, lockfiles "
-            "and generated files._\n"
+            "_Implementation lines exclude tests, fixtures, snapshots, docs, lockfiles, "
+            "generated code, localization files and assets._\n"
         )
         for reviewer, pr_list in prs.items():
             if not pr_list:

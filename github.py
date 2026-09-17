@@ -678,9 +678,7 @@ def get_prs_waiting_for_review_by_reviewer():
 
     Includes pull requests with an open review request or active requested-changes
     reviewer that has been waiting more than 24 hours. Approved PRs are excluded
-    even if GitHub still has leftover review requests. Only includes PRs that add
-    fewer than ``REVIEW_REMINDER_MAX_IMPLEMENTATION_ADDITIONS`` implementation
-    lines; tests, snapshots, docs and generated files do not count.
+    even if GitHub still has leftover review requests.
     """
     all_prs = _get_all_prs(["OPEN"])
     stuck_prs = {}
