@@ -13,6 +13,7 @@ from gql.transport.aiohttp import AIOHTTPTransport
 from tenacity import Retrying, before_sleep_log, stop_after_attempt, wait_exponential
 
 from config import get_github_orgs
+from implementation_lines import count_implementation_additions
 from time_window import TimeWindow
 
 load_dotenv()
@@ -33,6 +34,7 @@ TRACKED_REPOSITORIES = (
 )
 GITHUB_GRAPHQL_EXECUTE_TIMEOUT_SECONDS = 30
 CURSOR_AGENT_LOGIN = "cursoragent"
+REVIEW_REMINDER_MAX_IMPLEMENTATION_ADDITIONS = 200
 _cursor_pr_cache_lock = threading.Lock()
 
 
@@ -153,6 +155,15 @@ def get_prs(repo_id, pr_states, repo_name=None):
                             closedAt
                             isDraft
                             additions
+                            files(first: 100) {
+                                pageInfo {
+                                    hasNextPage
+                                }
+                                nodes {
+                                    path
+                                    additions
+                                }
+                            }
                             reviews(
                                 first: 10,
                                 states: [APPROVED, CHANGES_REQUESTED]
@@ -667,16 +678,21 @@ def get_prs_waiting_for_review_by_reviewer():
 
     Includes pull requests with an open review request or active requested-changes
     reviewer that has been waiting more than 24 hours. Approved PRs are excluded
-    even if GitHub still has leftover review requests. Only includes PRs with
-    fewer than 200 lines added.
+    even if GitHub still has leftover review requests. Only includes PRs that add
+    fewer than ``REVIEW_REMINDER_MAX_IMPLEMENTATION_ADDITIONS`` implementation
+    lines; tests, snapshots, docs and generated files do not count.
     """
     all_prs = _get_all_prs(["OPEN"])
     stuck_prs = {}
     threshold = datetime.now(timezone.utc) - timedelta(hours=24)
     for pr in all_prs:
-        additions = pr.get("additions")
-        if additions is None or additions >= 200:
+        implementation_additions = count_implementation_additions(pr)
+        if (
+            implementation_additions is None
+            or implementation_additions >= REVIEW_REMINDER_MAX_IMPLEMENTATION_ADDITIONS
+        ):
             continue
+        pr["implementation_additions"] = implementation_additions
         if has_known_merge_conflicts(pr):
             continue
         if has_required_approval(pr):
