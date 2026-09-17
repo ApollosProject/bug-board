@@ -53,6 +53,7 @@ def _install_import_shims() -> None:
 
     github_module = cast(Any, types.ModuleType("github"))
     github_module.GitHubDataError = type("GitHubDataError", (RuntimeError,), {})
+    github_module.REVIEW_REMINDER_MAX_IMPLEMENTATION_ADDITIONS = 200
     github_module.get_prs_waiting_for_review_by_reviewer = lambda *args, **kwargs: {}
     github_module.get_merged_pr_activity = lambda *args, **kwargs: ({}, {})
     github_module.get_merged_pr_counts_for_user = lambda *args, **kwargs: (0, 0)
