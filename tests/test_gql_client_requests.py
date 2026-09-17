@@ -317,6 +317,7 @@ class GraphQLClientRequestTests(unittest.TestCase):
         sleep.assert_called_once_with(1)
         query = print_ast(execute.call_args.args[0].document)
         self.assertIn("first: 20", query)
+        self.assertIn("files(first: 100)", query)
 
     def test_get_prs_raises_when_repo_fetch_fails(self):
         with (
@@ -403,6 +404,50 @@ class GraphQLClientRequestTests(unittest.TestCase):
                     {"darrylyip": [pr], "vitlelis": [pr]} if state in (None, "SUCCESS") else {}
                 )
                 self.assertEqual(waiting, expected)
+
+    def test_waiting_for_review_gates_on_implementation_additions(self):
+        def stuck_pr(number, additions, files):
+            return {
+                "number": number,
+                "url": f"https://github.com/example/repo/pull/{number}",
+                "additions": additions,
+                "files": {"pageInfo": {"hasNextPage": False}, "nodes": files},
+                "mergeable": "MERGEABLE",
+                "reviewDecision": "REVIEW_REQUIRED",
+                "reviewRequests": {"nodes": [{"requestedReviewer": {"login": "darrylyip"}}]},
+                "reviews": {"nodes": []},
+                "timelineItems": {
+                    "nodes": [
+                        {
+                            "createdAt": "2020-01-01T00:00:00Z",
+                            "requestedReviewer": {"login": "darrylyip"},
+                        }
+                    ]
+                },
+                "statusCheckRollup": {"state": "SUCCESS"},
+            }
+
+        mostly_tests = stuck_pr(
+            1,
+            309,
+            [
+                {"path": "src/core/schema.js", "additions": 17},
+                {"path": "src/data/prayers/__tests__/resolver.tests.js", "additions": 191},
+                {"path": "src/data/prayers/dataSource.js", "additions": 93},
+                {"path": "src/data/prayers/resolver.js", "additions": 8},
+            ],
+        )
+        large_implementation = stuck_pr(
+            2, 250, [{"path": "src/data/giving/dataSource.js", "additions": 250}]
+        )
+
+        with patch.object(
+            github, "_get_all_prs", return_value=[mostly_tests, large_implementation]
+        ):
+            waiting = github.get_prs_waiting_for_review_by_reviewer()
+
+        self.assertEqual(waiting, {"darrylyip": [mostly_tests]})
+        self.assertEqual(mostly_tests["implementation_additions"], 118)
 
     def test_waiting_for_review_allows_unknown_mergeability(self):
         class FixedDateTime(datetime):

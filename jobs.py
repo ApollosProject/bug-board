@@ -15,6 +15,7 @@ from config import load_config
 from constants import ENGINEERING_TEAM_SLUG, PRIORITY_TO_SCORE
 from fleet_health_cache import refresh_fleet_health_cache, should_use_redis_cache
 from github import (
+    REVIEW_REMINDER_MAX_IMPLEMENTATION_ADDITIONS,
     GitHubDataError,
     get_merged_pr_activity,
     get_merged_pr_counts_for_user,
@@ -646,7 +647,12 @@ def post_stale():
             filtered[reviewer] = pr_list
     prs = filtered
     if prs:
-        markdown += "*PRs - Checks Passing, Waiting for Review (+24h, <200 lines added)*\n"
+        markdown += (
+            "*PRs - Checks Passing, Waiting for Review "
+            f"(+24h, <{REVIEW_REMINDER_MAX_IMPLEMENTATION_ADDITIONS} implementation lines added)*\n"
+            "_Implementation lines exclude tests, fixtures, snapshots, docs, lockfiles, "
+            "generated code, localization files and assets._\n"
+        )
         for reviewer, pr_list in prs.items():
             if not pr_list:
                 continue
@@ -676,7 +682,10 @@ def post_stale():
                 pr_days.append((days_waiting, pr))
 
             for days_waiting, pr in sorted(pr_days, key=lambda x: x[0], reverse=True):
-                markdown += f"- <{pr['url']}|{pr['title']}> (+{days_waiting}d)\n"
+                markdown += (
+                    f"- <{pr['url']}|{pr['title']}> "
+                    f"(+{days_waiting}d, {pr['implementation_additions']} impl lines)\n"
+                )
         markdown += "\n\n"
 
     filtered_stale_issues = {

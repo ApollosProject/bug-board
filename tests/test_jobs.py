@@ -53,6 +53,7 @@ def _install_import_shims() -> None:
 
     github_module = cast(Any, types.ModuleType("github"))
     github_module.GitHubDataError = type("GitHubDataError", (RuntimeError,), {})
+    github_module.REVIEW_REMINDER_MAX_IMPLEMENTATION_ADDITIONS = 200
     github_module.get_prs_waiting_for_review_by_reviewer = lambda *args, **kwargs: {}
     github_module.get_merged_pr_activity = lambda *args, **kwargs: ({}, {})
     github_module.get_merged_pr_counts_for_user = lambda *args, **kwargs: (0, 0)
@@ -360,6 +361,36 @@ class PostStaleTest(unittest.TestCase):
         self.assertIn("*Stale Open Issues*", message)
         self.assertIn("APO-7555", message)
         self.assertIn("(74d)", message)
+
+    def _post_stale_message(self, team_members, prs_by_reviewer):
+        with (
+            patch.object(jobs_module, "get_team_members", return_value=team_members),
+            patch.object(
+                jobs_module,
+                "get_prs_waiting_for_review_by_reviewer",
+                return_value=prs_by_reviewer,
+            ),
+            patch.object(jobs_module, "get_open_stale_issues", return_value=[]),
+            patch.object(jobs_module, "get_stale_issues_by_assignee", return_value={}),
+            patch.dict(jobs_module.os.environ, {"APP_URL": "https://bug-board.example"}),
+            patch.object(jobs_module, "post_to_slack") as post,
+        ):
+            jobs_module.post_stale()
+        return post.call_args.args[0]
+
+    def test_review_reminders_show_implementation_lines(self):
+        pr = {
+            "title": "Group prayer list via forwarded-community consent",
+            "url": "https://github.com/ApollosProject/apollos-cluster/pull/4678",
+            "implementation_additions": 118,
+            "timelineItems": {"nodes": []},
+        }
+        message = self._post_stale_message(
+            {"vincent": {"github_username": "vincentwilson", "slack_id": "U0VW"}},
+            {"vincentwilson": [pr]},
+        )
+        self.assertIn("<200 implementation lines added", message)
+        self.assertIn("(+0d, 118 impl lines)", message)
 
     def test_continues_with_linear_stale_issues_when_github_pr_fetch_fails(self):
         open_issues = [{"id": "APO-7555"}]
