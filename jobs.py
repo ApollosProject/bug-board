@@ -682,13 +682,10 @@ def post_stale():
                 pr_days.append((days_waiting, pr))
 
             for days_waiting, pr in sorted(pr_days, key=lambda x: x[0], reverse=True):
-                implementation_additions = pr.get("implementation_additions")
-                size_note = (
-                    f", {implementation_additions} impl lines"
-                    if implementation_additions is not None
-                    else ""
+                markdown += (
+                    f"- <{pr['url']}|{pr['title']}> "
+                    f"(+{days_waiting}d, {pr['implementation_additions']} impl lines)\n"
                 )
-                markdown += f"- <{pr['url']}|{pr['title']}> (+{days_waiting}d{size_note})\n"
         markdown += "\n\n"
 
     filtered_stale_issues = {

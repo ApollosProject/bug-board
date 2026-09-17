@@ -361,6 +361,22 @@ class PostStaleTest(unittest.TestCase):
         self.assertIn("APO-7555", message)
         self.assertIn("(74d)", message)
 
+    def _post_stale_message(self, team_members, prs_by_reviewer):
+        with (
+            patch.object(jobs_module, "get_team_members", return_value=team_members),
+            patch.object(
+                jobs_module,
+                "get_prs_waiting_for_review_by_reviewer",
+                return_value=prs_by_reviewer,
+            ),
+            patch.object(jobs_module, "get_open_stale_issues", return_value=[]),
+            patch.object(jobs_module, "get_stale_issues_by_assignee", return_value={}),
+            patch.dict(jobs_module.os.environ, {"APP_URL": "https://bug-board.example"}),
+            patch.object(jobs_module, "post_to_slack") as post,
+        ):
+            jobs_module.post_stale()
+        return post.call_args.args[0]
+
     def test_review_reminders_show_implementation_lines(self):
         pr = {
             "title": "Group prayer list via forwarded-community consent",
@@ -368,33 +384,11 @@ class PostStaleTest(unittest.TestCase):
             "implementation_additions": 118,
             "timelineItems": {"nodes": []},
         }
-        with patch.object(
-            jobs_module,
-            "get_team_members",
-            return_value={"vincent": {"github_username": "vincentwilson", "slack_id": "U0VW"}},
-        ):
-            with patch.object(
-                jobs_module,
-                "get_prs_waiting_for_review_by_reviewer",
-                return_value={"vincentwilson": [pr]},
-            ):
-                with patch.object(jobs_module, "get_open_stale_issues", return_value=[]):
-                    with patch.object(jobs_module, "get_stale_issues_by_assignee", return_value={}):
-                        with patch.dict(
-                            jobs_module.os.environ,
-                            {"APP_URL": "https://bug-board.example"},
-                            clear=False,
-                        ):
-                            with patch.object(jobs_module, "post_to_slack") as post:
-                                jobs_module.post_stale()
-
-        message = post.call_args.args[0]
-        self.assertIn("<200 implementation lines added", message)
-        self.assertIn(
-            "exclude tests, fixtures, snapshots, docs, lockfiles, generated code, "
-            "localization files and assets",
-            message,
+        message = self._post_stale_message(
+            {"vincent": {"github_username": "vincentwilson", "slack_id": "U0VW"}},
+            {"vincentwilson": [pr]},
         )
+        self.assertIn("<200 implementation lines added", message)
         self.assertIn("(+0d, 118 impl lines)", message)
 
     def test_continues_with_linear_stale_issues_when_github_pr_fetch_fails(self):

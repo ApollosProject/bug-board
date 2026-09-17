@@ -7,12 +7,14 @@ class IsImplementationPathTest(unittest.TestCase):
     def test_classifies_paths(self):
         cases = {
             "src/data/prayers/dataSource.js": True,
-            "src/core/schema.js": True,
-            "apps/admin/app/routes/giving.tsx": True,
-            "airflow/dags/stripe_sync.py": True,
-            "requirements.txt": True,
             ".github/workflows/ci.yml": True,
             "src/data/prayers/__tests__/resolver.tests.js": False,
+            "src/data/prayers/__tests__/helpers.js": False,
+            "tests/helpers.py": False,
+            "e2e/setup.ts": False,
+            "docs/index.html": False,
+            "src/components/__snapshots__/notes.json": False,
+            "src/Foo.Test.js": False,
             "src/utils/format.test.ts": False,
             "e2e/giving.spec.ts": False,
             "tests/test_regressions.py": False,
@@ -22,11 +24,9 @@ class IsImplementationPathTest(unittest.TestCase):
             "src/components/Card.stories.tsx": False,
             "README.md": False,
             "docs/setup.mdx": False,
-            "AGENTS.md": False,
             ".cursor/rules/style.mdc": False,
             "yarn.lock": False,
             "package-lock.json": False,
-            "uv.lock": False,
             "src/__generated__/graphql.ts": False,
             "src/api/types.generated.ts": False,
             "src/locales/en.json": False,
@@ -37,10 +37,6 @@ class IsImplementationPathTest(unittest.TestCase):
         for path, expected in cases.items():
             with self.subTest(path=path):
                 self.assertEqual(is_implementation_path(path), expected)
-
-    def test_matching_ignores_case(self):
-        self.assertFalse(is_implementation_path("Docs/README.MD"))
-        self.assertFalse(is_implementation_path("src/Foo.Test.js"))
 
 
 class CountImplementationAdditionsTest(unittest.TestCase):

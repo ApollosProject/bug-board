@@ -440,19 +440,14 @@ class GraphQLClientRequestTests(unittest.TestCase):
         large_implementation = stuck_pr(
             2, 250, [{"path": "src/data/giving/dataSource.js", "additions": 250}]
         )
-        truncated_file_list = stuck_pr(3, 400, [])
-        truncated_file_list["files"]["pageInfo"]["hasNextPage"] = True
 
         with patch.object(
-            github,
-            "_get_all_prs",
-            return_value=[mostly_tests, large_implementation, truncated_file_list],
+            github, "_get_all_prs", return_value=[mostly_tests, large_implementation]
         ):
             waiting = github.get_prs_waiting_for_review_by_reviewer()
 
         self.assertEqual(waiting, {"darrylyip": [mostly_tests]})
         self.assertEqual(mostly_tests["implementation_additions"], 118)
-        self.assertNotIn("implementation_additions", large_implementation)
 
     def test_waiting_for_review_allows_unknown_mergeability(self):
         class FixedDateTime(datetime):

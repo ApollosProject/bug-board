@@ -80,7 +80,7 @@ EXCLUDED_FILENAME_PATTERNS = (
 
 
 def is_implementation_path(path: str) -> bool:
-    normalized = path.strip().lower()
+    normalized = path.lower()
     if not normalized:
         return False
     directory, filename = posixpath.split(normalized)
