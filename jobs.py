@@ -1,3 +1,4 @@
+import html
 import logging
 import os
 import re
@@ -287,6 +288,11 @@ def post_to_manager_slack(markdown: str):
     response.raise_for_status()
 
 
+def _slack_link(url: str, label: str) -> str:
+    label = html.escape(label.replace("`", "").replace("|", "-"), quote=False)
+    return f"<{url}|{label}>"
+
+
 def format_bug_line(bug):
     """Return a formatted Slack message line for a bug."""
     sla_text = format_issue_sla_text(bug, now=datetime.now(timezone.utc))
@@ -299,7 +305,9 @@ def format_bug_line(bug):
     )
     platform_text = f", {bug['platform']}" if bug["platform"] else ""
     reviewer_text = f", {reviewer}" if reviewer else ""
-    content = f"<{bug['url']}|{bug['title']}> ({timing_text}{platform_text}{reviewer_text})"
+    content = (
+        f"{_slack_link(bug['url'], bug['title'])} ({timing_text}{platform_text}{reviewer_text})"
+    )
     if bug.get("priority") == 1:
         return f"- \U0001f6a8 {content} \U0001f6a8"
     return f"- {content}"
@@ -676,7 +684,7 @@ def post_stale():
                 pr_days.append((days_waiting, pr))
 
             for days_waiting, pr in sorted(pr_days, key=lambda x: x[0], reverse=True):
-                markdown += f"- <{pr['url']}|{pr['title']}> (+{days_waiting}d)\n"
+                markdown += f"- {_slack_link(pr['url'], pr['title'])} (+{days_waiting}d)\n"
         markdown += "\n\n"
 
     filtered_stale_issues = {
@@ -694,7 +702,9 @@ def post_stale():
             assignee_slack_markdown = get_slack_markdown_by_linear_username(assignee)
             markdown += f"\n{assignee_slack_markdown}:\n\n"
             for issue in issues:
-                markdown += f"- <{issue['url']}|{issue['title']}> ({issue['daysStale']}d)\n"
+                markdown += (
+                    f"- {_slack_link(issue['url'], issue['title'])} ({issue['daysStale']}d)\n"
+                )
         markdown += "\n\n"
     markdown += f"<{os.getenv('APP_URL')}|View Bug Board>"
 
@@ -837,6 +847,7 @@ def post_project_updates():
 
         name = project.get("name") or "Untitled Project"
         url = project.get("url")
+        project_link = _slack_link(url, name)
         lead = (project.get("lead") or {}).get("displayName")
         lead_md = get_slack_markdown_by_linear_username(lead) if lead else "No Lead"
         inactive = _is_inactive_project(project)
@@ -849,7 +860,7 @@ def post_project_updates():
                     {
                         "name": name,
                         "last_update_date": last_update_date,
-                        "line": f"- <{url}|{name}> - {update_status_text} - Lead: {lead_md}",
+                        "line": f"- {project_link} - {update_status_text} - Lead: {lead_md}",
                     }
                 )
 
@@ -863,7 +874,7 @@ def post_project_updates():
                 if days_left == 0
                 else _format_short_weekday(target_dt)
             )
-            line = f"- <{url}|{name}> - {target_label} - Lead: {lead_md}"
+            line = f"- {project_link} - {target_label} - Lead: {lead_md}"
             if target_status_text.endswith("overdue"):
                 overdue.append({"name": name, "target_dt": target_dt, "line": line})
             elif days_left is not None and 0 <= days_left <= 3:
@@ -880,7 +891,7 @@ def post_project_updates():
                         "name": name,
                         "start_dt": start_dt,
                         "line": (
-                            f"- <{url}|{name}> - {_format_short_weekday(start_dt)} "
+                            f"- {project_link} - {_format_short_weekday(start_dt)} "
                             f"- Lead: {lead_md}"
                         ),
                     }

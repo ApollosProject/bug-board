@@ -290,6 +290,12 @@ class RunDebugJobsTest(unittest.TestCase):
 
 
 class PostStaleTest(unittest.TestCase):
+    def test_formats_dynamic_slack_link_labels(self):
+        self.assertEqual(
+            jobs_module._slack_link("https://linear.app/issue/APO-1", "Use `foo` | A & B < C"),
+            "<https://linear.app/issue/APO-1|Use foo - A &amp; B &lt; C>",
+        )
+
     def test_retries_transient_github_pr_fetch_failure(self):
         reminders = {"redreceipt": [{"url": "https://github.com/example/repo/pull/1"}]}
         timeout_error = jobs_module.GitHubDataError("GitHub timed out")
