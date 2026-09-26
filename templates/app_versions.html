@@ -181,10 +181,12 @@
                   {% if tab.key == "ios" %}
                     <td>
                       {% if row.latest_app_version_source == "app_store" %}
-                        {{ row.latest_app_version }}<br />
-                        <span class="version-muted">Checked {{ row.store_checked_display or "unknown" }}</span>
+                        {{ row.latest_app_version }}
                       {% else %}
                         <span class="version-muted">Not available</span>
+                      {% endif %}
+                      {% if row.store_checked_display %}
+                        <br /><span class="version-muted">Checked {{ row.store_checked_display }}</span>
                       {% endif %}
                     </td>
                   {% endif %}

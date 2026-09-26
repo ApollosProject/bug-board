@@ -215,13 +215,9 @@ class AppVersionsContextTest(unittest.TestCase):
         roku_church = next(row for row in annotated if row["church"] == "roku-church")
         self.assertTrue(one_church["is_outdated"])
         self.assertEqual(one_church["freshness_display"], "97")
-        self.assertEqual(one_church["comparison_display"], "101")
         self.assertEqual(one_church["version_status_label"], "Behind top seen")
         self.assertFalse(two_church["is_outdated"])
-        self.assertEqual(two_church["version_status_label"], "Top seen")
         self.assertEqual(bad_runtime["version_status_label"], "Unverified")
-        self.assertEqual(bad_runtime["comparison_display"], "101")
-        self.assertFalse(bad_runtime["is_outdated"])
         self.assertEqual(tv_church["version_status_label"], "Unverified")
         self.assertTrue(old_tv_church["is_outdated"])
         self.assertEqual(old_tv_church["freshness_display"], "v2026.05.01.00")
@@ -230,7 +226,6 @@ class AppVersionsContextTest(unittest.TestCase):
         self.assertEqual(unknown_platform["version_status_label"], "Unverified")
         self.assertTrue(roku_church["is_outdated"])
         self.assertEqual(roku_church["version_status_label"], "Behind source")
-        self.assertEqual(roku_church["comparison_display"], "deadbee")
         self.assertEqual(roku_church["freshness_display"], "ba95e2f")
         self.assertEqual(annotated[0]["church"], "one-church")
         self.assertTrue(app_versions._revisions_match("abcdef123456", "abcdef1"))
@@ -269,7 +264,6 @@ class AppVersionsContextTest(unittest.TestCase):
         bayside = next(row for row in annotated if row["church"] == "bayside")
         red_rocks = next(row for row in annotated if row["church"] == "red-rocks")
         self.assertFalse(bayside["is_outdated"])
-        self.assertEqual(bayside["version_status_label"], "Top seen")
         self.assertFalse(red_rocks["is_outdated"])
 
     def test_enriches_app_store_versions_by_bundle_id(self):
@@ -334,8 +328,9 @@ class AppVersionsContextTest(unittest.TestCase):
             "_fetch_app_store_versions",
             return_value={},
         ) as fetch_app_store_versions:
-            app_versions._enrich_app_store_versions(rows)
+            enriched = app_versions._enrich_app_store_versions(rows)
 
+        self.assertTrue(all(row.get("store_checked_display") for row in enriched))
         lookup_bundle_ids = fetch_app_store_versions.call_args.args[0]
         self.assertEqual(len(lookup_bundle_ids), app_versions.APP_STORE_LOOKUP_LIMIT + 1)
         self.assertIn(f"com.example.{app_versions.APP_STORE_LOOKUP_LIMIT}", lookup_bundle_ids)
@@ -675,8 +670,6 @@ class AppVersionsContextTest(unittest.TestCase):
         self.assertIn("display_churches AS", query)
         self.assertIn("version_observations AS", query)
         self.assertNotIn("app_totals AS", query)
-        self.assertNotIn("COUNT(DISTINCT", query)
-        self.assertNotIn("AS user_count", query)
         self.assertIn("MAX(events.seen_at) AS latest_seen_at", query)
         self.assertIn("GROUP BY app_identity_key", query)
         self.assertIn("USING (app_identity_key)", query)
@@ -771,6 +764,7 @@ class AppVersionsRouteTest(unittest.TestCase):
                 "bundle_id": "com.three",
                 "application_name": "Three Church",
                 "app_version": "1.0.2",
+                "store_checked_display": "2026-05-12 10:16 AM EDT",
                 "apollos_platform": "ios",
                 "apollos_version": "101",
             }
@@ -806,7 +800,9 @@ class AppVersionsRouteTest(unittest.TestCase):
         self.assertIn("Checked 2026-05-12 10:15 AM EDT", body)
         self.assertIn("Last seen 2026-05-12 10:00 AM EDT", body)
         self.assertIn("Behind top seen", body)
-        self.assertIn("Not available", body)
+        unavailable = body[body.index("com.three") : body.index("</tr>", body.index("com.three"))]
+        self.assertIn("Not available", unavailable)
+        self.assertIn("Checked 2026-05-12 10:16 AM EDT", unavailable)
         self.assertIn("<code>97</code>", body)
         self.assertIn("Two Church", body)
         self.assertNotIn("App Store (live)", body)

@@ -605,15 +605,13 @@ def _enrich_app_store_versions(rows: list[dict[str, Any]]) -> list[dict[str, Any
     for row in rows:
         updated = dict(row)
         bundle_id = _string_value(row.get("bundle_id"))
-        store_version = (
-            app_store_versions.get(bundle_id or "")
-            if _should_lookup_app_store_version(row)
-            else None
-        )
+        should_lookup = _should_lookup_app_store_version(row)
+        if should_lookup:
+            updated["store_checked_display"] = checked_at
+        store_version = app_store_versions.get(bundle_id or "") if should_lookup else None
         if store_version and (version := _string_value(store_version.get("version"))):
             updated["latest_app_version"] = version
             updated["latest_app_version_source"] = "app_store"
-            updated["store_checked_display"] = checked_at
             updated["latest_app_version_seen_at"] = store_version.get("currentVersionReleaseDate")
             updated["latest_app_name"] = store_version.get("trackName")
         else:
