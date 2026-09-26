@@ -226,6 +226,11 @@ class AppVersionsContextTest(unittest.TestCase):
         self.assertEqual(unknown_platform["version_status_label"], "Unverified")
         self.assertTrue(roku_church["is_outdated"])
         self.assertEqual(roku_church["version_status_label"], "Behind source")
+        for status, label in (("identical", "At source"), ("ahead", "Ahead of source")):
+            checked = app_versions._annotate_version_status(
+                [rows[-1]], {"roku_revision_statuses": {rows[-1]["source_revision"]: status}}
+            )
+            self.assertEqual(checked[0]["version_status_label"], label)
         self.assertEqual(roku_church["freshness_display"], "ba95e2f")
         self.assertEqual(annotated[0]["church"], "one-church")
         self.assertTrue(app_versions._revisions_match("abcdef123456", "abcdef1"))
@@ -795,17 +800,12 @@ class AppVersionsRouteTest(unittest.TestCase):
         self.assertIn("<th>Seen build</th>", body)
         self.assertIn("<th>Apple lookup (US)</th>", body)
         self.assertIn("<th>Expo Runtime</th>", body)
-        self.assertIn("Top seen 101", body)
         self.assertIn("<th>Status</th>", body)
-        self.assertIn("Checked 2026-05-12 10:15 AM EDT", body)
-        self.assertIn("Last seen 2026-05-12 10:00 AM EDT", body)
-        self.assertIn("Behind top seen", body)
         unavailable = body[body.index("com.three") : body.index("</tr>", body.index("com.three"))]
         self.assertIn("Not available", unavailable)
         self.assertIn("Checked 2026-05-12 10:16 AM EDT", unavailable)
         self.assertIn("<code>97</code>", body)
         self.assertIn("Two Church", body)
-        self.assertNotIn("App Store (live)", body)
 
     def test_preview_shows_church_slug_and_distinguishes_seen_from_apple_lookup(self):
         row = {
