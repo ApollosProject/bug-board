@@ -208,7 +208,10 @@ The legacy `GET /airflow-fleet-health` Better Stack monitor endpoint has been re
 `GET /apps` reads the Segment BigQuery export and shows the highest observed Apollos
 version signal per church/app/platform. It uses the analytics metadata sent by the mobile and TV
 apps, including the exported `apollos_version`, `app_version`, `app_update_id`, `bundle_id`,
-`application_name`, `church`, `apollos_platform`, `source_revision`, and `source_version` fields.
+`application_name`, `church`, `build_church`, `apollos_platform`, `source_revision`, and
+`source_version` fields. For mobile apps, `build_church` is the configured deployment slug while
+`church` is a church selected inside the app (which can differ in Preview). Older mobile events
+without `build_church` show "Unknown build slug" rather than mislabeling the selected church.
 The public US Apple lookup is shown separately for iOS bundle IDs, with the fetch time. It can
 lag App Store Connect and must not be treated as an authoritative published release. The seen
 build is the version reported by the selected installation in Segment, not the latest shipped

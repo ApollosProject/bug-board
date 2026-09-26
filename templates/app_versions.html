@@ -159,7 +159,7 @@
           <table class="version-table">
             <thead>
               <tr>
-                <th>Church</th>
+                <th>{{ "Build slug / church seen" if tab.key in ("ios", "android") else "Church seen" }}</th>
                 <th>App</th>
                 <th>Seen build</th>
                 {% if tab.key == "ios" %}<th>Apple lookup (US)</th>{% endif %}
@@ -171,7 +171,12 @@
               {% for row in tab.rows %}
                 <tr>
                   <td>
-                    <strong>{{ row.church }}</strong>
+                    {% if tab.key in ("ios", "android") %}
+                      <strong>{{ row.build_church or "Unknown build slug" }}</strong><br />
+                      <span class="version-muted">Church seen: {{ row.church }}</span>
+                    {% else %}
+                      <strong>{{ row.church }}</strong>
+                    {% endif %}
                   </td>
                   <td>{{ row.application_name }}<br /><span class="version-muted">{{ row.bundle_id }}</span></td>
                   <td>
