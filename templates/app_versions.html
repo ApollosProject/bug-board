@@ -35,8 +35,7 @@
     vertical-align: top;
   }
 
-  .version-table td:first-child,
-  .version-table td:nth-child(2) {
+  .version-table td:not(:last-child) {
     white-space: normal;
   }
 
@@ -100,10 +99,6 @@
     font-size: 0.9rem;
   }
 
-  .version-app-detail {
-    white-space: nowrap;
-  }
-
   .version-empty p:last-child,
   .version-setup p:last-child {
     margin-bottom: 0;
@@ -116,8 +111,10 @@
   <div>
     <h1>Apps</h1>
     <p>
-      Production freshness observed through Segment over the last {{ lookback_days }} days:
-      Expo runtime for mobile, release tag for TV, and source commit for Roku.
+      One build per app observed in Segment over the last {{ lookback_days }} days (highest runtime,
+      not necessarily the newest install). Freshness compares against the top version seen on the
+      same platform, or the source commit for Roku—not against a store release. Only iOS has a
+      public Apple lookup (US), which may lag App Store Connect; other stores are not checked.
     </p>
   </div>
 </section>
@@ -143,7 +140,7 @@
           {{ tab.label }}
           <span class="version-tab-count">{{ tab.row_count }}</span>
           {% if tab.outdated_count %}
-            <span class="version-tab-alert">{{ tab.outdated_count }}</span>
+            <span class="version-tab-alert" aria-label="{{ tab.outdated_count }} behind">{{ tab.outdated_count }}</span>
           {% endif %}
         </button>
       {% endfor %}
@@ -163,37 +160,42 @@
               <tr>
                 <th>Church</th>
                 <th>App</th>
+                <th>Seen build</th>
+                {% if tab.key == "ios" %}<th>Apple lookup (US)</th>{% endif %}
                 <th>{{ "Expo Runtime" if tab.key in ("ios", "android") else "Release" if tab.key in ("amazon", "androidtv", "tv", "tvos") else "Commit" if tab.key == "roku" else "Version" }}</th>
-                <th>Status</th>
-                <th>Seen</th>
-                <th>Users</th>
-                <th>Events</th>
+                <th>Source freshness</th>
               </tr>
             </thead>
             <tbody>
               {% for row in tab.rows %}
                 <tr>
                   <td>
-                    <strong>{{ "Demo" if row.church == "apollos_demo" else row.church }}</strong><br />
-                    <span class="version-muted">{{ row.bundle_id }}</span>
+                    <strong>{{ row.church }}</strong>
+                  </td>
+                  <td>{{ row.application_name }}<br /><span class="version-muted">{{ row.bundle_id }}</span></td>
+                  <td>
+                    {{ row.app_version or "unknown" }}<br />
+                    <span class="version-muted">Last seen {{ row.latest_seen_display or "unknown" }}</span>
+                  </td>
+                  {% if tab.key == "ios" %}
+                    <td>
+                      {% if row.latest_app_version_source == "app_store" %}
+                        {{ row.latest_app_version }}<br />
+                        <span class="version-muted">Checked {{ row.store_checked_display or "unknown" }}</span>
+                      {% else %}
+                        <span class="version-muted">Not available</span>
+                      {% endif %}
+                    </td>
+                  {% endif %}
+                  <td>
+                    <code>{{ row.freshness_display or "TBD" }}</code><br />
+                    <span class="version-muted">{{ "Source target" if tab.key == "roku" else "Top seen" }} {{ row.comparison_display or "unknown" }}</span>
                   </td>
                   <td>
-                    {{ row.application_name }}<br />
-                    <span class="version-muted version-app-detail">Observed {{ row.app_version or "unknown" }}</span>
-                    {% if row.latest_app_version_source == "app_store" and row.latest_app_version != row.app_version %}
-                      <br />
-                      <span class="version-muted version-app-detail">App Store (live) {{ row.latest_app_version }}</span>
-                    {% endif %}
-                  </td>
-                  <td><code>{{ row.freshness_display or row.apollos_version or "TBD" }}</code></td>
-                  <td>
-                    <span class="version-status version-status--{{ row.version_status_class or ('outdated' if row.is_outdated else 'current') }}">
-                      {{ row.version_status_label or ("Outdated" if row.is_outdated else "Current") }}
+                    <span class="version-status version-status--{{ row.version_status_class or 'observed' }}">
+                      {{ row.version_status_label or "Unverified" }}
                     </span>
                   </td>
-                  <td>{{ row.latest_seen_display or "unknown" }}</td>
-                  <td>{{ row.user_count }}</td>
-                  <td>{{ row.event_count }}</td>
                 </tr>
               {% endfor %}
             </tbody>

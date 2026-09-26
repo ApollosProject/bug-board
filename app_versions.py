@@ -526,7 +526,11 @@ def _annotate_version_status(
         source_version = _string_value(row.get("source_version"))
         source_revision = _string_value(row.get("source_revision"))
         release_version = _string_value(row.get("canonical_source_version"))
-        latest_version = latest_by_platform.get(platform)
+        latest_version = (
+            latest_by_platform.get(platform)
+            if platform in {"ios", "android", *RELEASE_TAG_PLATFORMS}
+            else None
+        )
         is_outdated = False
         freshness_display = version or "TBD"
         revision_status = None
@@ -538,23 +542,39 @@ def _annotate_version_status(
             freshness_display = source_revision[:7] if source_revision else "TBD"
             revision_status = roku_statuses.get(source_revision or "")
             is_outdated = revision_status == "behind"
-        elif version and latest_version:
+        elif platform in {"ios", "android"} and version and latest_version:
             is_outdated = compare_versions(version, latest_version) < 0
 
         updated["is_outdated"] = is_outdated
         updated["freshness_display"] = freshness_display
-        if freshness_display == "TBD":
-            version_status_label = "TBD"
-            version_status_class = "observed"
-        elif platform == "roku" and revision_status not in {"ahead", "behind", "identical"}:
-            version_status_label = "Unverified" if revision_status else "Observed"
-            version_status_class = "observed"
-        elif platform in RELEASE_TAG_PLATFORMS and not release_version:
+        updated["comparison_display"] = (
+            (_string_value(source_context.get("roku_target_revision")) or "")[:7] or "unknown"
+            if platform == "roku"
+            else latest_version or "unknown"
+        )
+        if platform == "roku":
+            version_status_label = {
+                "behind": "Behind source",
+                "identical": "At source",
+                "ahead": "Ahead of source",
+            }.get(revision_status or "", "Unverified")
+        elif (
+            platform not in {"ios", "android", *RELEASE_TAG_PLATFORMS}
+            or (platform in RELEASE_TAG_PLATFORMS and not release_version)
+            or freshness_display == "TBD"
+        ):
             version_status_label = "Unverified"
-            version_status_class = "observed"
+        elif latest_version:
+            version_status_label = "Behind top seen" if is_outdated else "Top seen"
         else:
-            version_status_label = "Outdated" if is_outdated else "Current"
-            version_status_class = "outdated" if is_outdated else "current"
+            version_status_label = "Unverified"
+        version_status_class = (
+            "observed"
+            if version_status_label == "Unverified"
+            else "outdated"
+            if is_outdated
+            else "current"
+        )
         updated["version_status_label"] = version_status_label
         updated["version_status_class"] = version_status_class
         updated["latest_seen_display"] = format_timestamp(row.get("latest_seen_at"))
@@ -588,6 +608,7 @@ def _enrich_app_store_versions(rows: list[dict[str, Any]]) -> list[dict[str, Any
         except ValueError as exc:
             logging.warning("App Store version lookup returned invalid JSON: %s", exc)
 
+    checked_at = format_timestamp(datetime.now().astimezone())
     enriched = []
     for row in rows:
         updated = dict(row)
@@ -600,6 +621,7 @@ def _enrich_app_store_versions(rows: list[dict[str, Any]]) -> list[dict[str, Any
         if store_version and (version := _string_value(store_version.get("version"))):
             updated["latest_app_version"] = version
             updated["latest_app_version_source"] = "app_store"
+            updated["store_checked_display"] = checked_at
             updated["latest_app_version_seen_at"] = store_version.get("currentVersionReleaseDate")
             updated["latest_app_name"] = store_version.get("trackName")
         else:

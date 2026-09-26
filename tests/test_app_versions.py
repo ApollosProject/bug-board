@@ -191,7 +191,10 @@ class AppVersionsContextTest(unittest.TestCase):
         )
         annotated = app_versions._annotate_version_status(
             selected,
-            {"roku_revision_statuses": {rows[-1]["source_revision"]: "behind"}},
+            {
+                "roku_revision_statuses": {rows[-1]["source_revision"]: "behind"},
+                "roku_target_revision": "deadbeefabcdef0",
+            },
         )
 
         one_church = next(row for row in annotated if row["church"] == "one-church")
@@ -203,19 +206,25 @@ class AppVersionsContextTest(unittest.TestCase):
         roku_church = next(row for row in annotated if row["church"] == "roku-church")
         self.assertTrue(one_church["is_outdated"])
         self.assertEqual(one_church["freshness_display"], "97")
+        self.assertEqual(one_church["comparison_display"], "101")
+        self.assertEqual(one_church["version_status_label"], "Behind top seen")
         self.assertFalse(two_church["is_outdated"])
-        self.assertEqual(tv_church["version_status_label"], "TBD")
+        self.assertEqual(two_church["version_status_label"], "Top seen")
+        self.assertEqual(tv_church["version_status_label"], "Unverified")
         self.assertTrue(old_tv_church["is_outdated"])
         self.assertEqual(old_tv_church["freshness_display"], "v2026.05.01.00")
         self.assertFalse(new_tv_church["is_outdated"])
         self.assertFalse(unknown_platform["is_outdated"])
+        self.assertEqual(unknown_platform["version_status_label"], "Unverified")
         self.assertTrue(roku_church["is_outdated"])
+        self.assertEqual(roku_church["version_status_label"], "Behind source")
+        self.assertEqual(roku_church["comparison_display"], "deadbee")
         self.assertEqual(roku_church["freshness_display"], "ba95e2f")
         self.assertEqual(annotated[0]["church"], "one-church")
         self.assertTrue(app_versions._revisions_match("abcdef123456", "abcdef1"))
         self.assertFalse(app_versions._revisions_match("abcdef123456", "abc"))
 
-    def test_annotates_outdated_apps_by_app_store_version(self):
+    def test_store_lookup_does_not_claim_a_build_is_outdated(self):
         rows = [
             {
                 "church": "bayside",
@@ -248,6 +257,7 @@ class AppVersionsContextTest(unittest.TestCase):
         bayside = next(row for row in annotated if row["church"] == "bayside")
         red_rocks = next(row for row in annotated if row["church"] == "red-rocks")
         self.assertFalse(bayside["is_outdated"])
+        self.assertEqual(bayside["version_status_label"], "Top seen")
         self.assertFalse(red_rocks["is_outdated"])
 
     def test_enriches_app_store_versions_by_bundle_id(self):
@@ -290,6 +300,7 @@ class AppVersionsContextTest(unittest.TestCase):
         self.assertEqual(bayside["latest_app_version"], "5.20.30")
         self.assertEqual(bayside["latest_app_version_source"], "app_store")
         self.assertEqual(bayside["latest_app_version_seen_at"], "2026-04-14T16:34:35Z")
+        self.assertIsNotNone(bayside["store_checked_display"])
         self.assertEqual(android["latest_app_version"], "1.0.0")
         self.assertEqual(android["latest_app_version_source"], "observed")
 
@@ -703,13 +714,11 @@ class AppVersionsRouteTest(unittest.TestCase):
                 "app_version": "1.0.0",
                 "latest_app_version": "1.0.1",
                 "latest_app_version_source": "app_store",
-                "latest_app_version_source_label": "App Store",
+                "store_checked_display": "2026-05-12 10:15 AM EDT",
                 "apollos_platform": "ios",
                 "apollos_version": "97",
-                "latest_apollos_version": "101",
-                "source_display": "v2026.05.12.00 (abc1234)",
                 "is_outdated": True,
-                "latest_seen_display": "2026-05-12 10:00 AM EDT",
+                "latest_seen_at": "2026-05-12 10:00 AM EDT",
                 "user_count": 5,
                 "event_count": 10,
             },
@@ -720,17 +729,25 @@ class AppVersionsRouteTest(unittest.TestCase):
                 "app_version": "1.0.0",
                 "latest_app_version": "1.0.0",
                 "latest_app_version_source": "observed",
-                "latest_app_version_source_label": "Observed",
                 "apollos_platform": "android",
                 "apollos_version": "97",
-                "latest_apollos_version": "97",
-                "source_display": "TBD",
                 "is_outdated": False,
-                "latest_seen_display": "2026-05-12 10:00 AM EDT",
+                "latest_seen_at": "2026-05-12 10:00 AM EDT",
                 "user_count": 7,
                 "event_count": 12,
             },
         ]
+        rows.append(
+            {
+                "church": "three-church",
+                "bundle_id": "com.three",
+                "application_name": "Three Church",
+                "app_version": "1.0.2",
+                "apollos_platform": "ios",
+                "apollos_version": "101",
+            }
+        )
+        rows = app_versions._annotate_version_status(rows)
         context = {
             "status": "ready",
             "status_label": "Ready",
@@ -752,21 +769,21 @@ class AppVersionsRouteTest(unittest.TestCase):
         self.assertIn('data-version-tab="ios"', body)
         self.assertIn('data-version-tab="android"', body)
         self.assertIn('id="version-panel-ios"', body)
-        self.assertNotIn("Latest observed", body)
         self.assertIn("One Church", body)
-        self.assertNotIn("<th>Latest App</th>", body)
-        self.assertNotIn("<th>Observed Version</th>", body)
+        self.assertIn("<th>Seen build</th>", body)
+        self.assertIn("<th>Apple lookup (US)</th>", body)
         self.assertIn("<th>Expo Runtime</th>", body)
-        self.assertNotIn("<th>Source</th>", body)
-        self.assertIn("1.0.1", body)
-        self.assertIn("App Store (live) 1.0.1", body)
-        self.assertNotIn("App Store (live) 1.0.0", body)
+        self.assertIn("Top seen 101", body)
+        self.assertIn("<th>Source freshness</th>", body)
+        self.assertIn("Checked 2026-05-12 10:15 AM EDT", body)
+        self.assertIn("Last seen 2026-05-12 10:00 AM EDT", body)
+        self.assertIn("Behind top seen", body)
+        self.assertIn("Not available", body)
         self.assertIn("<code>97</code>", body)
         self.assertIn("Two Church", body)
-        self.assertNotIn("<th>Platform</th>", body)
-        self.assertNotIn("<th>Latest Observed</th>", body)
+        self.assertNotIn("App Store (live)", body)
 
-    def test_preview_shows_demo_label_and_public_app_store_version(self):
+    def test_preview_shows_church_slug_and_distinguishes_seen_from_apple_lookup(self):
         row = {
             "church": "apollos_demo",
             "bundle_id": "com.differential.apollospreview",
@@ -774,21 +791,26 @@ class AppVersionsRouteTest(unittest.TestCase):
             "app_version": "1.0.0",
             "latest_app_version": "1.40",
             "latest_app_version_source": "app_store",
+            "store_checked_display": "2026-09-25 08:45 PM EDT",
             "apollos_platform": "ios",
-            "freshness_display": "106",
+            "apollos_version": "106",
         }
+        rows = app_versions._annotate_version_status([row])
         context = {
             "status": "ready",
-            "rows": [row],
-            "platform_tabs": app_versions.build_platform_tabs([row]),
+            "rows": rows,
+            "platform_tabs": app_versions.build_platform_tabs(rows),
             "lookback_days": 30,
         }
         with patch.object(app_module, "get_app_versions_context", return_value=context):
             body = self.client.get("/apps").get_data(as_text=True)
-        self.assertIn("<strong>Demo</strong>", body)
-        self.assertIn("Observed 1.0.0", body)
-        self.assertIn("App Store (live) 1.40", body)
-        self.assertNotIn("apollos_demo", body)
+        self.assertIn("<strong>apollos_demo</strong>", body)
+        self.assertIn("Apollos Preview", body)
+        self.assertIn("Last seen unknown", body)
+        self.assertIn("Checked 2026-09-25 08:45 PM EDT", body)
+        self.assertIn("Top seen", body)
+        self.assertIn("1.40", body)
+        self.assertNotIn("App Store (live)", body)
 
 
 if __name__ == "__main__":
