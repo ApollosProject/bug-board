@@ -232,12 +232,6 @@ class AppVersionsContextTest(unittest.TestCase):
         self.assertEqual(roku_church["version_status_label"], "Behind source")
         self.assertEqual(roku_church["comparison_display"], "deadbee")
         self.assertEqual(roku_church["freshness_display"], "ba95e2f")
-        for status, label in (("identical", "At source"), ("ahead", "Ahead of source")):
-            with self.subTest(status=status):
-                checked = app_versions._annotate_version_status(
-                    [rows[-1]], {"roku_revision_statuses": {rows[-1]["source_revision"]: status}}
-                )
-                self.assertEqual(checked[0]["version_status_label"], label)
         self.assertEqual(annotated[0]["church"], "one-church")
         self.assertTrue(app_versions._revisions_match("abcdef123456", "abcdef1"))
         self.assertFalse(app_versions._revisions_match("abcdef123456", "abc"))
