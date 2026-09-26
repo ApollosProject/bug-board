@@ -662,6 +662,7 @@ class AppVersionsContextTest(unittest.TestCase):
         self.assertIn("CAST(NULL AS STRING) AS source_revision", query)
         self.assertIn("NULLIF(CAST(`groupId` AS STRING), '') AS church", query)
         self.assertIn("NULLIF(CAST(`buildChurch` AS STRING), '') AS build_church", query)
+        self.assertIn("[SAFE_OFFSET(0)] AS church", query)
         self.assertIn("[SAFE_OFFSET(0)] AS build_church", query)
         self.assertIn("observation.build_church", query)
         self.assertNotIn("AND `apollos_version` IS NOT NULL", query)

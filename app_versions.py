@@ -338,7 +338,7 @@ def _build_app_versions_query(
               IF(apollos_version IS NOT NULL, church, NULL) IGNORE NULLS
               ORDER BY IF(church = 'Unknown church', 1, 0), church
               LIMIT 1
-            )[OFFSET(0)] AS church,
+            )[SAFE_OFFSET(0)] AS church,
             ARRAY_AGG(build_church IGNORE NULLS ORDER BY seen_at DESC LIMIT 1)
               [SAFE_OFFSET(0)] AS build_church
           FROM app_identity_events
