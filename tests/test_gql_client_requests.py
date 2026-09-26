@@ -649,13 +649,11 @@ class GraphQLClientRequestTests(unittest.TestCase):
             self.assertEqual(github.get_prs_waiting_for_review_by_reviewer(), {})
         latest_review = {"author": {"login": "michael"}, "submittedAt": "2020-01-06T00:00:00Z"}
         pr["reviews"]["nodes"].append(latest_review)
-        for state in ("COMMENTED", "DISMISSED"):
+        for state, expected in (("COMMENTED", {}), ("DISMISSED", {"michael": [pr]})):
             with self.subTest(state=state):
                 latest_review["state"] = state
                 with patch.object(github, "_get_all_prs", return_value=[pr]):
-                    self.assertEqual(
-                        github.get_prs_waiting_for_review_by_reviewer(), {"michael": [pr]}
-                    )
+                    self.assertEqual(github.get_prs_waiting_for_review_by_reviewer(), expected)
 
     def test_waiting_for_review_only_notifies_active_change_request_reviewer(self):
         class FixedDateTime(datetime):

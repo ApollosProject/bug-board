@@ -723,6 +723,7 @@ def get_prs_waiting_for_review_by_reviewer():
                     (submitted_at, review["state"])
                     for review in pr["reviews"]["nodes"]
                     if (review.get("author") or {}).get("login") == reviewer
+                    and review.get("state") in ("APPROVED", "CHANGES_REQUESTED", "DISMISSED")
                     and (submitted_at := _parse_github_timestamp(review.get("submittedAt")))
                     and submitted_at >= requested_at
                 ),
