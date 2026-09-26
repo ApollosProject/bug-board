@@ -174,7 +174,7 @@
               {% for row in tab.rows %}
                 <tr>
                   <td>
-                    <strong>{{ row.church }}</strong><br />
+                    <strong>{{ "Demo" if row.church == "apollos_demo" else row.church }}</strong><br />
                     <span class="version-muted">{{ row.bundle_id }}</span>
                   </td>
                   <td>
@@ -182,7 +182,7 @@
                     <span class="version-muted version-app-detail">Observed {{ row.app_version or "unknown" }}</span>
                     {% if row.latest_app_version_source == "app_store" and row.latest_app_version != row.app_version %}
                       <br />
-                      <span class="version-muted version-app-detail">App Store {{ row.latest_app_version }}</span>
+                      <span class="version-muted version-app-detail">App Store (live) {{ row.latest_app_version }}</span>
                     {% endif %}
                   </td>
                   <td><code>{{ row.freshness_display or row.apollos_version or "TBD" }}</code></td>

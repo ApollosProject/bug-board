@@ -293,7 +293,7 @@ class AppVersionsContextTest(unittest.TestCase):
         self.assertEqual(android["latest_app_version"], "1.0.0")
         self.assertEqual(android["latest_app_version_source"], "observed")
 
-    def test_limits_app_store_lookup_count(self):
+    def test_looks_up_all_app_store_bundles(self):
         rows = [
             {
                 "church": f"church-{index}",
@@ -314,13 +314,10 @@ class AppVersionsContextTest(unittest.TestCase):
             app_versions._enrich_app_store_versions(rows)
 
         lookup_bundle_ids = fetch_app_store_versions.call_args.args[0]
-        self.assertEqual(len(lookup_bundle_ids), app_versions.APP_STORE_LOOKUP_LIMIT)
-        self.assertNotIn(
-            f"com.example.{app_versions.APP_STORE_LOOKUP_LIMIT}",
-            lookup_bundle_ids,
-        )
+        self.assertEqual(len(lookup_bundle_ids), app_versions.APP_STORE_LOOKUP_LIMIT + 1)
+        self.assertIn(f"com.example.{app_versions.APP_STORE_LOOKUP_LIMIT}", lookup_bundle_ids)
 
-    def test_fetches_each_app_store_bundle_id_individually(self):
+    def test_batches_app_store_lookup_across_all_bundle_ids(self):
         class Response:
             def __init__(self, payload: dict[str, Any]):
                 self.payload = payload
@@ -332,47 +329,100 @@ class AppVersionsContextTest(unittest.TestCase):
                 return self.payload
 
         responses = [
-            Response(
-                {
-                    "results": [
-                        {
-                            "bundleId": "com.example.one",
-                            "version": "1.2.3",
-                        },
-                    ],
-                }
-            ),
-            Response(
-                {
-                    "results": [
-                        {
-                            "bundleId": "com.example.two",
-                            "version": "2.3.4",
-                        },
-                    ],
-                }
-            ),
+            Response({"results": [{"bundleId": "com.example.one", "version": "1.40"}]}),
+            Response({"results": [{"bundleId": "com.example.last", "version": "2.3.4"}]}),
         ]
+        bundle_ids = (
+            ["com.example.one"]
+            + [f"com.example.{i}" for i in range(app_versions.APP_STORE_LOOKUP_LIMIT - 1)]
+            + ["com.example.last"]
+        )
 
-        with patch.object(
-            app_versions.requests,
-            "get",
-            side_effect=responses,
-        ) as get:
-            versions = app_versions._fetch_app_store_versions(
-                ["com.example.one", "com.example.two"]
-            )
+        def response_for_batch(url, *, params, timeout):
+            if "com.example.one" in params["bundleId"].split(","):
+                return responses[0]
+            return responses[1]
 
-        self.assertEqual(versions["com.example.one"]["version"], "1.2.3")
-        self.assertEqual(versions["com.example.two"]["version"], "2.3.4")
+        with patch.object(app_versions.requests, "get", side_effect=response_for_batch) as get:
+            versions = app_versions._fetch_app_store_versions(bundle_ids)
+
+        self.assertEqual(versions["com.example.one"]["version"], "1.40")
+        self.assertEqual(versions["com.example.last"]["version"], "2.3.4")
         self.assertEqual(get.call_count, 2)
         self.assertCountEqual(
             [call.kwargs["params"] for call in get.call_args_list],
             [
-                {"bundleId": "com.example.one", "country": "us"},
-                {"bundleId": "com.example.two", "country": "us"},
+                {
+                    "bundleId": ",".join(bundle_ids[: app_versions.APP_STORE_LOOKUP_LIMIT]),
+                    "country": "us",
+                },
+                {"bundleId": "com.example.last", "country": "us"},
             ],
         )
+
+    def test_failed_batch_does_not_hide_healthy_app_versions(self):
+        class Response:
+            def __init__(self, ids):
+                self.ids = ids
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return {
+                    "results": [
+                        {"bundleId": bundle_id, "version": "1.40"} for bundle_id in self.ids
+                    ]
+                }
+
+        def lookup(url, *, params, timeout):
+            ids = params["bundleId"].split(",")
+            if "com.example.bad" in ids:
+                error = app_versions.requests.HTTPError("bad bundle")
+                error.response = types.SimpleNamespace(status_code=400)
+                raise error
+            return Response(ids)
+
+        bundle_ids = ["com.example.bad"] + [
+            f"com.example.good{i}" for i in range(app_versions.APP_STORE_LOOKUP_LIMIT)
+        ]
+        with patch.object(app_versions.requests, "get", side_effect=lookup):
+            versions = app_versions._fetch_app_store_versions(bundle_ids)
+
+        self.assertEqual(len(versions), app_versions.APP_STORE_LOOKUP_LIMIT)
+        self.assertEqual(versions["com.example.good0"]["version"], "1.40")
+        self.assertIn(f"com.example.good{app_versions.APP_STORE_LOOKUP_LIMIT - 1}", versions)
+        self.assertNotIn("com.example.bad", versions)
+
+    def test_transient_or_malformed_batch_does_not_retry_every_bundle(self):
+        class Response:
+            def __init__(self, results):
+                self.results = results
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return {"results": self.results}
+
+        bundle_ids = [f"com.example.{i}" for i in range(app_versions.APP_STORE_LOOKUP_LIMIT)]
+        bundle_ids.append("com.example.last")
+        for failure in ("timeout", "malformed"):
+            with self.subTest(failure=failure):
+
+                def lookup(url, *, params, timeout):
+                    ids = params["bundleId"].split(",")
+                    if len(ids) > 1:
+                        if failure == "timeout":
+                            raise app_versions.requests.RequestException("timeout")
+                        return Response({"unexpected": "shape"})
+                    return Response([{"bundleId": ids[0], "version": "1.40"}])
+
+                with patch.object(app_versions.requests, "get", side_effect=lookup) as get:
+                    versions = app_versions._fetch_app_store_versions(bundle_ids)
+                self.assertEqual(get.call_count, 2)
+                self.assertEqual(versions["com.example.last"]["version"], "1.40")
+                self.assertEqual(len(versions), 1)
 
     def test_selects_highest_observed_version_instead_of_most_recent_event(self):
         rows = [
@@ -709,12 +759,36 @@ class AppVersionsRouteTest(unittest.TestCase):
         self.assertIn("<th>Expo Runtime</th>", body)
         self.assertNotIn("<th>Source</th>", body)
         self.assertIn("1.0.1", body)
-        self.assertIn("App Store 1.0.1", body)
-        self.assertNotIn("App Store 1.0.0", body)
+        self.assertIn("App Store (live) 1.0.1", body)
+        self.assertNotIn("App Store (live) 1.0.0", body)
         self.assertIn("<code>97</code>", body)
         self.assertIn("Two Church", body)
         self.assertNotIn("<th>Platform</th>", body)
         self.assertNotIn("<th>Latest Observed</th>", body)
+
+    def test_preview_shows_demo_label_and_public_app_store_version(self):
+        row = {
+            "church": "apollos_demo",
+            "bundle_id": "com.differential.apollospreview",
+            "application_name": "Apollos Preview",
+            "app_version": "1.0.0",
+            "latest_app_version": "1.40",
+            "latest_app_version_source": "app_store",
+            "apollos_platform": "ios",
+            "freshness_display": "106",
+        }
+        context = {
+            "status": "ready",
+            "rows": [row],
+            "platform_tabs": app_versions.build_platform_tabs([row]),
+            "lookback_days": 30,
+        }
+        with patch.object(app_module, "get_app_versions_context", return_value=context):
+            body = self.client.get("/apps").get_data(as_text=True)
+        self.assertIn("<strong>Demo</strong>", body)
+        self.assertIn("Observed 1.0.0", body)
+        self.assertIn("App Store (live) 1.40", body)
+        self.assertNotIn("apollos_demo", body)
 
 
 if __name__ == "__main__":

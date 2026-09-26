@@ -579,17 +579,10 @@ def _enrich_app_store_versions(rows: list[dict[str, Any]]) -> list[dict[str, Any
             and _should_lookup_app_store_version(row)
         )
     )
-    lookup_bundle_ids = bundle_ids[:APP_STORE_LOOKUP_LIMIT]
-    if len(bundle_ids) > APP_STORE_LOOKUP_LIMIT:
-        logging.warning(
-            "Skipping App Store lookup for %s iOS bundle IDs over the %s-bundle limit.",
-            len(bundle_ids) - APP_STORE_LOOKUP_LIMIT,
-            APP_STORE_LOOKUP_LIMIT,
-        )
     app_store_versions: dict[str, dict[str, Any]] = {}
-    if lookup_bundle_ids:
+    if bundle_ids:
         try:
-            app_store_versions = _fetch_app_store_versions(lookup_bundle_ids)
+            app_store_versions = _fetch_app_store_versions(bundle_ids)
         except requests.RequestException as exc:
             logging.warning("App Store version lookup failed: %s", exc)
         except ValueError as exc:
@@ -617,44 +610,49 @@ def _enrich_app_store_versions(rows: list[dict[str, Any]]) -> list[dict[str, Any
 
 
 def _fetch_app_store_versions(bundle_ids: list[str]) -> dict[str, dict[str, Any]]:
+    def lookup(ids: list[str]) -> list[dict[str, Any]]:
+        response = requests.get(
+            APP_STORE_LOOKUP_URL,
+            params={"bundleId": ",".join(ids), "country": "us"},
+            timeout=APP_STORE_LOOKUP_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
+            raise ValueError("Invalid App Store lookup response")
+        return payload["results"]
+
+    batches = [
+        bundle_ids[i : i + APP_STORE_LOOKUP_LIMIT]
+        for i in range(0, len(bundle_ids), APP_STORE_LOOKUP_LIMIT)
+    ]
     app_store_versions: dict[str, dict[str, Any]] = {}
-    max_workers = min(APP_STORE_LOOKUP_WORKERS, len(bundle_ids))
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_by_bundle_id = {
-            executor.submit(_fetch_app_store_version, bundle_id): bundle_id
-            for bundle_id in bundle_ids
-        }
-        for future in as_completed(future_by_bundle_id):
-            bundle_id = future_by_bundle_id[future]
+    with ThreadPoolExecutor(max_workers=min(APP_STORE_LOOKUP_WORKERS, len(batches))) as executor:
+        futures = {executor.submit(lookup, batch): batch for batch in batches}
+        while futures:
+            future = next(as_completed(futures))
+            batch = futures.pop(future)
             try:
-                result = future.result()
+                results = future.result()
             except (requests.RequestException, ValueError) as exc:
-                logging.warning("App Store version lookup failed for %s: %s", bundle_id, exc)
+                response = (
+                    getattr(exc, "response", None) if isinstance(exc, requests.HTTPError) else None
+                )
+                if response is not None and response.status_code == 400 and len(batch) > 1:
+                    mid = len(batch) // 2
+                    for smaller_batch in (batch[:mid], batch[mid:]):
+                        futures[executor.submit(lookup, smaller_batch)] = smaller_batch
+                else:
+                    logging.warning("App Store version lookup failed for %s: %s", batch, exc)
                 continue
-            if result:
-                app_store_versions[result["bundleId"]] = result
+            for result in results:
+                if (
+                    isinstance(result, dict)
+                    and result.get("bundleId") in batch
+                    and _string_value(result.get("version"))
+                ):
+                    app_store_versions[result["bundleId"]] = result
     return app_store_versions
-
-
-def _fetch_app_store_version(bundle_id: str) -> dict[str, Any] | None:
-    response = requests.get(
-        APP_STORE_LOOKUP_URL,
-        params={
-            "bundleId": bundle_id,
-            "country": "us",
-        },
-        timeout=APP_STORE_LOOKUP_TIMEOUT_SECONDS,
-    )
-    response.raise_for_status()
-    payload = response.json()
-    for result in payload.get("results", []):
-        if not isinstance(result, dict):
-            continue
-        fetched_bundle_id = _string_value(result.get("bundleId"))
-        version = _string_value(result.get("version"))
-        if fetched_bundle_id and version:
-            return {**result, "bundleId": fetched_bundle_id}
-    return None
 
 
 def _should_lookup_app_store_version(row: dict[str, Any]) -> bool:
