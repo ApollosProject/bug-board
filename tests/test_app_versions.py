@@ -338,11 +338,12 @@ class AppVersionsContextTest(unittest.TestCase):
             + ["com.example.last"]
         )
 
-        with patch.object(
-            app_versions.requests,
-            "get",
-            side_effect=responses,
-        ) as get:
+        def response_for_batch(url, *, params, timeout):
+            if "com.example.one" in params["bundleId"].split(","):
+                return responses[0]
+            return responses[1]
+
+        with patch.object(app_versions.requests, "get", side_effect=response_for_batch) as get:
             versions = app_versions._fetch_app_store_versions(bundle_ids)
 
         self.assertEqual(versions["com.example.one"]["version"], "1.40")
