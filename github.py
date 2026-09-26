@@ -159,10 +159,7 @@ def get_prs(repo_id, pr_states, repo_name=None):
                             closedAt
                             isDraft
                             additions
-                            reviews(
-                                last: 100,
-                                states: [APPROVED, CHANGES_REQUESTED]
-                            ) {
+                            reviews(last: 100) {
                                 nodes {
                                     author {
                                         login
@@ -683,7 +680,7 @@ def get_prs_waiting_for_review_by_reviewer():
         additions = pr.get("additions")
         if additions is None or additions >= 200:
             continue
-        if pr.get("baseRefName") and pr["baseRefName"] != (
+        if not pr.get("baseRefName") or pr["baseRefName"] != (
             ((pr.get("repository") or {}).get("defaultBranchRef") or {}).get("name")
         ):
             continue

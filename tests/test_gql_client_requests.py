@@ -370,6 +370,8 @@ class GraphQLClientRequestTests(unittest.TestCase):
         pr = {
             "number": 6050,
             "additions": 1,
+            "baseRefName": "main",
+            "repository": {"defaultBranchRef": {"name": "main"}},
             "mergeable": "MERGEABLE",
             "reviewDecision": "REVIEW_REQUIRED",
             "reviewRequests": {
@@ -420,6 +422,8 @@ class GraphQLClientRequestTests(unittest.TestCase):
         pr = {
             "number": 6050,
             "additions": 1,
+            "baseRefName": "main",
+            "repository": {"defaultBranchRef": {"name": "main"}},
             "mergeable": "UNKNOWN",
             "reviewDecision": "REVIEW_REQUIRED",
             "reviewRequests": {"nodes": [{"requestedReviewer": {"login": "darrylyip"}}]},
@@ -453,6 +457,8 @@ class GraphQLClientRequestTests(unittest.TestCase):
         pr = {
             "number": 6050,
             "additions": 1,
+            "baseRefName": "main",
+            "repository": {"defaultBranchRef": {"name": "main"}},
             "mergeable": "CONFLICTING",
             "reviewDecision": "REVIEW_REQUIRED",
             "reviewRequests": {"nodes": [{"requestedReviewer": {"login": "darrylyip"}}]},
@@ -486,6 +492,8 @@ class GraphQLClientRequestTests(unittest.TestCase):
         pr = {
             "number": 1479,
             "additions": 3,
+            "baseRefName": "main",
+            "repository": {"defaultBranchRef": {"name": "main"}},
             "mergeable": "MERGEABLE",
             "reviewDecision": "APPROVED",
             "reviewRequests": {"nodes": [{"requestedReviewer": {"login": "redreceipt"}}]},
@@ -556,6 +564,12 @@ class GraphQLClientRequestTests(unittest.TestCase):
         pr["baseRefName"] = "master"
         with patch.object(github, "_get_all_prs", return_value=[pr]):
             self.assertIn("redreceipt", github.get_prs_waiting_for_review_by_reviewer())
+        for base, default in ((None, "master"), ("master", None)):
+            with self.subTest(base=base, default=default):
+                pr["baseRefName"] = base
+                pr["repository"]["defaultBranchRef"] = {"name": default}
+                with patch.object(github, "_get_all_prs", return_value=[pr]):
+                    self.assertEqual(github.get_prs_waiting_for_review_by_reviewer(), {})
 
     def test_waiting_for_review_skips_reviewer_who_approved_after_request(self):
         pr = {
@@ -624,6 +638,25 @@ class GraphQLClientRequestTests(unittest.TestCase):
         with patch.object(github, "_get_all_prs", return_value=[pr]):
             self.assertEqual(github.get_prs_waiting_for_review_by_reviewer(), {"michael": [pr]})
 
+        pr["reviews"]["nodes"].append(
+            {
+                "state": "APPROVED",
+                "author": {"login": "michael"},
+                "submittedAt": "2020-01-05T00:00:00Z",
+            }
+        )
+        with patch.object(github, "_get_all_prs", return_value=[pr]):
+            self.assertEqual(github.get_prs_waiting_for_review_by_reviewer(), {})
+        latest_review = {"author": {"login": "michael"}, "submittedAt": "2020-01-06T00:00:00Z"}
+        pr["reviews"]["nodes"].append(latest_review)
+        for state in ("COMMENTED", "DISMISSED"):
+            with self.subTest(state=state):
+                latest_review["state"] = state
+                with patch.object(github, "_get_all_prs", return_value=[pr]):
+                    self.assertEqual(
+                        github.get_prs_waiting_for_review_by_reviewer(), {"michael": [pr]}
+                    )
+
     def test_waiting_for_review_only_notifies_active_change_request_reviewer(self):
         class FixedDateTime(datetime):
             @classmethod
@@ -637,6 +670,8 @@ class GraphQLClientRequestTests(unittest.TestCase):
             "additions": 55,
             "mergeable": "MERGEABLE",
             "reviewDecision": "CHANGES_REQUESTED",
+            "baseRefName": "main",
+            "repository": {"defaultBranchRef": {"name": "main"}},
             "reviewRequests": {
                 "nodes": [
                     {"requestedReviewer": {"login": "dylan-manchester"}},
@@ -693,6 +728,8 @@ class GraphQLClientRequestTests(unittest.TestCase):
             "additions": 55,
             "mergeable": "MERGEABLE",
             "reviewDecision": "REVIEW_REQUIRED",
+            "baseRefName": "main",
+            "repository": {"defaultBranchRef": {"name": "main"}},
             "reviewRequests": {
                 "nodes": [
                     {"requestedReviewer": {"login": "michael"}},
@@ -748,6 +785,8 @@ class GraphQLClientRequestTests(unittest.TestCase):
             "additions": 55,
             "mergeable": "MERGEABLE",
             "reviewDecision": "CHANGES_REQUESTED",
+            "baseRefName": "main",
+            "repository": {"defaultBranchRef": {"name": "main"}},
             "reviewRequests": {"nodes": []},
             "reviews": {
                 "nodes": [
@@ -788,6 +827,8 @@ class GraphQLClientRequestTests(unittest.TestCase):
             "additions": 55,
             "mergeable": "MERGEABLE",
             "reviewDecision": "REVIEW_REQUIRED",
+            "baseRefName": "main",
+            "repository": {"defaultBranchRef": {"name": "main"}},
             "reviewRequests": {"nodes": [{"requestedReviewer": {"login": "dylan-manchester"}}]},
             "reviews": {"nodes": []},
             "timelineItems": {
@@ -824,6 +865,8 @@ class GraphQLClientRequestTests(unittest.TestCase):
             "additions": 55,
             "mergeable": "MERGEABLE",
             "reviewDecision": None,
+            "baseRefName": "main",
+            "repository": {"defaultBranchRef": {"name": "main"}},
             "reviewRequests": {"nodes": [{"requestedReviewer": {"login": "dylan-manchester"}}]},
             "reviews": {
                 "nodes": [
@@ -864,6 +907,8 @@ class GraphQLClientRequestTests(unittest.TestCase):
             "additions": 55,
             "mergeable": "MERGEABLE",
             "reviewDecision": None,
+            "baseRefName": "main",
+            "repository": {"defaultBranchRef": {"name": "main"}},
             "reviewRequests": {"nodes": [{"requestedReviewer": {"login": "dylan-manchester"}}]},
             "reviews": {
                 "nodes": [
@@ -904,6 +949,8 @@ class GraphQLClientRequestTests(unittest.TestCase):
             "additions": 55,
             "mergeable": "MERGEABLE",
             "reviewDecision": None,
+            "baseRefName": "main",
+            "repository": {"defaultBranchRef": {"name": "main"}},
             "reviewRequests": {"nodes": [{"requestedReviewer": {"login": "michael"}}]},
             "reviews": {
                 "nodes": [
