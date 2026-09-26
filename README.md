@@ -220,9 +220,9 @@ The page first inspects `INFORMATION_SCHEMA.COLUMNS` for the configured Segment 
 queries tables that expose a supported version signal, so Segment lifecycle-only app-store
 `version` fields are not mistaken for Apollos runtime versions. Source freshness means *behind
 top seen* or *top seen* within the same platform, not behind an App Store release. Missing or
-uncomparable signals are *unverified*. If older clients are still active after a release, the
-dashboard keeps the highest observed runtime for the app instead of letting the most recent
-older-client event hide it. Mobile rows prefer the
+uncomparable signals (including malformed mobile runtimes) are *unverified*. Mobile rows keep
+the highest comparable runtime instead of letting a recent older-client event hide it; TV selects
+the highest stable release tag and Roku selects its source version. Mobile rows prefer the
 `apollos` Segment dataset, TV rows prefer `apollos_tv`, and Roku rows prefer `apollos_roku` so the
 same app event is not counted twice when Segment exports overlap.
 TV rows show `TBD` until source metadata appears in Segment exports. Once those fields are present,

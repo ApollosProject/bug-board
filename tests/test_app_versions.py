@@ -133,6 +133,14 @@ class AppVersionsContextTest(unittest.TestCase):
                 "latest_seen_at": datetime(2026, 5, 2, 12, 0, tzinfo=timezone.utc),
             },
             {
+                "church": "bad-runtime",
+                "apollos_platform": "ios",
+                "application_name": "Bad Runtime",
+                "bundle_id": "com.bad",
+                "apollos_version": "v999",
+                "latest_seen_at": datetime(2026, 5, 3, 12, 0, tzinfo=timezone.utc),
+            },
+            {
                 "church": "tv-church",
                 "apollos_platform": "tvos",
                 "application_name": "TV Church",
@@ -199,6 +207,7 @@ class AppVersionsContextTest(unittest.TestCase):
 
         one_church = next(row for row in annotated if row["church"] == "one-church")
         two_church = next(row for row in annotated if row["church"] == "two-church")
+        bad_runtime = next(row for row in annotated if row["church"] == "bad-runtime")
         tv_church = next(row for row in annotated if row["church"] == "tv-church")
         old_tv_church = next(row for row in annotated if row["church"] == "old-tv-church")
         new_tv_church = next(row for row in annotated if row["church"] == "new-tv-church")
@@ -210,6 +219,9 @@ class AppVersionsContextTest(unittest.TestCase):
         self.assertEqual(one_church["version_status_label"], "Behind top seen")
         self.assertFalse(two_church["is_outdated"])
         self.assertEqual(two_church["version_status_label"], "Top seen")
+        self.assertEqual(bad_runtime["version_status_label"], "Unverified")
+        self.assertEqual(bad_runtime["comparison_display"], "101")
+        self.assertFalse(bad_runtime["is_outdated"])
         self.assertEqual(tv_church["version_status_label"], "Unverified")
         self.assertTrue(old_tv_church["is_outdated"])
         self.assertEqual(old_tv_church["freshness_display"], "v2026.05.01.00")

@@ -57,6 +57,7 @@ RELEASE_TAG_PLATFORMS = {"amazon", "androidtv", "tv", "tvos"}
 STABLE_RELEASE_TAG_PATTERN = re.compile(r"^v\d{4}\.\d{2}\.\d{2}\.\d{2}$")
 ALPHA_RELEASE_TAG_PATTERN = re.compile(r"^(v\d{4}\.\d{2}\.\d{2}\.\d{2})-alpha\.\d+$")
 SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{7,40}$")
+RUNTIME_VERSION_PATTERN = re.compile(r"\d+(?:\.\d+)*")
 INTERNAL_DEPLOYMENT_TRACKS = {"beta", "development", "internal", "preview", "prerelease"}
 
 
@@ -512,6 +513,12 @@ def _annotate_version_status(
                 else "apollos_version"
             )
         )
+        if (
+            platform in {"ios", "android"}
+            and version
+            and not RUNTIME_VERSION_PATTERN.fullmatch(version)
+        ):
+            continue
         if version and (
             platform not in latest_by_platform
             or compare_versions(version, latest_by_platform[platform]) > 0
@@ -523,6 +530,7 @@ def _annotate_version_status(
         updated = dict(row)
         platform = (_string_value(row.get("apollos_platform")) or "unknown").lower()
         version = _string_value(row.get("apollos_version"))
+        comparable_runtime = bool(version and RUNTIME_VERSION_PATTERN.fullmatch(version))
         source_version = _string_value(row.get("source_version"))
         source_revision = _string_value(row.get("source_revision"))
         release_version = _string_value(row.get("canonical_source_version"))
@@ -542,7 +550,7 @@ def _annotate_version_status(
             freshness_display = source_revision[:7] if source_revision else "TBD"
             revision_status = roku_statuses.get(source_revision or "")
             is_outdated = revision_status == "behind"
-        elif platform in {"ios", "android"} and version and latest_version:
+        elif platform in {"ios", "android"} and comparable_runtime and latest_version and version:
             is_outdated = compare_versions(version, latest_version) < 0
 
         updated["is_outdated"] = is_outdated
@@ -561,6 +569,7 @@ def _annotate_version_status(
         elif (
             platform not in {"ios", "android", *RELEASE_TAG_PLATFORMS}
             or (platform in RELEASE_TAG_PLATFORMS and not release_version)
+            or (platform in {"ios", "android"} and not comparable_runtime)
             or freshness_display == "TBD"
         ):
             version_status_label = "Unverified"

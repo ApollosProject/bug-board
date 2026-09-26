@@ -111,9 +111,10 @@
   <div>
     <h1>Apps</h1>
     <p>
-      One build per app observed in Segment over the last {{ lookback_days }} days (highest runtime,
-      not necessarily the newest install). Freshness compares against the top version seen on the
-      same platform, or the source commit for Roku—not against a store release. Only iOS has a
+      One build per app observed in Segment over the last {{ lookback_days }} days: mobile selects
+      the highest runtime, TV the highest stable release tag, and Roku its source version. This may
+      not be the newest install. Freshness compares with the top version seen on the same platform,
+      or the source commit for Roku—not a store release. Only iOS has a
       public Apple lookup (US), which may lag App Store Connect; other stores are not checked.
     </p>
   </div>
