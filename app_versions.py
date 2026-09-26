@@ -48,8 +48,6 @@ FIELD_CANDIDATES = {
     "source_revision": ("source_revision", "sourceRevision"),
     "source_version": ("source_version", "sourceVersion"),
     "deployment_track": ("deployment_track", "deploymentTrack"),
-    "user_id": ("user_id", "userId"),
-    "anonymous_id": ("anonymous_id", "anonymousId"),
 }
 
 ROKU_ANALYTICS_VERSION_CANDIDATES = ("context_library_version",)
@@ -304,9 +302,7 @@ def _build_app_versions_query(
             deployment_track,
             source_dataset,
             source_table,
-            version_source,
-            user_id,
-            anonymous_id
+            version_source
           FROM version_events
           WHERE apollos_version IS NOT NULL AND apollos_version != ''
         ),
@@ -362,8 +358,7 @@ def _build_app_versions_query(
             events.source_dataset,
             events.source_table,
             events.version_source,
-            MAX(events.seen_at) AS latest_seen_at,
-            COUNT(*) AS version_event_count
+            MAX(events.seen_at) AS latest_seen_at
           FROM app_identity_events events
           JOIN display_churches
             USING (app_identity_key)
@@ -382,14 +377,6 @@ def _build_app_versions_query(
             events.source_dataset,
             events.source_table,
             events.version_source
-        ),
-        app_totals AS (
-          SELECT
-            app_identity_key,
-            COUNT(*) AS event_count,
-            COUNT(DISTINCT COALESCE(user_id, anonymous_id)) AS user_count
-          FROM app_identity_events
-          GROUP BY app_identity_key
         )
         SELECT
           observation.church,
@@ -405,12 +392,8 @@ def _build_app_versions_query(
           observation.source_dataset,
           observation.source_table,
           observation.version_source,
-          observation.latest_seen_at,
-          totals.event_count,
-          totals.user_count
+          observation.latest_seen_at
         FROM version_observations observation
-        JOIN app_totals totals
-          USING (app_identity_key)
         ORDER BY observation.latest_seen_at DESC
     """
     query_config = _query_job_config(
@@ -746,6 +729,16 @@ def _is_newer_observed_version(
 ) -> bool:
     candidate_version = _string_value(candidate.get("apollos_version"))
     current_version = _string_value(current.get("apollos_version"))
+    platform = (_string_value(candidate.get("apollos_platform")) or "unknown").lower()
+    if platform in {"ios", "android"}:
+        candidate_valid = bool(
+            candidate_version and RUNTIME_VERSION_PATTERN.fullmatch(candidate_version)
+        )
+        current_valid = bool(current_version and RUNTIME_VERSION_PATTERN.fullmatch(current_version))
+        if candidate_valid != current_valid:
+            return candidate_valid
+        if not candidate_valid:
+            candidate_version = current_version = None
     if candidate_version and current_version:
         version_compare = compare_versions(candidate_version, current_version)
         if version_compare != 0:

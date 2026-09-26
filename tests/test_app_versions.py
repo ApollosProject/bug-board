@@ -487,13 +487,27 @@ class AppVersionsContextTest(unittest.TestCase):
             },
         ]
         rows.append({**rows[0], "apollos_version": "999", "deployment_track": "internal"})
+        rows.append({**rows[0], "apollos_version": "v999", "app_version": "1.0.99"})
+        rows.append(
+            {
+                **rows[2],
+                "church": "only_bad",
+                "bundle_id": "com.apollos.bad",
+                "apollos_version": "v999",
+            }
+        )
 
         selected = app_versions._select_latest_observed_versions(rows)
 
         grow_church = next(row for row in selected if row["church"] == "grow_church")
-        self.assertEqual(len(selected), 2)
+        only_bad = next(row for row in selected if row["church"] == "only_bad")
+        self.assertEqual(len(selected), 3)
         self.assertEqual(grow_church["apollos_version"], "97")
         self.assertEqual(grow_church["app_version"], "1.0.31")
+        self.assertEqual(
+            app_versions._annotate_version_status([only_bad])[0]["version_status_label"],
+            "Unverified",
+        )
 
     def test_app_identity_uses_bundle_when_application_name_changes(self):
         rows = [
@@ -660,7 +674,9 @@ class AppVersionsContextTest(unittest.TestCase):
         self.assertIn("app_identity_events AS", query)
         self.assertIn("display_churches AS", query)
         self.assertIn("version_observations AS", query)
-        self.assertIn("app_totals AS", query)
+        self.assertNotIn("app_totals AS", query)
+        self.assertNotIn("COUNT(DISTINCT", query)
+        self.assertNotIn("AS user_count", query)
         self.assertIn("MAX(events.seen_at) AS latest_seen_at", query)
         self.assertIn("GROUP BY app_identity_key", query)
         self.assertIn("USING (app_identity_key)", query)
