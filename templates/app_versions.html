@@ -190,7 +190,13 @@
                   {% endif %}
                   <td>
                     <code>{{ row.freshness_display or "TBD" }}</code><br />
-                    <span class="version-muted">{{ "Source target" if tab.key == "roku" else "Top seen" }} {{ row.comparison_display or "unknown" }}</span>
+                    <span class="version-muted">
+                      {% if row.version_status_label == "Unverified" %}
+                        Comparison unavailable
+                      {% else %}
+                        {{ "Source target" if tab.key == "roku" else "Top seen" }} {{ row.comparison_display or "unknown" }}
+                      {% endif %}
+                    </span>
                   </td>
                   <td>
                     <span class="version-status version-status--{{ row.version_status_class or 'observed' }}">

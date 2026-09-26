@@ -219,8 +219,10 @@ build or a measure of all installations. Roku Segment exports currently do not e
 The page first inspects `INFORMATION_SCHEMA.COLUMNS` for the configured Segment tables and only
 queries tables that expose a supported version signal, so Segment lifecycle-only app-store
 `version` fields are not mistaken for Apollos runtime versions. Source freshness means *behind
-top seen* or *top seen* within the same platform, not behind an App Store release. Missing or
-uncomparable signals (including malformed mobile runtimes) are *unverified*. Mobile rows keep
+top seen* or *top seen* within the same platform; Roku uses *behind source*, *at source*, or
+*ahead of source* against the target commit. None of these labels compare against a store release.
+Missing or uncomparable signals (including malformed mobile runtimes) are *unverified* and show
+no comparison. Mobile rows keep
 the highest comparable runtime instead of letting a recent older-client event hide it; TV selects
 the highest stable release tag and Roku selects its source version. Mobile rows prefer the
 `apollos` Segment dataset, TV rows prefer `apollos_tv`, and Roku rows prefer `apollos_roku` so the
