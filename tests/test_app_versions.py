@@ -378,7 +378,9 @@ class AppVersionsContextTest(unittest.TestCase):
         def lookup(url, *, params, timeout):
             ids = params["bundleId"].split(",")
             if "com.example.bad" in ids:
-                raise app_versions.requests.RequestException("bad bundle")
+                error = app_versions.requests.HTTPError("bad bundle")
+                error.response = types.SimpleNamespace(status_code=400)
+                raise error
             return Response(ids)
 
         bundle_ids = ["com.example.bad"] + [
@@ -391,6 +393,36 @@ class AppVersionsContextTest(unittest.TestCase):
         self.assertEqual(versions["com.example.good0"]["version"], "1.40")
         self.assertIn(f"com.example.good{app_versions.APP_STORE_LOOKUP_LIMIT - 1}", versions)
         self.assertNotIn("com.example.bad", versions)
+
+    def test_transient_or_malformed_batch_does_not_retry_every_bundle(self):
+        class Response:
+            def __init__(self, results):
+                self.results = results
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return {"results": self.results}
+
+        bundle_ids = [f"com.example.{i}" for i in range(app_versions.APP_STORE_LOOKUP_LIMIT)]
+        bundle_ids.append("com.example.last")
+        for failure in ("timeout", "malformed"):
+            with self.subTest(failure=failure):
+
+                def lookup(url, *, params, timeout):
+                    ids = params["bundleId"].split(",")
+                    if len(ids) > 1:
+                        if failure == "timeout":
+                            raise app_versions.requests.RequestException("timeout")
+                        return Response({"unexpected": "shape"})
+                    return Response([{"bundleId": ids[0], "version": "1.40"}])
+
+                with patch.object(app_versions.requests, "get", side_effect=lookup) as get:
+                    versions = app_versions._fetch_app_store_versions(bundle_ids)
+                self.assertEqual(get.call_count, 2)
+                self.assertEqual(versions["com.example.last"]["version"], "1.40")
+                self.assertEqual(len(versions), 1)
 
     def test_selects_highest_observed_version_instead_of_most_recent_event(self):
         rows = [

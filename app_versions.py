@@ -617,7 +617,10 @@ def _fetch_app_store_versions(bundle_ids: list[str]) -> dict[str, dict[str, Any]
             timeout=APP_STORE_LOOKUP_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
-        return response.json()["results"]
+        payload = response.json()
+        if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
+            raise ValueError("Invalid App Store lookup response")
+        return payload["results"]
 
     batches = [
         bundle_ids[i : i + APP_STORE_LOOKUP_LIMIT]
@@ -631,8 +634,11 @@ def _fetch_app_store_versions(bundle_ids: list[str]) -> dict[str, dict[str, Any]
             batch = futures.pop(future)
             try:
                 results = future.result()
-            except (requests.RequestException, ValueError, KeyError) as exc:
-                if len(batch) > 1:
+            except (requests.RequestException, ValueError) as exc:
+                response = (
+                    getattr(exc, "response", None) if isinstance(exc, requests.HTTPError) else None
+                )
+                if response is not None and response.status_code == 400 and len(batch) > 1:
                     mid = len(batch) // 2
                     for smaller_batch in (batch[:mid], batch[mid:]):
                         futures[executor.submit(lookup, smaller_batch)] = smaller_batch
