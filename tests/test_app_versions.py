@@ -612,6 +612,7 @@ class AppVersionsContextTest(unittest.TestCase):
             ("apollos", "tracks"): {
                 "timestamp": "timestamp",
                 "church": "church",
+                "buildchurch": "buildChurch",
                 "apollos_version": "apollos_version",
                 "app_version": "app_version",
                 "source_revision": "source_revision",
@@ -660,6 +661,9 @@ class AppVersionsContextTest(unittest.TestCase):
         )
         self.assertIn("CAST(NULL AS STRING) AS source_revision", query)
         self.assertIn("NULLIF(CAST(`groupId` AS STRING), '') AS church", query)
+        self.assertIn("NULLIF(CAST(`buildChurch` AS STRING), '') AS build_church", query)
+        self.assertIn("[SAFE_OFFSET(0)] AS build_church", query)
+        self.assertIn("observation.build_church", query)
         self.assertIn("'analytics_library' AS version_source", query)
         self.assertIn("TIMESTAMP_SUB(", query)
         self.assertIn("INTERVAL @lookback_days DAY", query)
@@ -797,6 +801,8 @@ class AppVersionsRouteTest(unittest.TestCase):
         self.assertIn('data-version-tab="android"', body)
         self.assertIn('id="version-panel-ios"', body)
         self.assertIn("One Church", body)
+        self.assertIn("Unknown build slug", body)
+        self.assertIn("Church seen: one-church", body)
         self.assertIn("<th>Seen build</th>", body)
         self.assertIn("<th>Apple lookup (US)</th>", body)
         self.assertIn("<th>Expo Runtime</th>", body)
@@ -810,6 +816,7 @@ class AppVersionsRouteTest(unittest.TestCase):
     def test_preview_shows_church_slug_and_distinguishes_seen_from_apple_lookup(self):
         row = {
             "church": "apollos_demo",
+            "build_church": "apollos_preview",
             "bundle_id": "com.differential.apollospreview",
             "application_name": "Apollos Preview",
             "app_version": "1.0.0",
@@ -838,7 +845,9 @@ class AppVersionsRouteTest(unittest.TestCase):
         }
         with patch.object(app_module, "get_app_versions_context", return_value=context):
             body = self.client.get("/apps").get_data(as_text=True)
-        self.assertIn("<strong>apollos_demo</strong>", body)
+        self.assertIn("<strong>apollos_preview</strong>", body)
+        self.assertIn("Church seen: apollos_demo", body)
+        self.assertNotIn("<strong>apollos_demo</strong>", body)
         self.assertIn("Apollos Preview", body)
         self.assertIn("Last seen unknown", body)
         self.assertIn("Checked 2026-09-25 08:45 PM EDT", body)

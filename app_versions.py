@@ -39,6 +39,7 @@ TIMESTAMP_COLUMN_CANDIDATES = (
 
 FIELD_CANDIDATES = {
     "church": ("church", "group_id", "groupId"),
+    "build_church": ("build_church", "buildChurch"),
     "apollos_platform": ("apollos_platform", "apollosPlatform", "apollosplatform"),
     "apollos_version": ("apollos_version", "apollosVersion"),
     "app_version": ("app_version", "appVersion"),
@@ -278,6 +279,7 @@ def _build_app_versions_query(
           SELECT
             seen_at,
             COALESCE(NULLIF(church, ''), 'Unknown church') AS church,
+            NULLIF(build_church, '') AS build_church,
             COALESCE(
               NULLIF(apollos_platform, ''),
               IF(source_dataset = 'apollos_roku', 'roku', NULL),
@@ -338,7 +340,9 @@ def _build_app_versions_query(
               church
               ORDER BY IF(church = 'Unknown church', 1, 0), church
               LIMIT 1
-            )[OFFSET(0)] AS church
+            )[OFFSET(0)] AS church,
+            ARRAY_AGG(build_church IGNORE NULLS ORDER BY seen_at DESC LIMIT 1)
+              [SAFE_OFFSET(0)] AS build_church
           FROM app_identity_events
           GROUP BY app_identity_key
         ),
@@ -346,6 +350,7 @@ def _build_app_versions_query(
           SELECT
             events.app_identity_key,
             display_churches.church,
+            display_churches.build_church,
             events.apollos_platform,
             events.application_name,
             events.bundle_id,
@@ -365,6 +370,7 @@ def _build_app_versions_query(
           GROUP BY
             events.app_identity_key,
             display_churches.church,
+            display_churches.build_church,
             events.apollos_platform,
             events.application_name,
             events.bundle_id,
@@ -380,6 +386,7 @@ def _build_app_versions_query(
         )
         SELECT
           observation.church,
+          observation.build_church,
           observation.apollos_platform,
           observation.application_name,
           observation.bundle_id,
