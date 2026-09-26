@@ -150,11 +150,17 @@ def get_prs(repo_id, pr_states, repo_name=None):
                             }
                             title
                             url
+                            baseRefName
+                            repository {
+                                defaultBranchRef {
+                                    name
+                                }
+                            }
                             closedAt
                             isDraft
                             additions
                             reviews(
-                                first: 10,
+                                last: 100,
                                 states: [APPROVED, CHANGES_REQUESTED]
                             ) {
                                 nodes {
@@ -166,7 +172,7 @@ def get_prs(repo_id, pr_states, repo_name=None):
                                 }
                             }
                             timelineItems(
-                                first: 50,
+                                last: 100,
                                 itemTypes: [REVIEW_REQUESTED_EVENT],
                             ) {
                               nodes {
@@ -665,10 +671,10 @@ def get_merged_pr_activity(
 def get_prs_waiting_for_review_by_reviewer():
     """Return PRs waiting on review, grouped by reviewer.
 
-    Includes pull requests with an open review request or active requested-changes
-    reviewer that has been waiting more than 24 hours. Approved PRs are excluded
-    even if GitHub still has leftover review requests. Only includes PRs with
-    fewer than 200 lines added.
+    Includes default-branch pull requests with an open review request or active
+    requested-changes reviewer that has been waiting more than 24 hours.
+    Reviewers who have already approved are excluded, as are approved PRs.
+    Only includes PRs with fewer than 200 lines added.
     """
     all_prs = _get_all_prs(["OPEN"])
     stuck_prs = {}
@@ -676,6 +682,10 @@ def get_prs_waiting_for_review_by_reviewer():
     for pr in all_prs:
         additions = pr.get("additions")
         if additions is None or additions >= 200:
+            continue
+        if pr.get("baseRefName") and pr["baseRefName"] != (
+            ((pr.get("repository") or {}).get("defaultBranchRef") or {}).get("name")
+        ):
             continue
         if has_known_merge_conflicts(pr):
             continue
@@ -710,6 +720,14 @@ def get_prs_waiting_for_review_by_reviewer():
         for reviewer in reviewers:
             requested_at = latest_review_request_times_by_reviewer.get(reviewer)
             if requested_at is None or requested_at >= threshold:
+                continue
+            if any(
+                review.get("state") == "APPROVED"
+                and (review.get("author") or {}).get("login") == reviewer
+                and (approved_at := _parse_github_timestamp(review.get("submittedAt")))
+                and approved_at >= requested_at
+                for review in pr["reviews"]["nodes"]
+            ):
                 continue
             if reviewer not in stuck_prs:
                 stuck_prs[reviewer] = []
