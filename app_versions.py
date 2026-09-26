@@ -263,8 +263,6 @@ def _build_app_versions_query(
               CURRENT_TIMESTAMP(),
               INTERVAL @lookback_days DAY
             )
-              AND `{version_column}` IS NOT NULL
-              AND CAST(`{version_column}` AS STRING) != ''
             """
         )
 
@@ -306,7 +304,7 @@ def _build_app_versions_query(
             source_table,
             version_source
           FROM version_events
-          WHERE apollos_version IS NOT NULL AND apollos_version != ''
+          WHERE apollos_version IS NOT NULL OR build_church IS NOT NULL
         ),
         filtered_events AS (
           SELECT *
@@ -337,7 +335,7 @@ def _build_app_versions_query(
           SELECT
             app_identity_key,
             ARRAY_AGG(
-              church
+              IF(apollos_version IS NOT NULL, church, NULL) IGNORE NULLS
               ORDER BY IF(church = 'Unknown church', 1, 0), church
               LIMIT 1
             )[OFFSET(0)] AS church,
@@ -367,6 +365,7 @@ def _build_app_versions_query(
           FROM app_identity_events events
           JOIN display_churches
             USING (app_identity_key)
+          WHERE events.apollos_version IS NOT NULL
           GROUP BY
             events.app_identity_key,
             display_churches.church,
