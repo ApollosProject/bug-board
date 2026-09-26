@@ -626,16 +626,23 @@ def _fetch_app_store_versions(bundle_ids: list[str]) -> dict[str, dict[str, Any]
     app_store_versions: dict[str, dict[str, Any]] = {}
     with ThreadPoolExecutor(max_workers=min(APP_STORE_LOOKUP_WORKERS, len(batches))) as executor:
         futures = {executor.submit(lookup, batch): batch for batch in batches}
-        for future in as_completed(futures):
+        while futures:
+            future = next(as_completed(futures))
+            batch = futures.pop(future)
             try:
                 results = future.result()
             except (requests.RequestException, ValueError, KeyError) as exc:
-                logging.warning("App Store version lookup failed for %s: %s", futures[future], exc)
+                if len(batch) > 1:
+                    mid = len(batch) // 2
+                    for smaller_batch in (batch[:mid], batch[mid:]):
+                        futures[executor.submit(lookup, smaller_batch)] = smaller_batch
+                else:
+                    logging.warning("App Store version lookup failed for %s: %s", batch, exc)
                 continue
             for result in results:
                 if (
                     isinstance(result, dict)
-                    and result.get("bundleId") in futures[future]
+                    and result.get("bundleId") in batch
                     and _string_value(result.get("version"))
                 ):
                     app_store_versions[result["bundleId"]] = result

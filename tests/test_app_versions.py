@@ -360,6 +360,38 @@ class AppVersionsContextTest(unittest.TestCase):
             ],
         )
 
+    def test_failed_batch_does_not_hide_healthy_app_versions(self):
+        class Response:
+            def __init__(self, ids):
+                self.ids = ids
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return {
+                    "results": [
+                        {"bundleId": bundle_id, "version": "1.40"} for bundle_id in self.ids
+                    ]
+                }
+
+        def lookup(url, *, params, timeout):
+            ids = params["bundleId"].split(",")
+            if "com.example.bad" in ids:
+                raise app_versions.requests.RequestException("bad bundle")
+            return Response(ids)
+
+        bundle_ids = ["com.example.bad"] + [
+            f"com.example.good{i}" for i in range(app_versions.APP_STORE_LOOKUP_LIMIT)
+        ]
+        with patch.object(app_versions.requests, "get", side_effect=lookup):
+            versions = app_versions._fetch_app_store_versions(bundle_ids)
+
+        self.assertEqual(len(versions), app_versions.APP_STORE_LOOKUP_LIMIT)
+        self.assertEqual(versions["com.example.good0"]["version"], "1.40")
+        self.assertIn(f"com.example.good{app_versions.APP_STORE_LOOKUP_LIMIT - 1}", versions)
+        self.assertNotIn("com.example.bad", versions)
+
     def test_selects_highest_observed_version_instead_of_most_recent_event(self):
         rows = [
             {
