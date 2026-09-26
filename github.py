@@ -721,13 +721,17 @@ def get_prs_waiting_for_review_by_reviewer():
             requested_at = latest_review_request_times_by_reviewer.get(reviewer)
             if requested_at is None or requested_at >= threshold:
                 continue
-            if any(
-                review.get("state") == "APPROVED"
-                and (review.get("author") or {}).get("login") == reviewer
-                and (approved_at := _parse_github_timestamp(review.get("submittedAt")))
-                and approved_at >= requested_at
-                for review in pr["reviews"]["nodes"]
-            ):
+            latest_review = max(
+                (
+                    (submitted_at, review["state"])
+                    for review in pr["reviews"]["nodes"]
+                    if (review.get("author") or {}).get("login") == reviewer
+                    and (submitted_at := _parse_github_timestamp(review.get("submittedAt")))
+                    and submitted_at >= requested_at
+                ),
+                default=None,
+            )
+            if latest_review and latest_review[1] == "APPROVED":
                 continue
             if reviewer not in stuck_prs:
                 stuck_prs[reviewer] = []

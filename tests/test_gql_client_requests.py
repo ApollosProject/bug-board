@@ -603,6 +603,27 @@ class GraphQLClientRequestTests(unittest.TestCase):
                 {"dylan": [pr], "michael": [pr]},
             )
 
+        pr["reviews"]["nodes"].append(
+            {
+                "state": "APPROVED",
+                "author": {"login": "michael"},
+                "submittedAt": "2020-01-03T12:00:00Z",
+            }
+        )
+        with patch.object(github, "_get_all_prs", return_value=[pr]):
+            self.assertEqual(github.get_prs_waiting_for_review_by_reviewer(), {"dylan": [pr]})
+
+        pr["reviewDecision"] = "CHANGES_REQUESTED"
+        pr["reviews"]["nodes"].append(
+            {
+                "state": "CHANGES_REQUESTED",
+                "author": {"login": "michael"},
+                "submittedAt": "2020-01-04T00:00:00Z",
+            }
+        )
+        with patch.object(github, "_get_all_prs", return_value=[pr]):
+            self.assertEqual(github.get_prs_waiting_for_review_by_reviewer(), {"michael": [pr]})
+
     def test_waiting_for_review_only_notifies_active_change_request_reviewer(self):
         class FixedDateTime(datetime):
             @classmethod
