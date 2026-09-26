@@ -802,7 +802,7 @@ class AppVersionsRouteTest(unittest.TestCase):
         self.assertIn("<th>Apple lookup (US)</th>", body)
         self.assertIn("<th>Expo Runtime</th>", body)
         self.assertIn("Top seen 101", body)
-        self.assertIn("<th>Source freshness</th>", body)
+        self.assertIn("<th>Status</th>", body)
         self.assertIn("Checked 2026-05-12 10:15 AM EDT", body)
         self.assertIn("Last seen 2026-05-12 10:00 AM EDT", body)
         self.assertIn("Behind top seen", body)

@@ -164,7 +164,7 @@
                 <th>Seen build</th>
                 {% if tab.key == "ios" %}<th>Apple lookup (US)</th>{% endif %}
                 <th>{{ "Expo Runtime" if tab.key in ("ios", "android") else "Release" if tab.key in ("amazon", "androidtv", "tv", "tvos") else "Commit" if tab.key == "roku" else "Version" }}</th>
-                <th>Source freshness</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
