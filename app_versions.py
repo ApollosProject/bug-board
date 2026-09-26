@@ -48,8 +48,6 @@ FIELD_CANDIDATES = {
     "source_revision": ("source_revision", "sourceRevision"),
     "source_version": ("source_version", "sourceVersion"),
     "deployment_track": ("deployment_track", "deploymentTrack"),
-    "user_id": ("user_id", "userId"),
-    "anonymous_id": ("anonymous_id", "anonymousId"),
 }
 
 ROKU_ANALYTICS_VERSION_CANDIDATES = ("context_library_version",)
@@ -57,6 +55,7 @@ RELEASE_TAG_PLATFORMS = {"amazon", "androidtv", "tv", "tvos"}
 STABLE_RELEASE_TAG_PATTERN = re.compile(r"^v\d{4}\.\d{2}\.\d{2}\.\d{2}$")
 ALPHA_RELEASE_TAG_PATTERN = re.compile(r"^(v\d{4}\.\d{2}\.\d{2}\.\d{2})-alpha\.\d+$")
 SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{7,40}$")
+RUNTIME_VERSION_PATTERN = re.compile(r"\d+(?:\.\d+)*")
 INTERNAL_DEPLOYMENT_TRACKS = {"beta", "development", "internal", "preview", "prerelease"}
 
 
@@ -303,9 +302,7 @@ def _build_app_versions_query(
             deployment_track,
             source_dataset,
             source_table,
-            version_source,
-            user_id,
-            anonymous_id
+            version_source
           FROM version_events
           WHERE apollos_version IS NOT NULL AND apollos_version != ''
         ),
@@ -361,8 +358,7 @@ def _build_app_versions_query(
             events.source_dataset,
             events.source_table,
             events.version_source,
-            MAX(events.seen_at) AS latest_seen_at,
-            COUNT(*) AS version_event_count
+            MAX(events.seen_at) AS latest_seen_at
           FROM app_identity_events events
           JOIN display_churches
             USING (app_identity_key)
@@ -381,14 +377,6 @@ def _build_app_versions_query(
             events.source_dataset,
             events.source_table,
             events.version_source
-        ),
-        app_totals AS (
-          SELECT
-            app_identity_key,
-            COUNT(*) AS event_count,
-            COUNT(DISTINCT COALESCE(user_id, anonymous_id)) AS user_count
-          FROM app_identity_events
-          GROUP BY app_identity_key
         )
         SELECT
           observation.church,
@@ -404,12 +392,8 @@ def _build_app_versions_query(
           observation.source_dataset,
           observation.source_table,
           observation.version_source,
-          observation.latest_seen_at,
-          totals.event_count,
-          totals.user_count
+          observation.latest_seen_at
         FROM version_observations observation
-        JOIN app_totals totals
-          USING (app_identity_key)
         ORDER BY observation.latest_seen_at DESC
     """
     query_config = _query_job_config(
@@ -512,6 +496,12 @@ def _annotate_version_status(
                 else "apollos_version"
             )
         )
+        if (
+            platform in {"ios", "android"}
+            and version
+            and not RUNTIME_VERSION_PATTERN.fullmatch(version)
+        ):
+            continue
         if version and (
             platform not in latest_by_platform
             or compare_versions(version, latest_by_platform[platform]) > 0
@@ -523,10 +513,15 @@ def _annotate_version_status(
         updated = dict(row)
         platform = (_string_value(row.get("apollos_platform")) or "unknown").lower()
         version = _string_value(row.get("apollos_version"))
+        comparable_runtime = bool(version and RUNTIME_VERSION_PATTERN.fullmatch(version))
         source_version = _string_value(row.get("source_version"))
         source_revision = _string_value(row.get("source_revision"))
         release_version = _string_value(row.get("canonical_source_version"))
-        latest_version = latest_by_platform.get(platform)
+        latest_version = (
+            latest_by_platform.get(platform)
+            if platform in {"ios", "android", *RELEASE_TAG_PLATFORMS}
+            else None
+        )
         is_outdated = False
         freshness_display = version or "TBD"
         revision_status = None
@@ -538,23 +533,40 @@ def _annotate_version_status(
             freshness_display = source_revision[:7] if source_revision else "TBD"
             revision_status = roku_statuses.get(source_revision or "")
             is_outdated = revision_status == "behind"
-        elif version and latest_version:
+        elif platform in {"ios", "android"} and comparable_runtime and latest_version and version:
             is_outdated = compare_versions(version, latest_version) < 0
 
         updated["is_outdated"] = is_outdated
         updated["freshness_display"] = freshness_display
-        if freshness_display == "TBD":
-            version_status_label = "TBD"
-            version_status_class = "observed"
-        elif platform == "roku" and revision_status not in {"ahead", "behind", "identical"}:
-            version_status_label = "Unverified" if revision_status else "Observed"
-            version_status_class = "observed"
-        elif platform in RELEASE_TAG_PLATFORMS and not release_version:
+        updated["comparison_display"] = (
+            (_string_value(source_context.get("roku_target_revision")) or "")[:7] or "unknown"
+            if platform == "roku"
+            else latest_version or "unknown"
+        )
+        if platform == "roku":
+            version_status_label = {
+                "behind": "Behind source",
+                "identical": "At source",
+                "ahead": "Ahead of source",
+            }.get(revision_status or "", "Unverified")
+        elif (
+            platform not in {"ios", "android", *RELEASE_TAG_PLATFORMS}
+            or (platform in RELEASE_TAG_PLATFORMS and not release_version)
+            or (platform in {"ios", "android"} and not comparable_runtime)
+            or freshness_display == "TBD"
+        ):
             version_status_label = "Unverified"
-            version_status_class = "observed"
+        elif latest_version:
+            version_status_label = "Behind top seen" if is_outdated else "Top seen"
         else:
-            version_status_label = "Outdated" if is_outdated else "Current"
-            version_status_class = "outdated" if is_outdated else "current"
+            version_status_label = "Unverified"
+        version_status_class = (
+            "observed"
+            if version_status_label == "Unverified"
+            else "outdated"
+            if is_outdated
+            else "current"
+        )
         updated["version_status_label"] = version_status_label
         updated["version_status_class"] = version_status_class
         updated["latest_seen_display"] = format_timestamp(row.get("latest_seen_at"))
@@ -588,15 +600,15 @@ def _enrich_app_store_versions(rows: list[dict[str, Any]]) -> list[dict[str, Any
         except ValueError as exc:
             logging.warning("App Store version lookup returned invalid JSON: %s", exc)
 
+    checked_at = format_timestamp(datetime.now().astimezone())
     enriched = []
     for row in rows:
         updated = dict(row)
         bundle_id = _string_value(row.get("bundle_id"))
-        store_version = (
-            app_store_versions.get(bundle_id or "")
-            if _should_lookup_app_store_version(row)
-            else None
-        )
+        should_lookup = _should_lookup_app_store_version(row)
+        if should_lookup:
+            updated["store_checked_display"] = checked_at
+        store_version = app_store_versions.get(bundle_id or "") if should_lookup else None
         if store_version and (version := _string_value(store_version.get("version"))):
             updated["latest_app_version"] = version
             updated["latest_app_version_source"] = "app_store"
@@ -715,6 +727,16 @@ def _is_newer_observed_version(
 ) -> bool:
     candidate_version = _string_value(candidate.get("apollos_version"))
     current_version = _string_value(current.get("apollos_version"))
+    platform = (_string_value(candidate.get("apollos_platform")) or "unknown").lower()
+    if platform in {"ios", "android"}:
+        candidate_valid = bool(
+            candidate_version and RUNTIME_VERSION_PATTERN.fullmatch(candidate_version)
+        )
+        current_valid = bool(current_version and RUNTIME_VERSION_PATTERN.fullmatch(current_version))
+        if candidate_valid != current_valid:
+            return candidate_valid
+        if not candidate_valid:
+            candidate_version = current_version = None
     if candidate_version and current_version:
         version_compare = compare_versions(candidate_version, current_version)
         if version_compare != 0:
