@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
@@ -11,6 +12,8 @@ from typing import Any
 
 import requests
 from packaging.version import InvalidVersion, Version
+
+from mobile_releases import fetch_live_mobile_releases
 
 DEFAULT_BIGQUERY_ANALYTICS_PROJECT_ID = "apollos-project"
 DEFAULT_BIGQUERY_ANALYTICS_DATASETS = ("apollos", "apollos_tv", "apollos_roku")
@@ -41,6 +44,8 @@ FIELD_CANDIDATES = {
     "apollos_platform": ("apollos_platform", "apollosPlatform", "apollosplatform"),
     "apollos_version": ("apollos_version", "apollosVersion"),
     "app_version": ("app_version", "appVersion"),
+    "native_build": ("context_app_build",),
+    "native_version": ("context_app_version",),
     "app_update_id": ("app_update_id", "appUpdateId"),
     "bundle_id": ("bundle_id", "bundleId"),
     "application_name": ("application_name", "applicationName"),
@@ -72,7 +77,47 @@ class AppVersionsError(RuntimeError):
 
 
 def get_app_versions_context() -> dict[str, Any]:
+    if not os.getenv("REDIS_URL", "").strip():
+        return _compute_app_versions_context()
+    from fleet_health_cache import _get_redis_client
+
+    try:
+        client = _get_redis_client()
+        raw = client.get(_app_versions_cache_key()) if client else None
+        if raw:
+            context = json.loads(raw)
+            if isinstance(context, dict) and isinstance(context.get("rows"), list):
+                return context
+    except Exception:
+        logging.exception("Unable to read app versions cache")
+    return {
+        "status": "unavailable",
+        "rows": [],
+        "lookback_days": _get_app_versions_config().lookback_days,
+        "error_message": "App release data is refreshing. The worker must be running.",
+    }
+
+
+def _app_versions_cache_key() -> str:
+    return f"apps:live-runtime:v1:{_get_app_versions_config()!r}"
+
+
+def refresh_app_versions_cache() -> None:
+    from fleet_health_cache import _get_redis_client
+
+    client = _get_redis_client()
+    if client is None:
+        return
+    context = _compute_app_versions_context()
+    try:
+        client.setex(_app_versions_cache_key(), 300, json.dumps(context, default=str))
+    except Exception:
+        logging.exception("Unable to store app versions cache")
+
+
+def _compute_app_versions_context() -> dict[str, Any]:
     config = _get_app_versions_config()
+    checked_at = time.time()
     try:
         rows, discovered_tables = fetch_app_versions(config)
     except AppVersionsError as exc:
@@ -103,6 +148,7 @@ def get_app_versions_context() -> dict[str, Any]:
         "status_label": "Ready",
         "rows": rows,
         "platform_tabs": build_platform_tabs(rows),
+        "checked_at": datetime.fromtimestamp(checked_at).astimezone().strftime("%Y-%m-%d %H:%M %Z"),
         "lookback_days": config.lookback_days,
         "configured_tables": discovered_tables,
         "configured_datasets": config.datasets,
@@ -116,7 +162,11 @@ def fetch_app_versions(config: AppVersionsConfig) -> tuple[list[dict[str, Any]],
     results = client.query(query, job_config=query_config).result()
     rows = [_row_to_dict(row) for row in results]
     source_context = _fetch_platform_source_context()
-    latest_rows = _select_latest_observed_versions(rows, source_context["stable_release_revisions"])
+    latest_rows = _select_latest_observed_versions(
+        [row for row in rows if str(row.get("apollos_platform")).lower() not in {"ios", "android"}],
+        source_context["stable_release_revisions"],
+    )
+    latest_rows += _select_live_mobile_versions(rows, fetch_live_mobile_releases(rows))
     source_context["roku_revision_statuses"] = _fetch_roku_revision_statuses(
         latest_rows,
         source_context.get("roku_target_revision"),
@@ -293,6 +343,8 @@ def _build_app_versions_query(
             ) AS bundle_id,
             apollos_version,
             app_version,
+            native_build,
+            native_version,
             app_update_id,
             source_revision,
             source_version,
@@ -351,6 +403,8 @@ def _build_app_versions_query(
             events.bundle_id,
             events.apollos_version,
             events.app_version,
+            events.native_build,
+            events.native_version,
             events.app_update_id,
             events.source_revision,
             events.source_version,
@@ -372,6 +426,8 @@ def _build_app_versions_query(
             events.bundle_id,
             events.apollos_version,
             events.app_version,
+            events.native_build,
+            events.native_version,
             events.app_update_id,
             events.source_revision,
             events.source_version,
@@ -388,6 +444,8 @@ def _build_app_versions_query(
           observation.bundle_id,
           observation.apollos_version,
           observation.app_version,
+          observation.native_build,
+          observation.native_version,
           observation.app_update_id,
           observation.source_revision,
           observation.source_version,
@@ -510,12 +568,6 @@ def _annotate_version_status(
                 else "apollos_version"
             )
         )
-        if (
-            platform in {"ios", "android"}
-            and version
-            and not RUNTIME_VERSION_PATTERN.fullmatch(version)
-        ):
-            continue
         if platform in {"ios", "android"}:
             continue
         if version and (
@@ -541,7 +593,7 @@ def _annotate_version_status(
             else None
         )
         is_outdated = False
-        freshness_display = version or "TBD"
+        freshness_display = row.get("live_runtime_display") or version or "Unknown"
         revision_status = None
         if platform in RELEASE_TAG_PLATFORMS:
             freshness_display = release_version or source_version or "TBD"
@@ -587,9 +639,14 @@ def _annotate_version_status(
                 version_status_label = "Behind top seen" if is_outdated else "Top seen"
         else:
             version_status_label = "Unverified"
+        if platform in {"ios", "android"}:
+            if row.get("live_runtime_display") and not version:
+                version_status_label = "Multiple live runtimes"
+            elif comparable_runtime and not latest_version:
+                updated["live_status_detail"] = "Release target unavailable"
         version_status_class = (
             "observed"
-            if version_status_label == "Unverified"
+            if version_status_label in {"Unverified", "Multiple live runtimes"}
             else "outdated"
             if is_outdated
             else "current"
@@ -606,6 +663,54 @@ def _annotate_version_status(
         )
     )
     return annotated
+
+
+def _select_live_mobile_versions(
+    rows: list[dict[str, Any]], releases: dict[tuple[str, str], dict[str, Any]]
+) -> list[dict[str, Any]]:
+    by_app: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    for row in rows:
+        key = _app_identity_key(row)
+        if key[1] in {"ios", "android"}:
+            by_app.setdefault(key, []).append(row)
+
+    selected = []
+    for (_, platform, bundle), observations in by_app.items():
+        # Display identity can come from any observation; runtime cannot.
+        updated = max(
+            observations, key=lambda row: _timestamp_sort_key(row.get("latest_seen_at"))
+        ).copy()
+        updated["apollos_version"] = None
+        updated["live_status_detail"] = "Store release could not be verified"
+        release = releases.get((platform, bundle))
+        builds = release.get("builds") if release else None
+        if builds == []:
+            updated["live_status_detail"] = "No published store build"
+        elif builds:
+            runtimes = set()
+            for build in builds:
+                matches = {
+                    _string_value(row.get("apollos_version"))
+                    for row in observations
+                    if _string_value(row.get("native_build")) == build["native_build"]
+                    and (
+                        platform == "android"
+                        or _string_value(row.get("native_version")) == build["native_version"]
+                    )
+                }
+                if len(matches) != 1 or not RUNTIME_VERSION_PATTERN.fullmatch(
+                    next(iter(matches)) or ""
+                ):
+                    updated["live_status_detail"] = "Live build has no unique runtime match"
+                    break
+                runtimes.update(matches)
+            else:
+                verified = sorted((runtime for runtime in runtimes if runtime), key=_version_key)
+                updated["live_runtime_display"] = ", ".join(verified)
+                updated["apollos_version"] = verified[0] if len(verified) == 1 else None
+                updated["live_status_detail"] = "Published store build matched by native build ID"
+        selected.append(updated)
+    return selected
 
 
 def _select_latest_observed_versions(

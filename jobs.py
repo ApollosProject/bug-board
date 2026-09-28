@@ -12,6 +12,7 @@ import schedule
 from dotenv import load_dotenv
 from tenacity import before_sleep_log, retry, stop_after_attempt, wait_fixed
 
+from app_versions import refresh_app_versions_cache
 from config import load_config
 from constants import ENGINEERING_TEAM_SLUG, PRIORITY_TO_SCORE
 from fleet_health_cache import refresh_fleet_health_cache, should_use_redis_cache
@@ -927,6 +928,7 @@ def run_debug_jobs() -> None:
         refresh_airflow_fleet_health_cache_job()
         refresh_leaderboard_cache_job()
         refresh_regression_summary_cache_job()
+        refresh_app_versions_cache()
     post_performance_outliers()
     post_priority_bugs()
     post_leaderboard()
@@ -944,6 +946,8 @@ def configure_scheduled_jobs() -> None:
         refresh_airflow_fleet_health_cache_job()
         schedule.every(refresh_interval_seconds).seconds.do(refresh_leaderboard_cache_job)
         refresh_leaderboard_cache_job()
+        schedule.every(180).seconds.do(refresh_app_versions_cache)
+        refresh_app_versions_cache()
         schedule.every(REGRESSION_CACHE_REFRESH_HOURS).hours.do(
             start_regression_summary_cache_refresh_job
         )

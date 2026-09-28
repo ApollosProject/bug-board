@@ -4,7 +4,7 @@ import types
 import unittest
 from datetime import datetime, timezone
 from typing import Any, cast
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 def _install_import_shims() -> None:
@@ -58,6 +58,26 @@ import app_versions  # noqa: E402
 
 
 class AppVersionsContextTest(unittest.TestCase):
+    def test_redis_requests_never_make_cold_store_calls_and_cache_expires(self):
+        client = Mock()
+        client.get.return_value = None
+        with patch.dict(app_versions.os.environ, {"REDIS_URL": "redis://local-fixture"}):
+            with patch("fleet_health_cache._get_redis_client", return_value=client):
+                with patch.object(app_versions, "_compute_app_versions_context") as compute:
+                    self.assertEqual(
+                        app_versions.get_app_versions_context()["status"], "unavailable"
+                    )
+                    compute.assert_not_called()
+                    compute.return_value = {"status": "ready", "rows": [], "platform_tabs": []}
+                    app_versions.refresh_app_versions_cache()
+                    key, ttl, payload = client.setex.call_args.args
+                    self.assertEqual(ttl, 300)
+                    client.get.return_value = payload
+                    compute.reset_mock()
+                    self.assertEqual(app_versions.get_app_versions_context()["status"], "ready")
+                    compute.assert_not_called()
+                    client.get.assert_called_with(key)
+
     def test_default_config_targets_apollos_bigquery_datasets(self):
         with patch.dict(app_versions.os.environ, {}, clear=False):
             for env_name in (
@@ -112,7 +132,7 @@ class AppVersionsContextTest(unittest.TestCase):
             ):
                 app_versions._build_bigquery_credentials()
 
-    def test_annotates_outdated_apps_by_platform_latest_runtime(self):
+    def test_annotates_mobile_against_release_and_tv_against_observations(self):
         rows = [
             {
                 "church": "one-church",
@@ -238,6 +258,94 @@ class AppVersionsContextTest(unittest.TestCase):
         self.assertTrue(app_versions._revisions_match("abcdef123456", "abcdef1"))
         self.assertFalse(app_versions._revisions_match("abcdef123456", "abc"))
 
+    def test_mobile_runtime_matches_the_live_native_build_not_newer_test_builds(self):
+        rows = [
+            {
+                "apollos_platform": platform,
+                "bundle_id": "com.church",
+                "church": "church",
+                "native_version": "1.0",
+                "native_build": build,
+                "apollos_version": runtime,
+                "deployment_track": "internal",
+            }
+            for platform in ("ios", "android")
+            for build, runtime in (("123", "112"), ("124", "114"))
+        ]
+        releases = {
+            (platform, "com.church"): {"builds": [{"native_build": "123", "native_version": "1.0"}]}
+            for platform in ("ios", "android")
+        }
+        selected = app_versions._select_live_mobile_versions(rows, releases)
+        self.assertEqual([row["apollos_version"] for row in selected], ["112", "112"])
+        # A promoted TestFlight/internal binary is live regardless of its baked-in track label.
+        annotated = app_versions._annotate_version_status(
+            selected, {"mobile_release_runtime": "112"}
+        )
+        self.assertTrue(all(row["version_status_label"] == "At release" for row in annotated))
+        for platform in ("ios", "android"):
+            releases[(platform, "com.church")]["builds"][0]["native_build"] = "missing"
+        self.assertTrue(
+            all(
+                row["apollos_version"] is None
+                for row in app_versions._select_live_mobile_versions(rows, releases)
+            )
+        )
+
+    def test_mobile_does_not_guess_from_marketing_version_or_conflicting_runtimes(self):
+        row = {
+            "apollos_platform": "ios",
+            "bundle_id": "com.church",
+            "church": "church",
+            "native_version": "1.0",
+            "native_build": "123",
+            "apollos_version": "112",
+        }
+        release = {
+            ("ios", "com.church"): {"builds": [{"native_build": "123", "native_version": "1.0"}]}
+        }
+        for observations in (
+            [{**row, "native_build": None}],
+            [{**row, "native_version": "0.9"}],
+            [row, {**row, "apollos_version": "114"}],
+            [row, {**row, "apollos_version": "invalid"}],
+        ):
+            with self.subTest(observations=observations):
+                selected = app_versions._select_live_mobile_versions(observations, release)
+                self.assertIsNone(selected[0]["apollos_version"])
+                annotated = app_versions._annotate_version_status(
+                    selected, {"mobile_release_runtime": "112"}
+                )
+                self.assertEqual(annotated[0]["version_status_label"], "Unverified")
+                self.assertEqual(annotated[0]["freshness_display"], "Unknown")
+        self.assertIsNone(
+            app_versions._select_live_mobile_versions([row], {})[0]["apollos_version"]
+        )
+
+    def test_multiple_published_android_runtimes_are_not_claimed_fully_current(self):
+        rows = [
+            {
+                "apollos_platform": "android",
+                "bundle_id": "com.church",
+                "church": "church",
+                "native_build": build,
+                "apollos_version": runtime,
+            }
+            for build, runtime in (("123", "104"), ("124", "112"))
+        ]
+        release = {
+            ("android", "com.church"): {
+                "builds": [{"native_build": "123"}, {"native_build": "124"}]
+            }
+        }
+        selected = app_versions._select_live_mobile_versions(rows, release)
+        annotated = app_versions._annotate_version_status(
+            selected, {"mobile_release_runtime": "112"}
+        )
+        self.assertEqual(annotated[0]["freshness_display"], "104, 112")
+        self.assertEqual(annotated[0]["version_status_label"], "Multiple live runtimes")
+        self.assertEqual(annotated[0]["version_status_class"], "observed")
+
     def test_mobile_compares_to_release_not_highest_observed(self):
         rows = [
             {"apollos_platform": "ios", "apollos_version": version, "church": version}
@@ -255,8 +363,6 @@ class AppVersionsContextTest(unittest.TestCase):
         self.assertTrue(all(row["version_status_label"] == "Unverified" for row in unavailable))
 
     def test_source_context_uses_latest_stable_tag_runtime(self):
-        import base64
-
         def github(path, params=None):
             if path == "tags":
                 return [
@@ -482,6 +588,8 @@ class AppVersionsContextTest(unittest.TestCase):
                 "buildchurch": "buildChurch",
                 "apollos_version": "apollos_version",
                 "app_version": "app_version",
+                "context_app_build": "context_app_build",
+                "context_app_version": "context_app_version",
                 "source_revision": "source_revision",
                 "source_version": "source_version",
                 "deployment_track": "deployment_track",
@@ -522,6 +630,10 @@ class AppVersionsContextTest(unittest.TestCase):
         self.assertIn("NULLIF(CAST(`source_revision` AS STRING), '') AS source_revision", query)
         self.assertIn("NULLIF(CAST(`sourceVersion` AS STRING), '') AS source_version", query)
         self.assertIn("AS deployment_track", query)
+        self.assertIn("CAST(`context_app_build` AS STRING)", query)
+        self.assertIn("observation.native_build", query)
+        self.assertIn("observation.native_version", query)
+        self.assertIn("CAST(NULL AS STRING) AS native_build", query)
         self.assertIn(
             "NULLIF(CAST(`context_library_version` AS STRING), '') AS apollos_version",
             query,
@@ -669,7 +781,7 @@ class AppVersionsRouteTest(unittest.TestCase):
         self.assertIn("One Church", body)
         self.assertIn("com.one", body)
         self.assertIn("<th>App</th>", body)
-        self.assertIn("<th>Version</th>", body)
+        self.assertIn("<th>Live runtime</th>", body)
         self.assertIn("<th>Status</th>", body)
         self.assertNotIn("<td>\n                  <td>", body)
         self.assertNotIn("Apple lookup", body)

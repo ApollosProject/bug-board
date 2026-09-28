@@ -124,7 +124,8 @@
 <section class="version-header">
   <div>
     <h1>Apps</h1>
-    <p>Highest version observed per app in the last {{ lookback_days }} days. Mobile compares with the latest stable Platforms release (not store availability); TV with the top release seen, Roku with source.</p>
+    <p>Mobile shows the runtime of the published store build, compared with the latest stable release. Unverified means the live build could not be matched. TV and Roku use observations from the last {{ lookback_days }} days.</p>
+    {% if checked_at %}<p class="version-muted">Checked {{ checked_at }}</p>{% endif %}
   </div>
 </section>
 
@@ -168,7 +169,7 @@
             <thead>
               <tr>
                 <th>App</th>
-                <th>Version</th>
+                <th>{{ "Live runtime" if tab.key in ("ios", "android") else "Version" }}</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -189,6 +190,9 @@
                     <span class="version-status version-status--{{ row.version_status_class or 'observed' }}">
                       {{ row.version_status_label or "Unverified" }}
                     </span>
+                    {% if row.live_status_detail and row.version_status_label == "Unverified" %}
+                      <br /><small class="version-muted">{{ row.live_status_detail }}</small>
+                    {% endif %}
                   </td>
                 </tr>
               {% endfor %}

@@ -212,7 +212,8 @@ class ConfigureScheduledJobsTest(unittest.TestCase):
             recorded_jobs,
         )
 
-    def test_schedules_leaderboard_refresh_when_redis_is_configured(self):
+    @patch.object(jobs_module, "refresh_app_versions_cache")
+    def test_schedules_leaderboard_refresh_when_redis_is_configured(self, refresh_apps):
         recorded_jobs = []
 
         def fake_every(interval=None):
@@ -243,6 +244,13 @@ class ConfigureScheduledJobsTest(unittest.TestCase):
                                 recorded_jobs,
                             )
                             start_regression_refresh.assert_called_once_with()
+                            refresh_apps.assert_called_once_with()
+                            self.assertTrue(
+                                any(
+                                    job["func"] is refresh_apps and job["interval"] == 180
+                                    for job in recorded_jobs
+                                )
+                            )
 
 
 class RegressionSummaryCacheRefreshTest(unittest.TestCase):
