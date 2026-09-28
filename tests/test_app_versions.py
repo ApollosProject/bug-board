@@ -783,6 +783,10 @@ class AppVersionsRouteTest(unittest.TestCase):
         self.assertIn("<th>App</th>", body)
         self.assertIn("<th>Live runtime</th>", body)
         self.assertIn("<th>Status</th>", body)
+        for label in ("App", "Live runtime", "Status"):
+            self.assertEqual(
+                body.count(f'<span class="version-cell-label version-muted">{label}</span>'), 3
+            )
         self.assertNotIn("<td>\n                  <td>", body)
         self.assertNotIn("Apple lookup", body)
         self.assertNotIn("<th>Seen build</th>", body)

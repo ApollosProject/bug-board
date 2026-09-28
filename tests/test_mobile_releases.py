@@ -60,6 +60,12 @@ class MobileReleasesTest(unittest.TestCase):
                 {"native_build": "123", "native_version": "1.10"},
             ],
         )
+        # Apple's live response exposes the legacy filter state and the modern state together.
+        payload["data"][1]["attributes"]["appVersionState"] = "READY_FOR_DISTRIBUTION"
+        self.assertEqual(
+            mobile_releases._published_apple_builds(payload),
+            [{"native_build": "123", "native_version": "1.10"}],
+        )
         payload["links"] = {"next": "more"}
         with self.assertRaises(ValueError):
             mobile_releases._published_apple_builds(payload)

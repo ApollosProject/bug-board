@@ -104,6 +104,7 @@ def _apple_builds(church: str, bundle: str) -> list[dict[str, str]]:
             f"{APPLE_API_URL}/apps/{apps[0]['id']}/appStoreVersions",
             params={
                 "filter[platform]": "IOS",
+                # Legacy filter name; appVersionState calls this READY_FOR_DISTRIBUTION.
                 "filter[appStoreState]": "READY_FOR_SALE",
                 "include": "build",
                 "limit": "200",

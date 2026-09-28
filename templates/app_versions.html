@@ -43,12 +43,15 @@
   .version-table th:first-child { width: 45%; }
   .version-table th:nth-child(2) { width: 20%; }
 
+  .version-cell-label { display: none; }
+
   @media (max-width: 600px) {
     .version-table, .version-table tbody, .version-table tr, .version-table td {
       display: block;
       width: 100%;
     }
     .version-table thead { display: none; }
+    .version-cell-label { display: block; }
     .version-table td { padding: 0.25rem 0; border: 0; }
     .version-table tr { padding: 0.6rem 0; border-bottom: 1px solid var(--pico-muted-border-color); }
   }
@@ -177,16 +180,19 @@
               {% for row in tab.rows %}
                 <tr>
                   <td>
+                    <span class="version-cell-label version-muted">App</span>
                     <strong>{{ row.application_name if row.application_name and row.application_name != "Unknown app" else row.build_church or row.bundle_id if tab.key in ("ios", "android") else row.church }}</strong><br />
                     <span class="version-muted">{{ (row.build_church or row.bundle_id) if tab.key in ("ios", "android") else row.church }}</span>
                   </td>
                   <td>
+                    <span class="version-cell-label version-muted">{{ "Live runtime" if tab.key in ("ios", "android") else "Version" }}</span>
                     <code>{{ row.freshness_display or "TBD" }}</code><br />
                     {% if row.version_status_label != "Unverified" %}
                       <span class="version-muted">{{ "Release" if tab.key in ("ios", "android") else "Source" if tab.key == "roku" else "Top seen" }} {{ row.comparison_display }}</span>
                     {% endif %}
                   </td>
                   <td>
+                    <span class="version-cell-label version-muted">Status</span>
                     <span class="version-status version-status--{{ row.version_status_class or 'observed' }}">
                       {{ row.version_status_label or "Unverified" }}
                     </span>
