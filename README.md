@@ -48,7 +48,7 @@ python -m unittest discover -s tests -p 'test_*.py'
 - `AIRFLOW_API_BASE_URL` – Base URL for Airflow REST API (for example: `https://airflow.example.com`)
 - `AIRFLOW_API_TOKEN` – Bearer token for Airflow API
 - `AIRFLOW_FLEET_HEARTBEAT_URL` – Optional Better Stack heartbeat URL for worker-reported Airflow fleet health
-- `REDIS_URL` – Optional Redis connection string for cached Airflow fleet-health and team metrics responses
+- `REDIS_URL` – Optional Redis connection string for cached Airflow fleet-health, team metrics, and Apps responses
 - `REDIS_SSL_CERT_REQS` – Optional TLS cert verification mode for `rediss://` (`none`, `optional`, `required`; default for `rediss://` is `none` unless `REDIS_URL` already sets `ssl_cert_reqs`)
 - `AIRFLOW_FLEET_HEALTH_REFRESH_SECONDS` – Optional worker refresh interval for cached fleet health and team metrics (default: `60`)
 - `AIRFLOW_FLEET_HEALTH_MAX_STALE_SECONDS` – Optional max age accepted by the web endpoint when reading cached data (default: `180`)
@@ -59,6 +59,7 @@ python -m unittest discover -s tests -p 'test_*.py'
 - `BIGQUERY_ANALYTICS_DATASETS` – Optional comma-separated BigQuery datasets containing Segment export tables (default: `apollos,apollos_tv,apollos_roku`)
 - `BIGQUERY_ANALYTICS_TABLES` – Optional comma-separated Segment tables to inspect for app runtime versions (default: `identifies,screens,app_became_active,app_became_backgrounded,app_became_inactive`)
 - `BIGQUERY_SERVICE_ACCOUNT_JSON_BASE64` – Base64-encoded Google service account JSON for BigQuery access
+- `APOLLOS_API_KEY` – Cluster API key for reading each app's existing Apple/Google store configuration; required for verified mobile live-runtime status
 - `APP_VERSIONS_LOOKBACK_DAYS` – Optional lookback window for `/apps` (default: `30`)
 - `APP_VERSIONS_LIMIT` – Optional maximum app rows rendered by `/apps` (default: `1000`)
 - `RIPPLING_PTO_CALENDAR_URL` – Optional private Rippling direct-reports calendar subscription URL used to add OOO bars to the project timeline; treat this value as a secret
@@ -205,34 +206,42 @@ The legacy `GET /airflow-fleet-health` Better Stack monitor endpoint has been re
 
 ## Apps dashboard
 
-`GET /apps` reads the Segment BigQuery export and shows the highest observed Apollos
-version signal per church/app/platform. It uses the analytics metadata sent by the mobile and TV
-apps, including the exported `apollos_version`, `app_version`, `app_update_id`, `bundle_id`,
-`application_name`, `church`, `build_church`, `apollos_platform`, `source_revision`, and
-`source_version` fields. For mobile apps, `build_church` is the configured deployment slug while
-`church` is a church selected inside the app (which can differ in Preview). Older mobile events
-without `build_church` show "Unknown build slug" rather than mislabeling the selected church.
-The public US Apple lookup is shown separately for iOS bundle IDs, with the fetch time. It can
-lag App Store Connect and must not be treated as an authoritative published release. The seen
-build is the version reported by the selected installation in Segment, not the latest shipped
-build or a measure of all installations. Roku Segment exports currently do not expose
-`apollos_version`, so Roku rows use the exported
-`context_library_version` and are labelled as analytics library versions.
+`GET /apps` shows app identity, runtime/version, and status, with stacked rows on small screens.
+Mobile rows show the **published store build's runtime**, not the highest runtime seen in Segment:
 
-The page first inspects `INFORMATION_SCHEMA.COLUMNS` for the configured Segment tables and only
-queries tables that expose a supported version signal, so Segment lifecycle-only app-store
-`version` fields are not mistaken for Apollos runtime versions. Source freshness means *behind
-top seen* or *top seen* within the same platform; Roku uses *behind source*, *at source*, or
-*ahead of source* against the target commit. None of these labels compare against a store release.
-Missing or uncomparable signals (including malformed mobile runtimes) are *unverified* and show
-no comparison. Mobile rows keep
-the highest comparable runtime instead of letting a recent older-client event hide it; TV selects
-the highest stable release tag and Roku selects its source version. Mobile rows prefer the
-`apollos` Segment dataset, TV rows prefer `apollos_tv`, and Roku rows prefer `apollos_roku` so the
-same app event is not counted twice when Segment exports overlap.
-TV rows show `TBD` until source metadata appears in Segment exports. Once those fields are present,
-TV freshness uses the highest observed `source_version` for each TV platform instead of the static
-Expo runtime version.
+- iOS: App Store Connect's newest live iOS version (`READY_FOR_SALE` /
+  `READY_FOR_DISTRIBUTION`) and its selected build. Match both native version and build number.
+- Android: `applications.tracks.releases.list` on `production`, accepting only
+  `RELEASE_LIFECYCLE_STATE_PUBLISHED` and its active version codes. Do not use `edits.tracks`:
+  a `completed` production-track upload can still be in review or awaiting manual publication.
+  The release-lifecycle lookup is read-only and does not create an edit.
+- Match the published native build to Segment `context_app_build` (plus `context_app_version`
+  on iOS) to recover its reported `apollos_version`/Expo runtime. Marketing version alone,
+  a GitHub tag, and a successful upload cannot establish the live runtime. Every published
+  build must have exactly one valid runtime match within the lookback window; otherwise show
+  **Unverified**. Multiple published runtimes are shown explicitly, never as fully current.
+  A build promoted from internal testing is eligible if the store confirms it is published.
+- Compare that live runtime with the newest stable `apollos-platforms` tag's
+  `templates/mobile/app.config.ts` runtime. Missing release-target data is also **Unverified**.
+  The target is a source release; it is not evidence that any particular app has shipped it.
+
+Set `APOLLOS_API_KEY` to enable store verification using the existing Cluster configuration:
+`APP.APPLE_API_KEY_B64` (or `APP.APPLE_API_KEY`) and `APP.GOOGLE_API_KEY_B64`.
+The configured bundle/package must match the observed app before its credentials are loaded.
+`build_church` identifies the deployed app; a selected `church` is only a lookup hint when
+that field is absent. Credentials stay in memory and are never logged or cached.
+With `REDIS_URL` configured, `jobs.py` refreshes the dashboard every three minutes and the
+public version snapshot expires after five minutes. Web requests only read the cache, avoiding
+per-app store lookups within Gunicorn's request timeout; an empty/expired cache is unavailable,
+never a stale current-status claim. Without Redis, local requests query directly.
+Missing credentials, store
+errors, missing native-build columns, and conflicting runtime evidence fail closed to
+**Unverified**, without substituting an observed runtime.
+
+TV still selects the highest observed stable release tag and compares within its platform;
+Roku compares source revisions. Unknown source metadata is unverified. Segment schemas are
+inspected before querying; `apollos`, `apollos_tv`, and `apollos_roku` are kept separate to avoid
+counting overlapping exports twice.
 
 To make the dashboard query live data locally, in production, or in review apps, set
 `BIGQUERY_SERVICE_ACCOUNT_JSON_BASE64`. The value should be a base64-encoded Google service
