@@ -202,6 +202,7 @@ class AppVersionsContextTest(unittest.TestCase):
             {
                 "roku_revision_statuses": {rows[-1]["source_revision"]: "behind"},
                 "roku_target_revision": "deadbeefabcdef0",
+                "mobile_release_runtime": "101",
             },
         )
 
@@ -215,8 +216,9 @@ class AppVersionsContextTest(unittest.TestCase):
         roku_church = next(row for row in annotated if row["church"] == "roku-church")
         self.assertTrue(one_church["is_outdated"])
         self.assertEqual(one_church["freshness_display"], "97")
-        self.assertEqual(one_church["version_status_label"], "Behind top seen")
+        self.assertEqual(one_church["version_status_label"], "Behind release")
         self.assertFalse(two_church["is_outdated"])
+        self.assertEqual(two_church["version_status_label"], "At release")
         self.assertEqual(bad_runtime["version_status_label"], "Unverified")
         self.assertEqual(tv_church["version_status_label"], "Unverified")
         self.assertTrue(old_tv_church["is_outdated"])
@@ -236,7 +238,48 @@ class AppVersionsContextTest(unittest.TestCase):
         self.assertTrue(app_versions._revisions_match("abcdef123456", "abcdef1"))
         self.assertFalse(app_versions._revisions_match("abcdef123456", "abc"))
 
-    def test_store_lookup_does_not_claim_a_build_is_outdated(self):
+    def test_mobile_compares_to_release_not_highest_observed(self):
+        rows = [
+            {"apollos_platform": "ios", "apollos_version": version, "church": version}
+            for version in ("111", "112", "114")
+        ]
+        annotated = app_versions._annotate_version_status(rows, {"mobile_release_runtime": "112"})
+        self.assertEqual(
+            {row["church"]: row["version_status_label"] for row in annotated},
+            {"111": "Behind release", "112": "At release", "114": "Ahead of release"},
+        )
+        self.assertEqual(annotated[0]["comparison_display"], "112")
+        self.assertTrue(annotated[0]["is_outdated"])
+        self.assertTrue(all(not row["is_outdated"] for row in annotated[1:]))
+        unavailable = app_versions._annotate_version_status(rows)
+        self.assertTrue(all(row["version_status_label"] == "Unverified" for row in unavailable))
+
+    def test_source_context_uses_latest_stable_tag_runtime(self):
+        import base64
+
+        def github(path, params=None):
+            if path == "tags":
+                return [
+                    {"name": name, "commit": {"sha": name}}
+                    for name in ("v2026.09.25.00-alpha.1", "v2026.09.24.00", "v2026.09.01.00")
+                ]
+            if path == "contents/templates/mobile/app.config.ts":
+                self.assertEqual(params, {"ref": "v2026.09.24.00"})
+                return {
+                    "encoding": "base64",
+                    "content": base64.b64encode(b"  runtimeVersion: '112',").decode(),
+                }
+            return []
+
+        with patch.object(app_versions, "_github_json", side_effect=github):
+            context = app_versions._fetch_platform_source_context()
+        self.assertEqual(context["mobile_release_runtime"], "112")
+        with patch.object(app_versions, "_github_json", return_value=None):
+            self.assertIsNone(
+                app_versions._fetch_platform_source_context()["mobile_release_runtime"]
+            )
+
+    def test_store_versions_do_not_determine_mobile_status(self):
         rows = [
             {
                 "church": "bayside",
@@ -270,182 +313,6 @@ class AppVersionsContextTest(unittest.TestCase):
         red_rocks = next(row for row in annotated if row["church"] == "red-rocks")
         self.assertFalse(bayside["is_outdated"])
         self.assertFalse(red_rocks["is_outdated"])
-
-    def test_enriches_app_store_versions_by_bundle_id(self):
-        rows = [
-            {
-                "church": "bayside",
-                "apollos_platform": "ios",
-                "application_name": "Bayside",
-                "bundle_id": "com.subsplashconsulting.Bayside-Church",
-                "apollos_version": "67",
-                "app_version": "5.20.18",
-            },
-            {
-                "church": "android",
-                "apollos_platform": "android",
-                "application_name": "Android",
-                "bundle_id": "com.example.android",
-                "apollos_version": "97",
-                "app_version": "1.0.0",
-            },
-        ]
-
-        with patch.object(
-            app_versions,
-            "_fetch_app_store_versions",
-            return_value={
-                "com.subsplashconsulting.Bayside-Church": {
-                    "bundleId": "com.subsplashconsulting.Bayside-Church",
-                    "version": "5.20.30",
-                    "currentVersionReleaseDate": "2026-04-14T16:34:35Z",
-                    "trackName": "Bayside Church",
-                },
-            },
-        ) as fetch_app_store_versions:
-            enriched = app_versions._enrich_app_store_versions(rows)
-
-        fetch_app_store_versions.assert_called_once_with(["com.subsplashconsulting.Bayside-Church"])
-        bayside = next(row for row in enriched if row["church"] == "bayside")
-        android = next(row for row in enriched if row["church"] == "android")
-        self.assertEqual(bayside["latest_app_version"], "5.20.30")
-        self.assertEqual(bayside["latest_app_version_source"], "app_store")
-        self.assertEqual(bayside["latest_app_version_seen_at"], "2026-04-14T16:34:35Z")
-        self.assertIsNotNone(bayside["store_checked_display"])
-        self.assertEqual(android["latest_app_version"], "1.0.0")
-        self.assertEqual(android["latest_app_version_source"], "observed")
-
-    def test_looks_up_all_app_store_bundles(self):
-        rows = [
-            {
-                "church": f"church-{index}",
-                "apollos_platform": "ios",
-                "application_name": f"App {index}",
-                "bundle_id": f"com.example.{index}",
-                "apollos_version": "67",
-                "app_version": "1.0.0",
-            }
-            for index in range(app_versions.APP_STORE_LOOKUP_LIMIT + 1)
-        ]
-
-        with patch.object(
-            app_versions,
-            "_fetch_app_store_versions",
-            return_value={},
-        ) as fetch_app_store_versions:
-            enriched = app_versions._enrich_app_store_versions(rows)
-
-        self.assertTrue(all(row.get("store_checked_display") for row in enriched))
-        lookup_bundle_ids = fetch_app_store_versions.call_args.args[0]
-        self.assertEqual(len(lookup_bundle_ids), app_versions.APP_STORE_LOOKUP_LIMIT + 1)
-        self.assertIn(f"com.example.{app_versions.APP_STORE_LOOKUP_LIMIT}", lookup_bundle_ids)
-
-    def test_batches_app_store_lookup_across_all_bundle_ids(self):
-        class Response:
-            def __init__(self, payload: dict[str, Any]):
-                self.payload = payload
-
-            def raise_for_status(self) -> None:
-                return None
-
-            def json(self) -> dict[str, Any]:
-                return self.payload
-
-        responses = [
-            Response({"results": [{"bundleId": "com.example.one", "version": "1.40"}]}),
-            Response({"results": [{"bundleId": "com.example.last", "version": "2.3.4"}]}),
-        ]
-        bundle_ids = (
-            ["com.example.one"]
-            + [f"com.example.{i}" for i in range(app_versions.APP_STORE_LOOKUP_LIMIT - 1)]
-            + ["com.example.last"]
-        )
-
-        def response_for_batch(url, *, params, timeout):
-            if "com.example.one" in params["bundleId"].split(","):
-                return responses[0]
-            return responses[1]
-
-        with patch.object(app_versions.requests, "get", side_effect=response_for_batch) as get:
-            versions = app_versions._fetch_app_store_versions(bundle_ids)
-
-        self.assertEqual(versions["com.example.one"]["version"], "1.40")
-        self.assertEqual(versions["com.example.last"]["version"], "2.3.4")
-        self.assertEqual(get.call_count, 2)
-        self.assertCountEqual(
-            [call.kwargs["params"] for call in get.call_args_list],
-            [
-                {
-                    "bundleId": ",".join(bundle_ids[: app_versions.APP_STORE_LOOKUP_LIMIT]),
-                    "country": "us",
-                },
-                {"bundleId": "com.example.last", "country": "us"},
-            ],
-        )
-
-    def test_failed_batch_does_not_hide_healthy_app_versions(self):
-        class Response:
-            def __init__(self, ids):
-                self.ids = ids
-
-            def raise_for_status(self):
-                pass
-
-            def json(self):
-                return {
-                    "results": [
-                        {"bundleId": bundle_id, "version": "1.40"} for bundle_id in self.ids
-                    ]
-                }
-
-        def lookup(url, *, params, timeout):
-            ids = params["bundleId"].split(",")
-            if "com.example.bad" in ids:
-                error = app_versions.requests.HTTPError("bad bundle")
-                error.response = types.SimpleNamespace(status_code=400)
-                raise error
-            return Response(ids)
-
-        bundle_ids = ["com.example.bad"] + [
-            f"com.example.good{i}" for i in range(app_versions.APP_STORE_LOOKUP_LIMIT)
-        ]
-        with patch.object(app_versions.requests, "get", side_effect=lookup):
-            versions = app_versions._fetch_app_store_versions(bundle_ids)
-
-        self.assertEqual(len(versions), app_versions.APP_STORE_LOOKUP_LIMIT)
-        self.assertEqual(versions["com.example.good0"]["version"], "1.40")
-        self.assertIn(f"com.example.good{app_versions.APP_STORE_LOOKUP_LIMIT - 1}", versions)
-        self.assertNotIn("com.example.bad", versions)
-
-    def test_transient_or_malformed_batch_does_not_retry_every_bundle(self):
-        class Response:
-            def __init__(self, results):
-                self.results = results
-
-            def raise_for_status(self):
-                pass
-
-            def json(self):
-                return {"results": self.results}
-
-        bundle_ids = [f"com.example.{i}" for i in range(app_versions.APP_STORE_LOOKUP_LIMIT)]
-        bundle_ids.append("com.example.last")
-        for failure in ("timeout", "malformed"):
-            with self.subTest(failure=failure):
-
-                def lookup(url, *, params, timeout):
-                    ids = params["bundleId"].split(",")
-                    if len(ids) > 1:
-                        if failure == "timeout":
-                            raise app_versions.requests.RequestException("timeout")
-                        return Response({"unexpected": "shape"})
-                    return Response([{"bundleId": ids[0], "version": "1.40"}])
-
-                with patch.object(app_versions.requests, "get", side_effect=lookup) as get:
-                    versions = app_versions._fetch_app_store_versions(bundle_ids)
-                self.assertEqual(get.call_count, 2)
-                self.assertEqual(versions["com.example.last"]["version"], "1.40")
-                self.assertEqual(len(versions), 1)
 
     def test_selects_highest_observed_version_instead_of_most_recent_event(self):
         rows = [
@@ -747,9 +614,6 @@ class AppVersionsRouteTest(unittest.TestCase):
                 "bundle_id": "com.one",
                 "application_name": "One Church",
                 "app_version": "1.0.0",
-                "latest_app_version": "1.0.1",
-                "latest_app_version_source": "app_store",
-                "store_checked_display": "2026-05-12 10:15 AM EDT",
                 "apollos_platform": "ios",
                 "apollos_version": "97",
                 "is_outdated": True,
@@ -762,8 +626,6 @@ class AppVersionsRouteTest(unittest.TestCase):
                 "bundle_id": "com.two",
                 "application_name": "Two Church",
                 "app_version": "1.0.0",
-                "latest_app_version": "1.0.0",
-                "latest_app_version_source": "observed",
                 "apollos_platform": "android",
                 "apollos_version": "97",
                 "is_outdated": False,
@@ -778,7 +640,6 @@ class AppVersionsRouteTest(unittest.TestCase):
                 "bundle_id": "com.three",
                 "application_name": "Three Church",
                 "app_version": "1.0.2",
-                "store_checked_display": "2026-05-12 10:16 AM EDT",
                 "apollos_platform": "ios",
                 "apollos_version": "101",
             }
@@ -806,28 +667,23 @@ class AppVersionsRouteTest(unittest.TestCase):
         self.assertIn('data-version-tab="android"', body)
         self.assertIn('id="version-panel-ios"', body)
         self.assertIn("One Church", body)
-        self.assertIn("Unknown build slug", body)
-        self.assertIn("Church seen: one-church", body)
-        self.assertIn("<th>Seen build</th>", body)
-        self.assertIn("<th>Apple lookup (US)</th>", body)
-        self.assertIn("<th>Expo Runtime</th>", body)
+        self.assertIn("com.one", body)
+        self.assertIn("<th>App</th>", body)
+        self.assertIn("<th>Version</th>", body)
         self.assertIn("<th>Status</th>", body)
-        unavailable = body[body.index("com.three") : body.index("</tr>", body.index("com.three"))]
-        self.assertIn("Not available", unavailable)
-        self.assertIn("Checked 2026-05-12 10:16 AM EDT", unavailable)
+        self.assertNotIn("<td>\n                  <td>", body)
+        self.assertNotIn("Apple lookup", body)
+        self.assertNotIn("<th>Seen build</th>", body)
         self.assertIn("<code>97</code>", body)
         self.assertIn("Two Church", body)
 
-    def test_preview_shows_church_slug_and_distinguishes_seen_from_apple_lookup(self):
+    def test_preview_shows_build_slug_without_extra_build_columns(self):
         row = {
             "church": "apollos_demo",
             "build_church": "apollos_preview",
             "bundle_id": "com.differential.apollospreview",
             "application_name": "Apollos Preview",
             "app_version": "1.0.0",
-            "latest_app_version": "1.40",
-            "latest_app_version_source": "app_store",
-            "store_checked_display": "2026-09-25 08:45 PM EDT",
             "apollos_platform": "ios",
             "apollos_version": "106",
         }
@@ -850,19 +706,12 @@ class AppVersionsRouteTest(unittest.TestCase):
         }
         with patch.object(app_module, "get_app_versions_context", return_value=context):
             body = self.client.get("/apps").get_data(as_text=True)
-        self.assertIn("<strong>apollos_preview</strong>", body)
-        self.assertIn("Church seen: apollos_demo", body)
-        self.assertNotIn("<strong>apollos_demo</strong>", body)
+        self.assertIn("apollos_preview", body)
         self.assertIn("Apollos Preview", body)
-        self.assertIn("Last seen unknown", body)
-        self.assertIn("Checked 2026-09-25 08:45 PM EDT", body)
-        self.assertIn("Top seen", body)
-        bad_start = body.index("com.example.invalid")
-        bad_row = body[bad_start : body.index("</tr>", bad_start)]
-        self.assertIn("Comparison unavailable", bad_row)
-        self.assertNotIn("Top seen 106", bad_row)
-        self.assertIn("1.40", body)
-        self.assertNotIn("App Store (live)", body)
+        self.assertNotIn("Checked 2026-09-25", body)
+        self.assertNotIn("Top seen", body)
+        self.assertIn("Unverified", body)
+        self.assertNotIn("1.40", body)
 
 
 if __name__ == "__main__":

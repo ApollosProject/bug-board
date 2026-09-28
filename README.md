@@ -211,17 +211,19 @@ apps, including the exported `apollos_version`, `app_version`, `app_update_id`, 
 `application_name`, `church`, `build_church`, `apollos_platform`, `source_revision`, and
 `source_version` fields. For mobile apps, `build_church` is the configured deployment slug while
 `church` is a church selected inside the app (which can differ in Preview). Older mobile events
-without `build_church` show "Unknown build slug" rather than mislabeling the selected church.
-The public US Apple lookup is shown separately for iOS bundle IDs, with the fetch time. It can
-lag App Store Connect and must not be treated as an authoritative published release. The seen
-build is the version reported by the selected installation in Segment, not the latest shipped
-build or a measure of all installations. Roku Segment exports currently do not expose
-`apollos_version`, so Roku rows use the exported
+without `build_church` show the bundle ID rather than mislabeling the selected church.
+The version is reported by an installation in Segment, not a measure of all installations.
+Mobile status compares its runtime against the newest stable `apollos-platforms` release tag's
+`templates/mobile/app.config.ts` runtime, not the highest version seen in analytics or a store
+listing. A newer observed runtime is marked *ahead of release*, not *outdated*. If GitHub is
+unavailable or no stable tag runtime can be read, mobile status is *unverified*. A release tag
+is not proof that every app has been published in the store. Roku Segment exports currently do
+not expose `apollos_version`, so Roku rows use the exported
 `context_library_version` and are labelled as analytics library versions.
 
 The page first inspects `INFORMATION_SCHEMA.COLUMNS` for the configured Segment tables and only
 queries tables that expose a supported version signal, so Segment lifecycle-only app-store
-`version` fields are not mistaken for Apollos runtime versions. Source freshness means *behind
+`version` fields are not mistaken for Apollos runtime versions. TV freshness means *behind
 top seen* or *top seen* within the same platform; Roku uses *behind source*, *at source*, or
 *ahead of source* against the target commit. None of these labels compare against a store release.
 Missing or uncomparable signals (including malformed mobile runtimes) are *unverified* and show

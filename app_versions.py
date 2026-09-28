@@ -4,7 +4,7 @@ import json
 import logging
 import os
 import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -23,10 +23,8 @@ DEFAULT_SEGMENT_TABLES = (
 )
 DEFAULT_APP_VERSIONS_LOOKBACK_DAYS = 30
 DEFAULT_APP_VERSIONS_LIMIT = 1000
-APP_STORE_LOOKUP_URL = "https://itunes.apple.com/lookup"
-APP_STORE_LOOKUP_LIMIT = 24
-APP_STORE_LOOKUP_TIMEOUT_SECONDS = 5
-APP_STORE_LOOKUP_WORKERS = 8
+GITHUB_TIMEOUT_SECONDS = 5
+REVISION_COMPARE_WORKERS = 8
 PLATFORMS_GITHUB_API_URL = "https://api.github.com/repos/ApollosProject/apollos-platforms"
 
 TIMESTAMP_COLUMN_CANDIDATES = (
@@ -119,7 +117,6 @@ def fetch_app_versions(config: AppVersionsConfig) -> tuple[list[dict[str, Any]],
     rows = [_row_to_dict(row) for row in results]
     source_context = _fetch_platform_source_context()
     latest_rows = _select_latest_observed_versions(rows, source_context["stable_release_revisions"])
-    latest_rows = _enrich_app_store_versions(latest_rows)
     source_context["roku_revision_statuses"] = _fetch_roku_revision_statuses(
         latest_rows,
         source_context.get("roku_target_revision"),
@@ -428,7 +425,7 @@ def _github_json(path: str, params: dict[str, str] | None = None) -> Any:
             f"{PLATFORMS_GITHUB_API_URL}/{path}",
             params=params,
             headers=headers,
-            timeout=APP_STORE_LOOKUP_TIMEOUT_SECONDS,
+            timeout=GITHUB_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
         return response.json()
@@ -440,12 +437,23 @@ def _github_json(path: str, params: dict[str, str] | None = None) -> Any:
 def _fetch_platform_source_context() -> dict[str, Any]:
     tags = _github_json("tags", {"per_page": "100"}) or []
     commits = _github_json("commits", {"sha": "master", "path": "templates/roku", "per_page": "1"})
+    stable_tags = [tag for tag in tags if STABLE_RELEASE_TAG_PATTERN.fullmatch(tag.get("name", ""))]
+    latest_tag = max(stable_tags, key=lambda tag: _version_key(tag["name"]), default=None)
+    mobile_release_runtime = None
+    if latest_tag:
+        config = _github_json(
+            "contents/templates/mobile/app.config.ts", {"ref": latest_tag["name"]}
+        )
+        if isinstance(config, dict) and config.get("encoding") == "base64":
+            try:
+                contents = base64.b64decode(config["content"]).decode("utf-8")
+                match = re.search(r"^\s*runtimeVersion:\s*['\"](\d+)['\"]", contents, re.MULTILINE)
+                mobile_release_runtime = match.group(1) if match else None
+            except (KeyError, TypeError, binascii.Error, UnicodeDecodeError):
+                pass
     return {
-        "stable_release_revisions": {
-            tag["name"]: tag["commit"]["sha"]
-            for tag in tags
-            if STABLE_RELEASE_TAG_PATTERN.fullmatch(tag.get("name", ""))
-        },
+        "stable_release_revisions": {tag["name"]: tag["commit"]["sha"] for tag in stable_tags},
+        "mobile_release_runtime": mobile_release_runtime,
         "roku_target_revision": commits[0]["sha"] if commits else None,
     }
 
@@ -463,7 +471,7 @@ def _fetch_roku_revision_statuses(
     )
     if not target_revision or not revisions:
         return {}
-    with ThreadPoolExecutor(max_workers=min(APP_STORE_LOOKUP_WORKERS, len(revisions))) as executor:
+    with ThreadPoolExecutor(max_workers=min(REVISION_COMPARE_WORKERS, len(revisions))) as executor:
         statuses = executor.map(
             lambda revision: _fetch_revision_compare_status(target_revision, revision),
             revisions,
@@ -508,6 +516,8 @@ def _annotate_version_status(
             and not RUNTIME_VERSION_PATTERN.fullmatch(version)
         ):
             continue
+        if platform in {"ios", "android"}:
+            continue
         if version and (
             platform not in latest_by_platform
             or compare_versions(version, latest_by_platform[platform]) > 0
@@ -524,8 +534,10 @@ def _annotate_version_status(
         source_revision = _string_value(row.get("source_revision"))
         release_version = _string_value(row.get("canonical_source_version"))
         latest_version = (
-            latest_by_platform.get(platform)
-            if platform in {"ios", "android", *RELEASE_TAG_PLATFORMS}
+            _string_value(source_context.get("mobile_release_runtime"))
+            if platform in {"ios", "android"}
+            else latest_by_platform.get(platform)
+            if platform in RELEASE_TAG_PLATFORMS
             else None
         )
         is_outdated = False
@@ -563,7 +575,16 @@ def _annotate_version_status(
         ):
             version_status_label = "Unverified"
         elif latest_version:
-            version_status_label = "Behind top seen" if is_outdated else "Top seen"
+            if platform in {"ios", "android"}:
+                version_status_label = (
+                    "Behind release"
+                    if is_outdated
+                    else "Ahead of release"
+                    if compare_versions(version or "", latest_version) > 0
+                    else "At release"
+                )
+            else:
+                version_status_label = "Behind top seen" if is_outdated else "Top seen"
         else:
             version_status_label = "Unverified"
         version_status_class = (
@@ -575,7 +596,6 @@ def _annotate_version_status(
         )
         updated["version_status_label"] = version_status_label
         updated["version_status_class"] = version_status_class
-        updated["latest_seen_display"] = format_timestamp(row.get("latest_seen_at"))
         annotated.append(updated)
     annotated.sort(
         key=lambda row: (
@@ -586,100 +606,6 @@ def _annotate_version_status(
         )
     )
     return annotated
-
-
-def _enrich_app_store_versions(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    bundle_ids = list(
-        dict.fromkeys(
-            bundle_id
-            for row in rows
-            if (bundle_id := _string_value(row.get("bundle_id")))
-            and _should_lookup_app_store_version(row)
-        )
-    )
-    app_store_versions: dict[str, dict[str, Any]] = {}
-    if bundle_ids:
-        try:
-            app_store_versions = _fetch_app_store_versions(bundle_ids)
-        except requests.RequestException as exc:
-            logging.warning("App Store version lookup failed: %s", exc)
-        except ValueError as exc:
-            logging.warning("App Store version lookup returned invalid JSON: %s", exc)
-
-    checked_at = format_timestamp(datetime.now().astimezone())
-    enriched = []
-    for row in rows:
-        updated = dict(row)
-        bundle_id = _string_value(row.get("bundle_id"))
-        should_lookup = _should_lookup_app_store_version(row)
-        if should_lookup:
-            updated["store_checked_display"] = checked_at
-        store_version = app_store_versions.get(bundle_id or "") if should_lookup else None
-        if store_version and (version := _string_value(store_version.get("version"))):
-            updated["latest_app_version"] = version
-            updated["latest_app_version_source"] = "app_store"
-            updated["latest_app_version_seen_at"] = store_version.get("currentVersionReleaseDate")
-            updated["latest_app_name"] = store_version.get("trackName")
-        else:
-            updated["latest_app_version"] = _string_value(row.get("app_version"))
-            updated["latest_app_version_source"] = "observed"
-        enriched.append(updated)
-    return enriched
-
-
-def _fetch_app_store_versions(bundle_ids: list[str]) -> dict[str, dict[str, Any]]:
-    def lookup(ids: list[str]) -> list[dict[str, Any]]:
-        response = requests.get(
-            APP_STORE_LOOKUP_URL,
-            params={"bundleId": ",".join(ids), "country": "us"},
-            timeout=APP_STORE_LOOKUP_TIMEOUT_SECONDS,
-        )
-        response.raise_for_status()
-        payload = response.json()
-        if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
-            raise ValueError("Invalid App Store lookup response")
-        return payload["results"]
-
-    batches = [
-        bundle_ids[i : i + APP_STORE_LOOKUP_LIMIT]
-        for i in range(0, len(bundle_ids), APP_STORE_LOOKUP_LIMIT)
-    ]
-    app_store_versions: dict[str, dict[str, Any]] = {}
-    with ThreadPoolExecutor(max_workers=min(APP_STORE_LOOKUP_WORKERS, len(batches))) as executor:
-        futures = {executor.submit(lookup, batch): batch for batch in batches}
-        while futures:
-            future = next(as_completed(futures))
-            batch = futures.pop(future)
-            try:
-                results = future.result()
-            except (requests.RequestException, ValueError) as exc:
-                response = (
-                    getattr(exc, "response", None) if isinstance(exc, requests.HTTPError) else None
-                )
-                if response is not None and response.status_code == 400 and len(batch) > 1:
-                    mid = len(batch) // 2
-                    for smaller_batch in (batch[:mid], batch[mid:]):
-                        futures[executor.submit(lookup, smaller_batch)] = smaller_batch
-                else:
-                    logging.warning("App Store version lookup failed for %s: %s", batch, exc)
-                continue
-            for result in results:
-                if (
-                    isinstance(result, dict)
-                    and result.get("bundleId") in batch
-                    and _string_value(result.get("version"))
-                ):
-                    app_store_versions[result["bundleId"]] = result
-    return app_store_versions
-
-
-def _should_lookup_app_store_version(row: dict[str, Any]) -> bool:
-    platform = (_string_value(row.get("apollos_platform")) or "").lower()
-    bundle_id = _string_value(row.get("bundle_id")) or ""
-    normalized = bundle_id.lower()
-    if platform != "ios":
-        return False
-    return "." in normalized and normalized not in {"unknown", "roku"}
 
 
 def _select_latest_observed_versions(
@@ -840,16 +766,6 @@ def _version_key(value: str) -> tuple[Any, ...]:
         else:
             parts.append((0, token.lower()))
     return (1, tuple(parts), normalized.lower())
-
-
-def format_timestamp(value: Any) -> str | None:
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value.astimezone().strftime("%Y-%m-%d %I:%M %p %Z")
-    if isinstance(value, str):
-        return value
-    return str(value)
 
 
 def _timestamp_sort_key(value: Any) -> tuple[int, Any]:
