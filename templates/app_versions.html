@@ -26,7 +26,7 @@
 
   .version-status--observed {
     background: rgba(84, 110, 122, 0.15);
-    color: #37474f;
+    color: var(--pico-color);
   }
 
   .version-table {
@@ -127,7 +127,7 @@
 <section class="version-header">
   <div>
     <h1>Apps</h1>
-    <p>Mobile shows the runtime of the published store build, compared with the latest stable release. Unverified means the live build could not be matched. TV and Roku use observations from the last {{ lookback_days }} days.</p>
+    <p>iOS, Android, and Android TV show the published store build's runtime against the latest stable release for that platform. Unverified means the live build or release target could not be matched. Other platforms show analytics observations from the last {{ lookback_days }} days, not verified store releases.</p>
     {% if checked_at %}<p class="version-muted">Checked {{ checked_at }}</p>{% endif %}
   </div>
 </section>
@@ -152,7 +152,7 @@
         >
           {{ tab.label }}
           <span class="version-tab-count">{{ tab.row_count }}</span>
-          {% if tab.outdated_count %}
+          {% if tab.outdated_count and tab.uses_store_runtime %}
             <span class="version-tab-alert" aria-label="{{ tab.outdated_count }} behind">{{ tab.outdated_count }}</span>
           {% endif %}
         </button>
@@ -172,7 +172,7 @@
             <thead>
               <tr>
                 <th>App</th>
-                <th>{{ "Live runtime" if tab.key in ("ios", "android") else "Version" }}</th>
+                <th>{{ "Live runtime" if tab.uses_store_runtime else "Observed version" }}</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -181,14 +181,14 @@
                 <tr>
                   <td>
                     <span class="version-cell-label version-muted">App</span>
-                    <strong>{{ row.application_name if row.application_name and row.application_name != "Unknown app" else row.build_church or row.bundle_id if tab.key in ("ios", "android") else row.church }}</strong><br />
-                    <span class="version-muted">{{ (row.build_church or row.bundle_id) if tab.key in ("ios", "android") else row.church }}</span>
+                    <strong>{{ row.application_name if row.application_name and row.application_name != "Unknown app" else row.build_church or row.bundle_id if tab.uses_store_runtime else row.church }}</strong><br />
+                    <span class="version-muted">{{ (row.build_church or row.bundle_id) if tab.uses_store_runtime else row.church }}</span>
                   </td>
                   <td>
-                    <span class="version-cell-label version-muted">{{ "Live runtime" if tab.key in ("ios", "android") else "Version" }}</span>
+                    <span class="version-cell-label version-muted">{{ "Live runtime" if tab.uses_store_runtime else "Observed version" }}</span>
                     <code>{{ row.freshness_display or "TBD" }}</code><br />
                     {% if row.version_status_label != "Unverified" %}
-                      <span class="version-muted">{{ "Release" if tab.key in ("ios", "android") else "Source" if tab.key == "roku" else "Top seen" }} {{ row.comparison_display }}</span>
+                      <span class="version-muted">{{ "Release" if tab.uses_store_runtime else "Source" if tab.key == "roku" else "Top observed" }} {{ row.comparison_display }}</span>
                     {% endif %}
                   </td>
                   <td>
@@ -196,7 +196,7 @@
                     <span class="version-status version-status--{{ row.version_status_class or 'observed' }}">
                       {{ row.version_status_label or "Unverified" }}
                     </span>
-                    {% if row.live_status_detail and row.version_status_label == "Unverified" %}
+                    {% if row.live_status_detail and (row.version_status_label == "Unverified" or not tab.uses_store_runtime) %}
                       <br /><small class="version-muted">{{ row.live_status_detail }}</small>
                     {% endif %}
                   </td>

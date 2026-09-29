@@ -13,7 +13,7 @@ from typing import Any
 import requests
 from packaging.version import InvalidVersion, Version
 
-from mobile_releases import fetch_live_mobile_releases
+from mobile_releases import STORE_PLATFORMS, fetch_live_mobile_releases
 
 DEFAULT_BIGQUERY_ANALYTICS_PROJECT_ID = "apollos-project"
 DEFAULT_BIGQUERY_ANALYTICS_DATASETS = ("apollos", "apollos_tv", "apollos_roku")
@@ -55,7 +55,7 @@ FIELD_CANDIDATES = {
 }
 
 ROKU_ANALYTICS_VERSION_CANDIDATES = ("context_library_version",)
-RELEASE_TAG_PLATFORMS = {"amazon", "androidtv", "tv", "tvos"}
+RELEASE_TAG_PLATFORMS = {"amazon", "tv", "tvos"}
 STABLE_RELEASE_TAG_PATTERN = re.compile(r"^v\d{4}\.\d{2}\.\d{2}\.\d{2}$")
 ALPHA_RELEASE_TAG_PATTERN = re.compile(r"^(v\d{4}\.\d{2}\.\d{2}\.\d{2})-alpha\.\d+$")
 SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{7,40}$")
@@ -99,7 +99,7 @@ def get_app_versions_context() -> dict[str, Any]:
 
 
 def _app_versions_cache_key() -> str:
-    return f"apps:live-runtime:v1:{_get_app_versions_config()!r}"
+    return f"apps:live-runtime:v2:{_get_app_versions_config()!r}"
 
 
 def refresh_app_versions_cache() -> None:
@@ -163,7 +163,7 @@ def fetch_app_versions(config: AppVersionsConfig) -> tuple[list[dict[str, Any]],
     rows = [_row_to_dict(row) for row in results]
     source_context = _fetch_platform_source_context()
     latest_rows = _select_latest_observed_versions(
-        [row for row in rows if str(row.get("apollos_platform")).lower() not in {"ios", "android"}],
+        [row for row in rows if str(row.get("apollos_platform")).lower() not in STORE_PLATFORMS],
         source_context["stable_release_revisions"],
     )
     latest_rows += _select_live_mobile_versions(rows, fetch_live_mobile_releases(rows))
@@ -497,21 +497,25 @@ def _fetch_platform_source_context() -> dict[str, Any]:
     commits = _github_json("commits", {"sha": "master", "path": "templates/roku", "per_page": "1"})
     stable_tags = [tag for tag in tags if STABLE_RELEASE_TAG_PATTERN.fullmatch(tag.get("name", ""))]
     latest_tag = max(stable_tags, key=lambda tag: _version_key(tag["name"]), default=None)
-    mobile_release_runtime = None
+    release_runtimes: dict[str, str | None] = {"mobile": None, "tv": None}
     if latest_tag:
-        config = _github_json(
-            "contents/templates/mobile/app.config.ts", {"ref": latest_tag["name"]}
-        )
-        if isinstance(config, dict) and config.get("encoding") == "base64":
-            try:
-                contents = base64.b64decode(config["content"]).decode("utf-8")
-                match = re.search(r"^\s*runtimeVersion:\s*['\"](\d+)['\"]", contents, re.MULTILINE)
-                mobile_release_runtime = match.group(1) if match else None
-            except (KeyError, TypeError, binascii.Error, UnicodeDecodeError):
-                pass
+        for template in release_runtimes:
+            config = _github_json(
+                f"contents/templates/{template}/app.config.ts", {"ref": latest_tag["name"]}
+            )
+            if isinstance(config, dict) and config.get("encoding") == "base64":
+                try:
+                    contents = base64.b64decode(config["content"]).decode("utf-8")
+                    match = re.search(
+                        r"^\s*runtimeVersion:\s*['\"](\d+)['\"]", contents, re.MULTILINE
+                    )
+                    release_runtimes[template] = match.group(1) if match else None
+                except (KeyError, TypeError, binascii.Error, UnicodeDecodeError):
+                    pass
     return {
         "stable_release_revisions": {tag["name"]: tag["commit"]["sha"] for tag in stable_tags},
-        "mobile_release_runtime": mobile_release_runtime,
+        "mobile_release_runtime": release_runtimes["mobile"],
+        "tv_release_runtime": release_runtimes["tv"],
         "roku_target_revision": commits[0]["sha"] if commits else None,
     }
 
@@ -568,7 +572,7 @@ def _annotate_version_status(
                 else "apollos_version"
             )
         )
-        if platform in {"ios", "android"}:
+        if platform in STORE_PLATFORMS:
             continue
         if version and (
             platform not in latest_by_platform
@@ -586,8 +590,12 @@ def _annotate_version_status(
         source_revision = _string_value(row.get("source_revision"))
         release_version = _string_value(row.get("canonical_source_version"))
         latest_version = (
-            _string_value(source_context.get("mobile_release_runtime"))
-            if platform in {"ios", "android"}
+            _string_value(
+                source_context.get(
+                    "tv_release_runtime" if platform == "androidtv" else "mobile_release_runtime"
+                )
+            )
+            if platform in STORE_PLATFORMS
             else latest_by_platform.get(platform)
             if platform in RELEASE_TAG_PLATFORMS
             else None
@@ -603,7 +611,7 @@ def _annotate_version_status(
             freshness_display = source_revision[:7] if source_revision else "TBD"
             revision_status = roku_statuses.get(source_revision or "")
             is_outdated = revision_status == "behind"
-        elif platform in {"ios", "android"} and comparable_runtime and latest_version and version:
+        elif platform in STORE_PLATFORMS and comparable_runtime and latest_version and version:
             is_outdated = compare_versions(version, latest_version) < 0
 
         updated["is_outdated"] = is_outdated
@@ -620,14 +628,14 @@ def _annotate_version_status(
                 "ahead": "Ahead of source",
             }.get(revision_status or "", "Unverified")
         elif (
-            platform not in {"ios", "android", *RELEASE_TAG_PLATFORMS}
+            platform not in STORE_PLATFORMS | RELEASE_TAG_PLATFORMS
             or (platform in RELEASE_TAG_PLATFORMS and not release_version)
-            or (platform in {"ios", "android"} and not comparable_runtime)
+            or (platform in STORE_PLATFORMS and not comparable_runtime)
             or freshness_display == "TBD"
         ):
             version_status_label = "Unverified"
         elif latest_version:
-            if platform in {"ios", "android"}:
+            if platform in STORE_PLATFORMS:
                 version_status_label = (
                     "Behind release"
                     if is_outdated
@@ -639,14 +647,21 @@ def _annotate_version_status(
                 version_status_label = "Behind top seen" if is_outdated else "Top seen"
         else:
             version_status_label = "Unverified"
-        if platform in {"ios", "android"}:
+        if platform in STORE_PLATFORMS:
             if row.get("live_runtime_display") and not version:
                 version_status_label = "Multiple live runtimes"
             elif comparable_runtime and not latest_version:
                 updated["live_status_detail"] = "Release target unavailable"
+        else:
+            updated["live_status_detail"] = (
+                "Store publication not verified; analytics observation only."
+            )
+            if version_status_label != "Unverified":
+                version_status_label = f"Observed: {version_status_label}"
         version_status_class = (
             "observed"
-            if version_status_label in {"Unverified", "Multiple live runtimes"}
+            if platform not in STORE_PLATFORMS
+            or version_status_label in {"Unverified", "Multiple live runtimes"}
             else "outdated"
             if is_outdated
             else "current"
@@ -671,7 +686,7 @@ def _select_live_mobile_versions(
     by_app: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
     for row in rows:
         key = _app_identity_key(row)
-        if key[1] in {"ios", "android"}:
+        if key[1] in STORE_PLATFORMS:
             by_app.setdefault(key, []).append(row)
 
     selected = []
@@ -700,7 +715,7 @@ def _select_live_mobile_versions(
                         or row["app_version"] == row["native_version"]
                     )
                     and (
-                        platform == "android"
+                        platform != "ios"
                         or _string_value(row.get("native_version")) == build["native_version"]
                     )
                 }
@@ -833,6 +848,7 @@ def build_platform_tabs(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             {
                 "key": platform,
                 "label": format_platform_label(platform),
+                "uses_store_runtime": platform in STORE_PLATFORMS,
                 "rows": platform_rows,
                 "row_count": len(platform_rows),
                 "outdated_count": sum(1 for row in platform_rows if row.get("is_outdated")),

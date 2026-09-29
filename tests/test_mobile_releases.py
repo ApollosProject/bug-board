@@ -30,12 +30,46 @@ class MobileReleasesTest(unittest.TestCase):
             }
         )
         self.assertEqual(
-            mobile_releases._published_android_builds(payload),
+            mobile_releases._published_android_builds(payload, "production"),
             [
                 {"native_build": "35"},
                 {"native_build": "34"},
             ],
         )
+
+    def test_google_looks_up_the_platform_track_and_excludes_unpublished_builds(self):
+        releases = [
+            {
+                "track": track,
+                "releaseLifecycleState": f"RELEASE_LIFECYCLE_STATE_{state}",
+                "activeArtifacts": [{"versionCode": code}],
+            }
+            for track, state, code in (
+                ("production", "PUBLISHED", 112),
+                ("tv:production", "PUBLISHED", 2),
+                ("tv:production", "IN_REVIEW", 3),
+                ("tv:production", "APPROVED_NOT_PUBLISHED", 4),
+                ("tv:internal", "PUBLISHED", 5),
+            )
+        ]
+        for platform, track, code in (
+            ("android", "production", "112"),
+            ("androidtv", "tv:production", "2"),
+        ):
+            with (
+                self.subTest(platform=platform),
+                patch.object(mobile_releases, "_config", side_effect=["com.church", "e30="]),
+                patch("google.oauth2.service_account.Credentials.from_service_account_info"),
+                patch("google.auth.transport.requests.AuthorizedSession") as session_class,
+            ):
+                session = session_class.return_value.__enter__.return_value
+                session.get.return_value.json.return_value = {"releases": releases}
+                result = mobile_releases._fetch_release("church", platform, "com.church")
+                self.assertEqual(result["builds"], [{"native_build": code}])
+                self.assertEqual(
+                    session.get.call_args.args[0],
+                    f"{mobile_releases.GOOGLE_API_URL}/com.church/tracks/{track}/releases",
+                )
 
     def test_apple_selects_latest_live_version_and_its_selected_build(self):
         payload = {
