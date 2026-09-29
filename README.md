@@ -207,24 +207,28 @@ The legacy `GET /airflow-fleet-health` Better Stack monitor endpoint has been re
 ## Apps dashboard
 
 `GET /apps` shows app identity, runtime/version, and status, with stacked rows on small screens.
-Mobile rows show the **published store build's runtime**, not the highest runtime seen in Segment:
+iOS, Android, and Android TV rows show the **published store build's runtime**, not the highest
+runtime seen in Segment:
 
 - iOS: App Store Connect's newest live iOS version (`READY_FOR_SALE` /
   `READY_FOR_DISTRIBUTION`) and its selected build. Match both native version and build number.
-- Android: `applications.tracks.releases.list` on `production`, accepting only
-  `RELEASE_LIFECYCLE_STATE_PUBLISHED` and its active version codes. Do not use `edits.tracks`:
-  a `completed` production-track upload can still be in review or awaiting manual publication.
+- Android / Android TV: `applications.tracks.releases.list` on `production` / `tv:production`,
+  respectively, accepting only `RELEASE_LIFECYCLE_STATE_PUBLISHED` and its active version codes.
+  Do not use `edits.tracks`: a `completed` production-track upload can still be in review or
+  awaiting manual publication.
   The release-lifecycle lookup is read-only and does not create an edit.
 - Match the published native build to Segment `context_app_build` (plus `context_app_version`
-  on iOS) to recover its reported `apollos_version`/Expo runtime. Marketing version alone,
-  a GitHub tag, and a successful upload cannot establish the live runtime. Every published
+  on iOS) to recover its reported `apollos_version`/Expo runtime. Android and Android TV
+  remain separate identities even when they share a package ID and version codes. Marketing version
+  alone, a GitHub tag, and a successful upload cannot establish the live runtime. Every published
   build must have exactly one valid runtime match within the lookback window; otherwise show
   **Unverified**. Events whose reported `app_version` disagrees with `context_app_version`
   are excluded: queued events can retain old properties with a newer native context.
   Multiple published runtimes are shown explicitly, never as fully current.
   A build promoted from internal testing is eligible if the store confirms it is published.
 - Compare that live runtime with the newest stable `apollos-platforms` tag's
-  `templates/mobile/app.config.ts` runtime. Missing release-target data is also **Unverified**.
+  `templates/mobile/app.config.ts` runtime for mobile, or `templates/tv/app.config.ts` runtime
+  for Android TV. Missing release-target data is also **Unverified**.
   The target is a source release; it is not evidence that any particular app has shipped it.
 
 Set `APOLLOS_API_KEY` to enable store verification using the existing Cluster configuration:
@@ -243,8 +247,12 @@ Missing credentials, store
 errors, missing native-build columns, and conflicting runtime evidence fail closed to
 **Unverified**, without substituting an observed runtime.
 
-TV still selects the highest observed stable release tag and compares within its platform;
-Roku compares source revisions. Unknown source metadata is unverified. Segment schemas are
+Amazon, tvOS, and generic TV still select the highest observed stable release tag and compare
+within their platform; Roku compares observed source revisions with the latest Roku source commit.
+These comparisons do **not** verify store publication: they use neutral observation badges and
+an explicit store-unverified warning, never a green current-status badge. tvOS analytics currently
+lack native build IDs; matching only the marketing version would not establish a live runtime.
+Unknown platforms/source metadata remain unverified. Segment schemas are
 inspected before querying; `apollos`, `apollos_tv`, and `apollos_roku` are kept separate to avoid
 counting overlapping exports twice.
 

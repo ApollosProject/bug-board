@@ -247,16 +247,82 @@ class AppVersionsContextTest(unittest.TestCase):
         self.assertFalse(unknown_platform["is_outdated"])
         self.assertEqual(unknown_platform["version_status_label"], "Unverified")
         self.assertTrue(roku_church["is_outdated"])
-        self.assertEqual(roku_church["version_status_label"], "Behind source")
-        for status, label in (("identical", "At source"), ("ahead", "Ahead of source")):
+        self.assertEqual(roku_church["version_status_label"], "Observed: Behind source")
+        for observed in (old_tv_church, new_tv_church, roku_church, unknown_platform):
+            self.assertEqual(observed["version_status_class"], "observed")
+            self.assertIn("Store publication not verified", observed["live_status_detail"])
+        for status, label in (
+            ("identical", "Observed: At source"),
+            ("ahead", "Observed: Ahead of source"),
+        ):
             checked = app_versions._annotate_version_status(
                 [rows[-1]], {"roku_revision_statuses": {rows[-1]["source_revision"]: status}}
             )
             self.assertEqual(checked[0]["version_status_label"], label)
+            self.assertEqual(checked[0]["version_status_class"], "observed")
         self.assertEqual(roku_church["freshness_display"], "ba95e2f")
         self.assertEqual(annotated[0]["church"], "one-church")
         self.assertTrue(app_versions._revisions_match("abcdef123456", "abcdef1"))
         self.assertFalse(app_versions._revisions_match("abcdef123456", "abc"))
+
+    def test_androidtv_pipeline_matches_the_published_build_not_the_highest_seen_tag(self):
+        tv = {
+            "church": "cedar_creek",
+            "bundle_id": "com.cedarcreek",
+            "apollos_platform": "androidtv",
+            "native_build": "33",
+            "native_version": "1.0.33",
+            "apollos_version": "2",
+            "source_version": "v2026.08.31.00",
+            "deployment_track": "production",
+        }
+        rows = [
+            tv,
+            {
+                **tv,
+                "native_build": "34",
+                "native_version": "1.0.34",
+                "apollos_version": "3",
+                "source_version": "v2026.09.24.00",
+            },
+            {**tv, "apollos_platform": "android", "apollos_version": "112"},
+        ]
+        client = Mock()
+        client.query.return_value.result.return_value = rows
+        context = {
+            "stable_release_revisions": {},
+            "mobile_release_runtime": "112",
+            "tv_release_runtime": "3",
+        }
+        releases = {
+            (platform, "com.cedarcreek"): {"builds": [{"native_build": "33"}]}
+            for platform in ("android", "androidtv")
+        }
+        with (
+            patch.object(app_versions, "_build_bigquery_client", return_value=client),
+            patch.object(app_versions, "_fetch_segment_schema", return_value={}),
+            patch.object(app_versions, "_build_app_versions_query", return_value=("query", None)),
+            patch.object(app_versions, "_fetch_platform_source_context", return_value=context),
+            patch.object(app_versions, "fetch_live_mobile_releases", return_value=releases),
+        ):
+            selected, _ = app_versions.fetch_app_versions(app_versions._get_app_versions_config())
+        self.assertEqual(len(selected), 2)
+        television, mobile = selected
+        self.assertEqual(television["apollos_platform"], "androidtv")
+        self.assertEqual(television["freshness_display"], "2")
+        self.assertEqual(television["comparison_display"], "3")
+        self.assertEqual(television["version_status_label"], "Behind release")
+        self.assertEqual(mobile["version_status_label"], "At release")
+        context["tv_release_runtime"] = None
+        self.assertEqual(
+            app_versions._annotate_version_status([television], context)[0]["version_status_label"],
+            "Unverified",
+        )
+        unmatched = app_versions._select_live_mobile_versions([tv], {})
+        self.assertEqual(
+            app_versions._annotate_version_status(unmatched, context)[0]["version_status_label"],
+            "Unverified",
+        )
 
     def test_mobile_runtime_matches_the_live_native_build_not_newer_test_builds(self):
         rows = [
@@ -292,8 +358,8 @@ class AppVersionsContextTest(unittest.TestCase):
             )
         )
 
-    def test_mobile_ignores_events_with_contradictory_app_and_native_versions(self):
-        for platform in ("ios", "android"):
+    def test_store_runtime_ignores_events_with_contradictory_app_and_native_versions(self):
+        for platform in ("ios", "android", "androidtv"):
             with self.subTest(platform=platform):
                 current = {
                     "apollos_platform": platform,
@@ -394,17 +460,24 @@ class AppVersionsContextTest(unittest.TestCase):
                     {"name": name, "commit": {"sha": name}}
                     for name in ("v2026.09.25.00-alpha.1", "v2026.09.24.00", "v2026.09.01.00")
                 ]
-            if path == "contents/templates/mobile/app.config.ts":
+            if path in (
+                "contents/templates/mobile/app.config.ts",
+                "contents/templates/tv/app.config.ts",
+            ):
                 self.assertEqual(params, {"ref": "v2026.09.24.00"})
+                runtime = "3" if "/tv/" in path else "112"
                 return {
                     "encoding": "base64",
-                    "content": base64.b64encode(b"  runtimeVersion: '112',").decode(),
+                    "content": base64.b64encode(
+                        f"  runtimeVersion: '{runtime}',".encode()
+                    ).decode(),
                 }
             return []
 
         with patch.object(app_versions, "_github_json", side_effect=github):
             context = app_versions._fetch_platform_source_context()
         self.assertEqual(context["mobile_release_runtime"], "112")
+        self.assertEqual(context["tv_release_runtime"], "3")
         with patch.object(app_versions, "_github_json", return_value=None):
             self.assertIsNone(
                 app_versions._fetch_platform_source_context()["mobile_release_runtime"]
@@ -597,6 +670,8 @@ class AppVersionsContextTest(unittest.TestCase):
         self.assertEqual(ios_tab["outdated_count"], 1)
         androidtv_tab = next(tab for tab in tabs if tab["key"] == "androidtv")
         self.assertEqual(androidtv_tab["label"], "AndroidTV")
+        self.assertTrue(androidtv_tab["uses_store_runtime"])
+        self.assertFalse(tabs[-1]["uses_store_runtime"])
 
     def test_builds_query_from_discovered_segment_columns(self):
         config = app_versions.AppVersionsConfig(
@@ -817,6 +892,41 @@ class AppVersionsRouteTest(unittest.TestCase):
         self.assertNotIn("<th>Seen build</th>", body)
         self.assertIn("<code>97</code>", body)
         self.assertIn("Two Church", body)
+
+    def test_observation_only_platforms_never_render_as_verified_current(self):
+        observations = [
+            {
+                "apollos_platform": platform,
+                "church": "church",
+                "apollos_version": "3",
+                "source_version": "v2026.09.24.00",
+                "source_revision": "abcdef123456",
+            }
+            for platform in ("amazon", "tvos", "tv", "roku", "unknown")
+        ]
+        rows = app_versions._annotate_version_status(
+            app_versions._select_latest_observed_versions(observations),
+            {"roku_revision_statuses": {"abcdef123456": "identical"}},
+        )
+        with patch.object(
+            app_module,
+            "get_app_versions_context",
+            return_value={
+                "status": "ready",
+                "rows": rows,
+                "platform_tabs": app_versions.build_platform_tabs(rows),
+                "lookback_days": 30,
+            },
+        ):
+            body = self.client.get("/apps").get_data(as_text=True)
+        self.assertNotIn("version-status--current", body.split('<main class="container">')[1])
+        self.assertEqual(
+            body.count("Store publication not verified; analytics observation only."), 5
+        )
+        self.assertIn("Observed: Top seen", body)
+        self.assertIn("Observed: At source", body)
+        self.assertIn("<th>Observed version</th>", body)
+        self.assertNotIn("<th>Live runtime</th>", body)
 
     def test_preview_shows_build_slug_without_extra_build_columns(self):
         row = {

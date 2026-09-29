@@ -15,6 +15,8 @@ CLUSTER_API_URL = "https://cluster.apollos.app/api/config"
 APPLE_API_URL = "https://api.appstoreconnect.apple.com/v1"
 GOOGLE_API_URL = "https://androidpublisher.googleapis.com/androidpublisher/v3/applications"
 TIMEOUT_SECONDS = 5
+GOOGLE_TRACKS = {"android": "production", "androidtv": "tv:production"}
+STORE_PLATFORMS = {"ios", *GOOGLE_TRACKS}
 
 
 def fetch_live_mobile_releases(rows: list[dict[str, Any]]) -> dict[tuple[str, str], dict[str, Any]]:
@@ -22,7 +24,7 @@ def fetch_live_mobile_releases(rows: list[dict[str, Any]]) -> dict[tuple[str, st
     for row in rows:
         platform = str(row.get("apollos_platform") or "").lower()
         bundle = str(row.get("bundle_id") or "").strip()
-        if platform not in {"ios", "android"} or not re.fullmatch(r"[\w.-]+", bundle):
+        if platform not in STORE_PLATFORMS or not re.fullmatch(r"[\w.-]+", bundle):
             continue
         church = str(row.get("build_church") or row.get("church") or "")
         if re.fullmatch(r"[A-Za-z0-9_-]+", church):
@@ -35,7 +37,8 @@ def fetch_live_mobile_releases(rows: list[dict[str, Any]]) -> dict[tuple[str, st
         slug = app_church.get("slug") or ""
         if not isinstance(slug, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", slug):
             continue
-        for platform, field in (("ios", "appleBundleId"), ("android", "androidPkgId")):
+        for platform in STORE_PLATFORMS:
+            field = "appleBundleId" if platform == "ios" else "androidPkgId"
             directory_bundle = app_church.get(field)
             if not isinstance(directory_bundle, str):
                 continue
@@ -96,7 +99,9 @@ def _fetch_release(church: str, platform: str, bundle: str) -> dict[str, Any] | 
         if _config(church, key) != bundle:
             return None  # Selected church is only a lookup hint, not app identity.
         builds = (
-            _apple_builds(church, bundle) if platform == "ios" else _android_builds(church, bundle)
+            _apple_builds(church, bundle)
+            if platform == "ios"
+            else _android_builds(church, bundle, GOOGLE_TRACKS[platform])
         )
         return {"builds": builds, "checked_at": time.time()}
     except Exception as exc:
@@ -176,7 +181,7 @@ def _published_apple_builds(payload: dict[str, Any]) -> list[dict[str, str]]:
     ]
 
 
-def _android_builds(church: str, bundle: str) -> list[dict[str, str]]:
+def _android_builds(church: str, bundle: str, track: str) -> list[dict[str, str]]:
     from google.auth.transport.requests import AuthorizedSession
     from google.oauth2 import service_account
 
@@ -187,17 +192,17 @@ def _android_builds(church: str, bundle: str) -> list[dict[str, str]]:
     with AuthorizedSession(credentials, refresh_timeout=TIMEOUT_SECONDS) as session:
         # Unlike edits.tracks, this read-only API distinguishes approved from published.
         response = session.get(
-            f"{GOOGLE_API_URL}/{bundle}/tracks/production/releases", timeout=TIMEOUT_SECONDS
+            f"{GOOGLE_API_URL}/{bundle}/tracks/{track}/releases", timeout=TIMEOUT_SECONDS
         )
         response.raise_for_status()
-        return _published_android_builds(response.json())
+        return _published_android_builds(response.json(), track)
 
 
-def _published_android_builds(payload: dict[str, Any]) -> list[dict[str, str]]:
+def _published_android_builds(payload: dict[str, Any], track: str) -> list[dict[str, str]]:
     return [
         {"native_build": str(artifact["versionCode"])}
         for release in payload.get("releases", [])
-        if release.get("track") == "production"
+        if release.get("track") == track
         and release.get("releaseLifecycleState") == "RELEASE_LIFECYCLE_STATE_PUBLISHED"
         for artifact in release["activeArtifacts"]
     ]
