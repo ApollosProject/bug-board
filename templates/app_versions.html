@@ -207,7 +207,7 @@
                     {% if row.live_status_detail and (row.version_status_label == "Unverified" or not tab.uses_store_runtime) %}
                       <br /><small class="version-muted">{{ row.live_status_detail }}</small>
                     {% endif %}
-                    {% if row.deployable %}
+                    {% if config.GITHUB_OAUTH_ENABLED and session.get('github_user_id') and row.deployable %}
                       <form method="post" action="{{ url_for('deploy_app', platform=tab.key, bundle=row.bundle_id|lower, church=row.church) }}">
                         <input type="hidden" name="csrf" value="{{ session.app_deploy_csrf }}" />
                         <button type="submit" class="secondary outline version-deploy" aria-label="Deploy {{ tab.label }} for {{ row.build_church or row.church }} ({{ row.bundle_id }})">Deploy {{ tab.label }}</button>

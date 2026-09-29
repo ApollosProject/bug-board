@@ -1034,8 +1034,14 @@ class AppVersionsRouteTest(unittest.TestCase):
         app_module.app.config["GITHUB_OAUTH_ENABLED"] = True
         with self.client.session_transaction() as session:
             session.update(github_login="engineer", github_user_id=42, github_org="ApollosProject")
-        with patch.object(app_module, "get_app_versions_context", return_value=context):
+        with (
+            patch.object(app_module, "get_app_versions_context", return_value=context),
+            patch.object(
+                app_versions, "_app_identity_key", wraps=app_versions._app_identity_key
+            ) as identity,
+        ):
             body = self.client.get("/apps").get_data(as_text=True)
+        self.assertEqual(identity.call_count, len(rows))
         self.assertNotIn('action="/apps/deploy/', body)
 
     def test_preview_shows_build_slug_without_extra_build_columns(self):
@@ -1081,6 +1087,11 @@ class AppVersionsRouteTest(unittest.TestCase):
             body,
         )
         self.assertIn(">Deploy iOS</button>", body)
+        app_module.app.config["GITHUB_OAUTH_ENABLED"] = False
+        with patch.object(app_module, "get_app_versions_context", return_value=context):
+            self.assertNotIn(
+                'action="/apps/deploy/', self.client.get("/apps").get_data(as_text=True)
+            )
         self.assertIn("apollos_preview", body)
         self.assertIn("Apollos Preview", body)
         self.assertNotIn("Checked 2026-09-25", body)

@@ -30,7 +30,7 @@ from airflow_fleet_health import AirflowFleetHealthError, evaluate_fleet_health
 from api import person_metrics_payload, require_api_key
 from app_versions import (
     AppVersionsError,
-    app_control_row,
+    app_control_rows,
     app_control_slug,
     dispatch_app_deploy,
     get_app_versions_context,
@@ -496,20 +496,10 @@ def apps_dashboard():
     if app.config.get("GITHUB_OAUTH_ENABLED") and session.get("github_user_id"):
         if "app_deploy_csrf" not in session:
             session["app_deploy_csrf"] = secrets.token_urlsafe(32)
-        # ponytail: scans visible rows for each control; index identities if 1k rows gets slow.
         for row in context.get("rows", []):
-            target = app_control_row(
-                context,
-                str(row.get("apollos_platform", "")).lower(),
-                str(row.get("bundle_id", "")).lower(),
-                str(row.get("church", "")),
-            )
-            row["deployable"] = bool(
-                row.get("church")
-                and row.get("bundle_id")
-                and app_control_slug(row)
-                and row is target
-            )
+            row["deployable"] = False
+        for row in app_control_rows(context).values():
+            row["deployable"] = True
     return render_template("app_versions.html", **context)
 
 
@@ -521,7 +511,8 @@ def deploy_app(platform: str, bundle: str, church: str):
     csrf = session.get("app_deploy_csrf", "")
     if not csrf or not secrets.compare_digest(request.form.get("csrf", ""), csrf):
         abort(403)
-    row = app_control_row(get_app_versions_context(), platform, bundle, church)
+    key = (church if bundle in {"unknown", "roku"} else "", platform, bundle, church)
+    row = app_control_rows(get_app_versions_context()).get(key)
     slug = app_control_slug(row) if row else None
     if not slug:
         abort(404)

@@ -181,19 +181,22 @@ def fetch_app_versions(config: AppVersionsConfig) -> tuple[list[dict[str, Any]],
     )
 
 
-def app_control_row(
-    context: dict[str, Any], platform: str, bundle: str, church: str
-) -> dict[str, Any] | None:
-    if context.get("status") != "ready" or platform not in DEPLOY_PLATFORMS:
-        return None
-    matches = [
-        row
-        for row in context["rows"]
-        if _app_identity_key(row)
-        == (church if bundle in {"unknown", "roku"} else "", platform, bundle)
-        and _string_value(row.get("church")) == church
-    ]
-    return matches[0] if len(matches) == 1 else None
+def app_control_rows(context: dict[str, Any]) -> dict[tuple[str, str, str, str], dict[str, Any]]:
+    if context.get("status") != "ready":
+        return {}
+    matches: dict[tuple[str, str, str, str], dict[str, Any] | None] = {}
+    for row in context["rows"]:
+        key = (*_app_identity_key(row), _string_value(row.get("church")) or "")
+        matches[key] = None if key in matches else row
+    return {
+        key: row
+        for key, row in matches.items()
+        if row is not None
+        and key[1] in DEPLOY_PLATFORMS
+        and row.get("church")
+        and row.get("bundle_id")
+        and app_control_slug(row)
+    }
 
 
 def app_control_slug(row: dict[str, Any]) -> str | None:
