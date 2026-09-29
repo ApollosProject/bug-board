@@ -207,12 +207,9 @@ The legacy `GET /airflow-fleet-health` Better Stack monitor endpoint has been re
 ## Apps dashboard
 
 `GET /apps` shows app identity, runtime/version, and status, with stacked rows on small screens.
-Signed-in users can dispatch a production deployment for each supported app from the latest
-stable Platforms release tag. This requires `GITHUB_ACTIONS_TOKEN` (Actions workflow dispatch
-permission); `GITHUB_DEPLOY_WORKFLOW_ID` defaults to Admin's `173574865`. The workflow checks
-`APP.PRODUCTION_READY` or `TV.PRODUCTION_READY` before deploying; Bug Board does not edit these
-settings. Generic `tv`/unknown observations cannot be mapped to a deploy platform.
-
+Signed-in users can deploy supported apps from the latest stable Platforms tag using
+`GITHUB_ACTIONS_TOKEN` (Actions dispatch); `GITHUB_DEPLOY_WORKFLOW_ID` defaults to `173574865`.
+The workflow checks `APP.PRODUCTION_READY` or `TV.PRODUCTION_READY`; generic `tv`/unknown apps cannot be deployed.
 iOS, Android, and Android TV rows show the **published store build's runtime**, not the highest
 runtime seen in Segment:
 

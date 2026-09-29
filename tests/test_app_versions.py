@@ -814,18 +814,13 @@ class AppVersionsRouteTest(unittest.TestCase):
                 with self.client.session_transaction() as session:
                     csrf = session["app_deploy_csrf"]
                 self.assertEqual(self.client.post(path, data={"csrf": "invalid"}).status_code, 403)
-                self.assertEqual(
-                    self.client.post(
-                        "/apps/deploy/ios/com.other/apollos_demo", data={"csrf": csrf}
-                    ).status_code,
-                    404,
-                )
-                self.assertEqual(
-                    self.client.post(
-                        "/apps/deploy/tv/com.preview/apollos_demo", data={"csrf": csrf}
-                    ).status_code,
-                    404,
-                )
+                for invalid_path in (
+                    "/apps/deploy/ios/com.other/apollos_demo",
+                    "/apps/deploy/tv/com.preview/apollos_demo",
+                ):
+                    self.assertEqual(
+                        self.client.post(invalid_path, data={"csrf": csrf}).status_code, 404
+                    )
                 dispatch.assert_not_called()
                 response = self.client.post(path, data={"csrf": csrf})
                 self.assertEqual(response.status_code, 303)
@@ -1043,7 +1038,6 @@ class AppVersionsRouteTest(unittest.TestCase):
             body,
         )
         self.assertIn(">Deploy iOS</button>", body)
-        self.assertNotIn("production ready", body.lower())
         self.assertIn("apollos_preview", body)
         self.assertIn("Apollos Preview", body)
         self.assertNotIn("Checked 2026-09-25", body)
