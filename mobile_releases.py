@@ -30,6 +30,19 @@ def fetch_live_mobile_releases(rows: list[dict[str, Any]]) -> dict[tuple[str, st
     if not os.getenv("APOLLOS_API_KEY") or not candidates:
         return {}
 
+    # Older analytics may identify the selected church, not the app's build church.
+    for app_church in _fetch_app_churches():
+        slug = app_church.get("slug") or ""
+        if not isinstance(slug, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", slug):
+            continue
+        for platform, field in (("ios", "appleBundleId"), ("android", "androidPkgId")):
+            directory_bundle = app_church.get(field)
+            if not isinstance(directory_bundle, str):
+                continue
+            key = (platform, directory_bundle)
+            if key in candidates:
+                candidates[key].add(slug)
+
     def lookup(item):
         (platform, bundle), churches = item
         for church in sorted(churches):
@@ -40,6 +53,28 @@ def fetch_live_mobile_releases(rows: list[dict[str, Any]]) -> dict[tuple[str, st
 
     with ThreadPoolExecutor(max_workers=min(16, len(candidates))) as executor:
         return dict(executor.map(lookup, candidates.items()))
+
+
+def _fetch_app_churches() -> list[dict[str, Any]]:
+    try:
+        response = requests.post(
+            "https://cluster.apollos.app/graphql",
+            json={"query": "query { churches { slug appleBundleId androidPkgId } }"},
+            headers={"x-api-key": os.environ["APOLLOS_API_KEY"]},
+            timeout=TIMEOUT_SECONDS,
+            allow_redirects=False,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, dict) or payload.get("errors"):
+            raise ValueError("App directory unavailable")
+        churches = payload["data"]["churches"]
+        if not isinstance(churches, list) or not all(isinstance(c, dict) for c in churches):
+            raise ValueError("Invalid app directory")
+        return churches
+    except (requests.RequestException, KeyError, TypeError, ValueError) as exc:
+        logging.warning("App directory unavailable (%s)", type(exc).__name__)
+        return []
 
 
 def _config(church: str, key: str) -> Any:
@@ -97,8 +132,8 @@ def _apple_builds(church: str, bundle: str) -> list[dict[str, str]]:
             f"{APPLE_API_URL}/apps", params={"filter[bundleId]": bundle}, timeout=TIMEOUT_SECONDS
         )
         response.raise_for_status()
-        apps = response.json()["data"]
-        if len(apps) != 1 or apps[0]["attributes"]["bundleId"] != bundle:
+        apps = [app for app in response.json()["data"] if app["attributes"]["bundleId"] == bundle]
+        if len(apps) != 1:
             raise ValueError("App identity is not unique")
         response = session.get(
             f"{APPLE_API_URL}/apps/{apps[0]['id']}/appStoreVersions",

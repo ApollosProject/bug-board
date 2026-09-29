@@ -693,6 +693,12 @@ def _select_live_mobile_versions(
                     _string_value(row.get("apollos_version"))
                     for row in observations
                     if _string_value(row.get("native_build")) == build["native_build"]
+                    # Queued events can carry old properties with a newer native context.
+                    and (
+                        not row.get("app_version")
+                        or not row.get("native_version")
+                        or row["app_version"] == row["native_version"]
+                    )
                     and (
                         platform == "android"
                         or _string_value(row.get("native_version")) == build["native_version"]

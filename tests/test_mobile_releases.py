@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import mobile_releases
 
@@ -69,6 +69,96 @@ class MobileReleasesTest(unittest.TestCase):
         payload["links"] = {"next": "more"}
         with self.assertRaises(ValueError):
             mobile_releases._published_apple_builds(payload)
+
+    def test_apple_requires_one_exact_bundle_match_among_prefix_matches(self):
+        app = {"id": "demo", "attributes": {"bundleId": "com.demo"}}
+        prefix_match = {"id": "preview", "attributes": {"bundleId": "com.demo.preview"}}
+        key = {"key": "unused", "key_id": "unused", "issuer_id": "unused"}
+        for apps in ([prefix_match, app], [prefix_match], [app, app]):
+            with (
+                self.subTest(apps=apps),
+                patch.object(mobile_releases, "_config", side_effect=[None, key]),
+                patch("google.auth.crypt.es256.ES256Signer.from_string"),
+                patch("google.auth.jwt.encode", return_value=b"test-token"),
+                patch.object(mobile_releases.requests, "Session") as session_class,
+            ):
+                session = session_class.return_value.__enter__.return_value
+                session.get.side_effect = [
+                    Mock(json=Mock(return_value={"data": apps})),
+                    Mock(json=Mock(return_value={"data": []})),
+                ]
+                if apps == [prefix_match, app]:
+                    self.assertEqual(mobile_releases._apple_builds("demo", "com.demo"), [])
+                    self.assertEqual(
+                        session.get.call_args.args[0],
+                        f"{mobile_releases.APPLE_API_URL}/apps/demo/appStoreVersions",
+                    )
+                else:
+                    with self.assertRaises(ValueError):
+                        mobile_releases._apple_builds("demo", "com.demo")
+                    self.assertEqual(session.get.call_count, 1)
+
+    def test_directory_resolves_build_church_without_crossing_platforms(self):
+        rows = [{"apollos_platform": "ios", "bundle_id": "com.preview", "church": "demo"}]
+        directory = [
+            {"slug": "preview", "appleBundleId": "com.preview"},
+            {"slug": "other", "androidPkgId": "com.preview"},
+            {"slug": "../invalid", "appleBundleId": "com.preview"},
+        ]
+        release = {"builds": []}
+        with (
+            patch.dict(mobile_releases.os.environ, {"APOLLOS_API_KEY": "test"}),
+            patch.object(mobile_releases, "_fetch_app_churches", return_value=directory),
+            patch.object(mobile_releases, "_fetch_release", side_effect=[None, release]) as fetch,
+        ):
+            self.assertEqual(
+                mobile_releases.fetch_live_mobile_releases(rows),
+                {("ios", "com.preview"): release},
+            )
+        self.assertEqual(
+            [call.args for call in fetch.call_args_list],
+            [("demo", "ios", "com.preview"), ("preview", "ios", "com.preview")],
+        )
+
+    def test_directory_rejects_errors_and_malformed_responses(self):
+        directory = [{"slug": "preview", "appleBundleId": "com.preview"}]
+        for payload in (
+            {"data": {"churches": directory}},
+            {"data": {"churches": directory}, "errors": [{"message": "secret"}]},
+            {"data": None},
+            {"data": {"churches": None}},
+            {"data": {"churches": [None]}},
+            [],
+        ):
+            with (
+                self.subTest(payload=payload),
+                patch.dict(mobile_releases.os.environ, {"APOLLOS_API_KEY": "test"}),
+                patch.object(
+                    mobile_releases.requests,
+                    "post",
+                    return_value=Mock(json=Mock(return_value=payload)),
+                ),
+            ):
+                if payload == {"data": {"churches": directory}}:
+                    self.assertEqual(mobile_releases._fetch_app_churches(), directory)
+                else:
+                    with self.assertLogs(level="WARNING") as logs:
+                        self.assertEqual(mobile_releases._fetch_app_churches(), [])
+                    self.assertNotIn("secret", " ".join(logs.output))
+
+    def test_directory_failure_falls_back_to_observed_church_without_logging_secrets(self):
+        rows = [{"apollos_platform": "ios", "bundle_id": "com.demo", "church": "demo"}]
+        with (
+            patch.dict(mobile_releases.os.environ, {"APOLLOS_API_KEY": "test"}),
+            patch.object(mobile_releases.requests, "post", side_effect=ValueError("secret")),
+            patch.object(mobile_releases, "_fetch_release", return_value={"builds": []}),
+            self.assertLogs(level="WARNING") as logs,
+        ):
+            self.assertEqual(
+                mobile_releases.fetch_live_mobile_releases(rows),
+                {("ios", "com.demo"): {"builds": []}},
+            )
+        self.assertNotIn("secret", " ".join(logs.output))
 
     def test_lookup_verifies_bundle_before_loading_any_store_credential(self):
         with patch.object(mobile_releases, "_config", return_value="com.other") as config:
