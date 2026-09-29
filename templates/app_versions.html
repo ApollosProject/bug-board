@@ -254,6 +254,7 @@
         }
         status.textContent = await response.text();
         button.textContent = 'Sent';
+        button.setAttribute('aria-label', status.textContent);
       } catch {
         status.textContent = 'Could not confirm request. Check GitHub Actions before trying again.';
         button.disabled = false;
