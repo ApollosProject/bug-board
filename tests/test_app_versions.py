@@ -841,6 +841,53 @@ class AppVersionsRouteTest(unittest.TestCase):
             app_module.app.config["GITHUB_OAUTH_ENABLED"] = False
             self.assertEqual(self.client.post(path, data={"csrf": csrf}).status_code, 403)
 
+    def test_directory_target_restores_cached_button_and_dispatches_correct_church(self):
+        observation = {
+            "apollos_platform": "ios",
+            "bundle_id": "com.preview",
+            "church": "selected_church",
+            "deploy_target_count": 7,
+            "apollos_version": "112",
+        }
+        app_module.app.config["GITHUB_OAUTH_ENABLED"] = True
+        with self.client.session_transaction() as session:
+            session.update(github_login="engineer", github_user_id=42, github_org="ApollosProject")
+        for slugs in (["preview"], ["preview", "duplicate"], []):
+            observation["deploy_target_count"] = 1 if len(slugs) > 1 else 7
+            with (
+                self.subTest(slugs=slugs),
+                patch.dict(app_versions.os.environ, {"APOLLOS_API_KEY": "test"}),
+                patch(
+                    "mobile_releases._fetch_app_churches",
+                    return_value=[{"slug": slug, "appleBundleId": "com.preview"} for slug in slugs],
+                ),
+                patch("mobile_releases._fetch_release", return_value=None),
+            ):
+                releases = app_versions.fetch_live_mobile_releases([observation])
+                rows = app_versions._annotate_version_status(
+                    app_versions._select_live_mobile_versions([observation], releases)
+                )
+                context = json.loads(json.dumps({"status": "ready", "rows": rows}))
+                with (
+                    patch.object(app_module, "get_app_versions_context", return_value=context),
+                    patch.object(app_module, "dispatch_app_deploy") as dispatch,
+                ):
+                    body = self.client.get("/apps").get_data(as_text=True)
+                    self.assertIn("Unverified", body)  # Store failure doesn't block deployment.
+                    with self.client.session_transaction() as session:
+                        csrf = session["app_deploy_csrf"]
+                    path = "/apps/deploy/ios/com.preview/selected_church"
+                    response = self.client.post(path, data={"csrf": csrf})
+                    if len(slugs) == 1:
+                        self.assertIn(f'action="{path}"', body)
+                        self.assertEqual(response.status_code, 303)
+                        dispatch.assert_called_once_with("preview", "ios")
+                    else:
+                        self.assertNotIn('action="/apps/deploy/', body)
+                        self.assertEqual(response.status_code, 404)
+                        dispatch.assert_not_called()
+        self.assertEqual(observation["deploy_target_count"], 7)
+
     def test_dispatch_uses_stable_release_and_production_track(self):
         tags = Mock()
         tags.json.return_value = [
