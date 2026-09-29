@@ -395,12 +395,12 @@ def _build_app_versions_query(
             seen_at,
             COALESCE(NULLIF(church, ''), 'Unknown church') AS church,
             NULLIF(build_church, '') AS build_church,
-            COALESCE(
+            LOWER(COALESCE(
               NULLIF(apollos_platform, ''),
               IF(source_dataset = 'apollos_roku', 'roku', NULL),
               IF(source_dataset = 'apollos_tv', 'tv', NULL),
               'unknown'
-            ) AS apollos_platform,
+            )) AS apollos_platform,
             COALESCE(
               NULLIF(application_name, ''),
               IF(source_dataset = 'apollos_roku', 'Roku', NULL),

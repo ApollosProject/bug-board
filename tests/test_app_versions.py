@@ -762,6 +762,7 @@ class AppVersionsContextTest(unittest.TestCase):
         self.assertIn("filtered_events AS", query)
         self.assertIn("source_dataset = 'apollos_tv'", query)
         self.assertIn("IF(source_dataset = 'apollos_tv', 'tv', NULL)", query)
+        self.assertIn("LOWER(COALESCE(\n              NULLIF(apollos_platform, '')", query)
         self.assertIn("apollos_platform IN ('amazon', 'androidtv', 'tvos', 'tv')", query)
         self.assertIn(
             "apollos_platform NOT IN ('amazon', 'androidtv', 'tvos', 'tv', 'roku')",
