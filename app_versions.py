@@ -61,6 +61,7 @@ ALPHA_RELEASE_TAG_PATTERN = re.compile(r"^(v\d{4}\.\d{2}\.\d{2}\.\d{2})-alpha\.\
 SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{7,40}$")
 RUNTIME_VERSION_PATTERN = re.compile(r"\d+(?:\.\d+)*")
 INTERNAL_DEPLOYMENT_TRACKS = {"beta", "development", "internal", "preview", "prerelease"}
+DEPLOY_PLATFORMS = {"ios", "android", "tvos", "androidtv", "amazon", "roku"}
 
 
 @dataclass(frozen=True)
@@ -99,7 +100,7 @@ def get_app_versions_context() -> dict[str, Any]:
 
 
 def _app_versions_cache_key() -> str:
-    return f"apps:live-runtime:v2:{_get_app_versions_config()!r}"
+    return f"apps:live-runtime:v3:{_get_app_versions_config()!r}"
 
 
 def refresh_app_versions_cache() -> None:
@@ -178,6 +179,75 @@ def fetch_app_versions(config: AppVersionsConfig) -> tuple[list[dict[str, Any]],
         _annotate_version_status(latest_rows, source_context)[: config.limit],
         discovered_tables,
     )
+
+
+def app_control_rows(context: dict[str, Any]) -> dict[tuple[str, str, str], dict[str, Any]]:
+    if context.get("status") != "ready":
+        return {}
+    matches: dict[tuple[str, str, str], dict[str, Any] | None] = {}
+    for row in context["rows"]:
+        key = _app_identity_key(row)
+        matches[key] = None if key in matches else row
+    return {
+        key: row
+        for key, row in matches.items()
+        if row is not None
+        and key[1] in DEPLOY_PLATFORMS
+        and row.get("deploy_target_count") == 1
+        and row.get("church")
+        and row.get("bundle_id")
+        and app_control_slug(row)
+    }
+
+
+def app_control_slug(row: dict[str, Any]) -> str | None:
+    slug = _string_value(row.get("build_church")) or _string_value(row.get("church"))
+    return slug if slug and re.fullmatch(r"[A-Za-z0-9_-]+", slug) else None
+
+
+def dispatch_app_deploy(church: str, platform: str) -> None:
+    token = os.getenv("GITHUB_ACTIONS_TOKEN", "").strip()
+    if not token:
+        raise AppVersionsError("GITHUB_ACTIONS_TOKEN is not configured")
+    ref = ""
+    page = 1
+    while True:
+        response = requests.get(
+            f"{PLATFORMS_GITHUB_API_URL}/tags",
+            params={"per_page": 100, "page": page},
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+            timeout=GITHUB_TIMEOUT_SECONDS,
+            allow_redirects=False,
+        )
+        response.raise_for_status()
+        tags = response.json()
+        ref = max(
+            [ref]
+            + [
+                tag["name"]
+                for tag in tags
+                if STABLE_RELEASE_TAG_PATTERN.fullmatch(tag.get("name", ""))
+            ]
+        )
+        if len(tags) < 100:
+            break
+        page += 1
+    if not ref:
+        raise AppVersionsError("No stable release tag found")
+    response = requests.post(
+        f"{PLATFORMS_GITHUB_API_URL}/actions/workflows/"
+        f"{os.getenv('GITHUB_DEPLOY_WORKFLOW_ID', '173574865')}/dispatches",
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+        json={
+            "ref": ref,
+            "inputs": {"church": church, "platform": platform, "track": "production"},
+        },
+        timeout=GITHUB_TIMEOUT_SECONDS,
+        allow_redirects=False,
+    )
+    response.raise_for_status()
+    if response.status_code != 204:
+        raise AppVersionsError("GitHub did not confirm workflow dispatch")
 
 
 def _build_bigquery_client(project_id: str):
@@ -325,12 +395,12 @@ def _build_app_versions_query(
             seen_at,
             COALESCE(NULLIF(church, ''), 'Unknown church') AS church,
             NULLIF(build_church, '') AS build_church,
-            COALESCE(
+            LOWER(COALESCE(
               NULLIF(apollos_platform, ''),
               IF(source_dataset = 'apollos_roku', 'roku', NULL),
               IF(source_dataset = 'apollos_tv', 'tv', NULL),
               'unknown'
-            ) AS apollos_platform,
+            )) AS apollos_platform,
             COALESCE(
               NULLIF(application_name, ''),
               IF(source_dataset = 'apollos_roku', 'Roku', NULL),
@@ -389,7 +459,12 @@ def _build_app_versions_query(
               LIMIT 1
             )[SAFE_OFFSET(0)] AS church,
             ARRAY_AGG(build_church IGNORE NULLS ORDER BY seen_at DESC LIMIT 1)
-              [SAFE_OFFSET(0)] AS build_church
+              [SAFE_OFFSET(0)] AS build_church,
+            IF(
+              COUNT(DISTINCT build_church) > 0,
+              COUNT(DISTINCT build_church),
+              COUNT(DISTINCT IF(apollos_version IS NOT NULL, church, NULL))
+            ) AS deploy_target_count
           FROM app_identity_events
           GROUP BY app_identity_key
         ),
@@ -398,6 +473,7 @@ def _build_app_versions_query(
             events.app_identity_key,
             display_churches.church,
             display_churches.build_church,
+            display_churches.deploy_target_count,
             events.apollos_platform,
             events.application_name,
             events.bundle_id,
@@ -421,6 +497,7 @@ def _build_app_versions_query(
             events.app_identity_key,
             display_churches.church,
             display_churches.build_church,
+            display_churches.deploy_target_count,
             events.apollos_platform,
             events.application_name,
             events.bundle_id,
@@ -439,6 +516,7 @@ def _build_app_versions_query(
         SELECT
           observation.church,
           observation.build_church,
+          observation.deploy_target_count,
           observation.apollos_platform,
           observation.application_name,
           observation.bundle_id,

@@ -34,6 +34,8 @@ python -m unittest discover -s tests -p 'test_*.py'
 
 - `LINEAR_API_KEY` – API token for Linear
 - `GITHUB_TOKEN` – GitHub token used for pull‑request data
+- `GITHUB_ACTIONS_TOKEN` – Fine-grained token for `ApollosProject/apollos-platforms` with Actions: write and Contents: read, used to dispatch production deployments from `/apps`
+- `GITHUB_DEPLOY_WORKFLOW_ID` – Optional workflow ID for production deploys (default: `173574865`)
 - `GITHUB_OAUTH_ENABLED` – Set to `true` to require GitHub sign-in; the app also enables the gate automatically when either OAuth credential is configured
 - `GITHUB_OAUTH_CLIENT_ID` – Client ID for the GitHub OAuth app that gates dashboard access
 - `GITHUB_OAUTH_CLIENT_SECRET` – Client secret for the GitHub OAuth app
@@ -207,6 +209,9 @@ The legacy `GET /airflow-fleet-health` Better Stack monitor endpoint has been re
 ## Apps dashboard
 
 `GET /apps` shows app identity, runtime/version, and status, with stacked rows on small screens.
+Signed-in users can deploy supported apps from the latest stable Platforms tag using
+`GITHUB_ACTIONS_TOKEN` (see permissions above); `GITHUB_DEPLOY_WORKFLOW_ID` defaults to `173574865`.
+The workflow checks `APP.PRODUCTION_READY` or `TV.PRODUCTION_READY`; generic `tv`/unknown apps cannot be deployed.
 iOS, Android, and Android TV rows show the **published store build's runtime**, not the highest
 runtime seen in Segment:
 
