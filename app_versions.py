@@ -181,12 +181,12 @@ def fetch_app_versions(config: AppVersionsConfig) -> tuple[list[dict[str, Any]],
     )
 
 
-def app_control_rows(context: dict[str, Any]) -> dict[tuple[str, str, str, str], dict[str, Any]]:
+def app_control_rows(context: dict[str, Any]) -> dict[tuple[str, str, str], dict[str, Any]]:
     if context.get("status") != "ready":
         return {}
-    matches: dict[tuple[str, str, str, str], dict[str, Any] | None] = {}
+    matches: dict[tuple[str, str, str], dict[str, Any] | None] = {}
     for row in context["rows"]:
-        key = (*_app_identity_key(row), _string_value(row.get("church")) or "")
+        key = _app_identity_key(row)
         matches[key] = None if key in matches else row
     return {
         key: row

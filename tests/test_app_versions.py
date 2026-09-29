@@ -822,6 +822,9 @@ class AppVersionsRouteTest(unittest.TestCase):
                     self.assertEqual(
                         self.client.post(invalid_path, data={"csrf": csrf}).status_code, 404
                     )
+                context["rows"].append({**row, "church": "other_church"})
+                self.assertEqual(self.client.post(path, data={"csrf": csrf}).status_code, 404)
+                context["rows"].pop()
                 dispatch.assert_not_called()
                 response = self.client.post(path, data={"csrf": csrf})
                 self.assertEqual(response.status_code, 303)
@@ -1024,7 +1027,7 @@ class AppVersionsRouteTest(unittest.TestCase):
         rows = [
             {"apollos_platform": "ios", "bundle_id": "com.unknown", "church": "Unknown church"},
             {"apollos_platform": "ios", "bundle_id": "com.duplicate", "church": "church_one"},
-            {"apollos_platform": "ios", "bundle_id": "com.duplicate", "church": "church_one"},
+            {"apollos_platform": "ios", "bundle_id": "com.duplicate", "church": "church_two"},
         ]
         context = {
             "status": "ready",

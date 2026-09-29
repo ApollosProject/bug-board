@@ -514,9 +514,11 @@ def deploy_app(platform: str, bundle: str, church: str):
     csrf = session.get("app_deploy_csrf", "")
     if not csrf or not secrets.compare_digest(request.form.get("csrf", ""), csrf):
         abort(403)
-    key = (church if bundle in {"unknown", "roku"} else "", platform, bundle, church)
+    key = (church if bundle in {"unknown", "roku"} else "", platform, bundle)
     row = app_control_rows(get_app_versions_context()).get(key)
-    slug = app_control_slug(row) if row else None
+    if not row or row.get("church") != church:
+        abort(404)
+    slug = app_control_slug(row)
     if not slug:
         abort(404)
     try:
