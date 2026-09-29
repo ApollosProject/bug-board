@@ -526,7 +526,10 @@ def deploy_app(platform: str, bundle: str, church: str):
     except (AppVersionsError, requests.RequestException, KeyError):
         app.logger.exception("App deploy failed for %s %s", slug, platform)
         abort(502)
-    flash(f"Deployment started for {slug} ({platform}).")
+    message = f"Deployment request sent for {slug} ({platform})."
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return message, 200, {"Content-Type": "text/plain; charset=utf-8"}
+    flash(message)
     return redirect(url_for("apps_dashboard"), code=303)
 
 

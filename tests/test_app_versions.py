@@ -837,7 +837,22 @@ class AppVersionsRouteTest(unittest.TestCase):
                 response = self.client.post(path, data={"csrf": csrf})
                 self.assertEqual(response.status_code, 303)
                 dispatch.assert_called_once_with("apollos_preview", "ios")
-                self.assertIn("Deployment started", self.client.get("/apps").get_data(as_text=True))
+                self.assertIn(
+                    "Deployment request sent", self.client.get("/apps").get_data(as_text=True)
+                )
+                dispatch.reset_mock()
+                response = self.client.post(
+                    path,
+                    data={"csrf": csrf},
+                    headers={"X-Requested-With": "XMLHttpRequest"},
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.mimetype, "text/plain")
+                self.assertEqual(
+                    response.get_data(as_text=True),
+                    "Deployment request sent for apollos_preview (ios).",
+                )
+                dispatch.assert_called_once_with("apollos_preview", "ios")
             app_module.app.config["GITHUB_OAUTH_ENABLED"] = False
             self.assertEqual(self.client.post(path, data={"csrf": csrf}).status_code, 403)
 
@@ -1172,6 +1187,10 @@ class AppVersionsRouteTest(unittest.TestCase):
         )
         self.assertIn("button.version-deploy[type=submit] {\n    width: auto;", body)
         self.assertIn('class="secondary outline version-deploy"', body)
+        self.assertIn('class="version-deploy-form"', body)
+        self.assertIn("event.preventDefault();", body)
+        self.assertIn("button.setAttribute('aria-label', status.textContent);", body)
+        self.assertIn('role="status" aria-live="polite"', body)
         self.assertIn(
             'aria-label="Deploy iOS for apollos_preview (com.differential.apollospreview)"',
             body,

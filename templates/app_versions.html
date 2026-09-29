@@ -208,9 +208,10 @@
                       <br /><small class="version-muted">{{ row.live_status_detail }}</small>
                     {% endif %}
                     {% if config.GITHUB_OAUTH_ENABLED and session.get('github_user_id') and row.deployable %}
-                      <form method="post" action="{{ url_for('deploy_app', platform=tab.key, bundle=row.bundle_id|lower, church=row.church) }}">
+                      <form class="version-deploy-form" method="post" action="{{ url_for('deploy_app', platform=tab.key, bundle=row.bundle_id|lower, church=row.church) }}">
                         <input type="hidden" name="csrf" value="{{ session.app_deploy_csrf }}" />
                         <button type="submit" class="secondary outline version-deploy" aria-label="Deploy {{ tab.label }} for {{ row.build_church or row.church }} ({{ row.bundle_id }})">Deploy {{ tab.label }}</button>
+                        <small role="status" aria-live="polite"></small>
                       </form>
                     {% endif %}
                   </td>
@@ -235,6 +236,32 @@
 
 {% block extra_scripts %}
 <script>
+  for (const form of document.querySelectorAll('.version-deploy-form')) {
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const button = form.querySelector('button');
+      const status = form.querySelector('[role="status"]');
+      button.disabled = true;
+      status.textContent = 'Sending…';
+      try {
+        const response = await fetch(form.action, {
+          method: 'POST',
+          body: new FormData(form),
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        });
+        if (!response.ok || !response.headers.get('Content-Type')?.startsWith('text/plain')) {
+          throw new Error('Dispatch not confirmed');
+        }
+        status.textContent = await response.text();
+        button.textContent = 'Sent';
+        button.setAttribute('aria-label', status.textContent);
+      } catch {
+        status.textContent = 'Could not confirm request. Check GitHub Actions before trying again.';
+        button.disabled = false;
+      }
+    });
+  }
+
   for (const tab of document.querySelectorAll('[data-version-tab]')) {
     tab.addEventListener('click', () => {
       const selectedKey = tab.dataset.versionTab;
