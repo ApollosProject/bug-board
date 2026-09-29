@@ -219,7 +219,9 @@ Mobile rows show the **published store build's runtime**, not the highest runtim
   on iOS) to recover its reported `apollos_version`/Expo runtime. Marketing version alone,
   a GitHub tag, and a successful upload cannot establish the live runtime. Every published
   build must have exactly one valid runtime match within the lookback window; otherwise show
-  **Unverified**. Multiple published runtimes are shown explicitly, never as fully current.
+  **Unverified**. Events whose reported `app_version` disagrees with `context_app_version`
+  are excluded: queued events can retain old properties with a newer native context.
+  Multiple published runtimes are shown explicitly, never as fully current.
   A build promoted from internal testing is eligible if the store confirms it is published.
 - Compare that live runtime with the newest stable `apollos-platforms` tag's
   `templates/mobile/app.config.ts` runtime. Missing release-target data is also **Unverified**.
@@ -229,7 +231,10 @@ Set `APOLLOS_API_KEY` to enable store verification using the existing Cluster co
 `APP.APPLE_API_KEY_B64` (or `APP.APPLE_API_KEY`) and `APP.GOOGLE_API_KEY_B64`.
 The configured bundle/package must match the observed app before its credentials are loaded.
 `build_church` identifies the deployed app; a selected `church` is only a lookup hint when
-that field is absent. Credentials stay in memory and are never logged or cached.
+that field is absent. Cluster's existing church directory supplies additional lookup hints by
+exact platform bundle/package ID, including Preview when older analytics identify Demo instead.
+Directory failures fall back to analytics hints; the configuration bundle check still applies.
+Credentials stay in memory and are never logged or cached.
 With `REDIS_URL` configured, `jobs.py` refreshes the dashboard every three minutes and the
 public version snapshot expires after five minutes. Web requests only read the cache, avoiding
 per-app store lookups within Gunicorn's request timeout; an empty/expired cache is unavailable,

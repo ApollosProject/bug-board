@@ -292,6 +292,31 @@ class AppVersionsContextTest(unittest.TestCase):
             )
         )
 
+    def test_mobile_ignores_events_with_contradictory_app_and_native_versions(self):
+        for platform in ("ios", "android"):
+            with self.subTest(platform=platform):
+                current = {
+                    "apollos_platform": platform,
+                    "bundle_id": "com.church",
+                    "native_build": "123",
+                    "native_version": "1.1",
+                    "app_version": "1.1",
+                    "apollos_version": "104",
+                }
+                stale = {**current, "app_version": "1.0", "apollos_version": "103"}
+                releases = {
+                    (platform, "com.church"): {
+                        "builds": [{"native_build": "123", "native_version": "1.1"}]
+                    }
+                }
+                selected = app_versions._select_live_mobile_versions([current, stale], releases)
+                self.assertEqual(selected[0]["apollos_version"], "104")
+                unmatched = app_versions._select_live_mobile_versions([stale], releases)
+                self.assertIsNone(unmatched[0]["apollos_version"])
+                self.assertEqual(
+                    unmatched[0]["live_status_detail"], "Live build has no unique runtime match"
+                )
+
     def test_mobile_does_not_guess_from_marketing_version_or_conflicting_runtimes(self):
         row = {
             "apollos_platform": "ios",
