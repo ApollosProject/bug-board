@@ -1,4 +1,5 @@
 import base64
+import json
 import sys
 import types
 import unittest
@@ -1071,6 +1072,8 @@ class AppVersionsRouteTest(unittest.TestCase):
             "platform_tabs": app_versions.build_platform_tabs(rows),
             "lookback_days": 30,
         }
+        context = json.loads(json.dumps(context))  # Redis cache separates row and tab objects.
+        self.assertIsNot(context["rows"][0], context["platform_tabs"][0]["rows"][0])
         app_module.app.config["GITHUB_OAUTH_ENABLED"] = True
         with self.client.session_transaction() as session:
             session.update(github_login="engineer", github_user_id=42, github_org="ApollosProject")

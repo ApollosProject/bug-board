@@ -32,6 +32,7 @@ from app_versions import (
     AppVersionsError,
     app_control_rows,
     app_control_slug,
+    build_platform_tabs,
     dispatch_app_deploy,
     get_app_versions_context,
 )
@@ -500,6 +501,8 @@ def apps_dashboard():
             row["deployable"] = False
         for row in app_control_rows(context).values():
             row["deployable"] = True
+        if context.get("status") == "ready":
+            context["platform_tabs"] = build_platform_tabs(context["rows"])
     return render_template("app_versions.html", **context)
 
 
