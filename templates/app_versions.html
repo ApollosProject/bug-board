@@ -116,12 +116,26 @@
     font-size: 0.9rem;
   }
 
+  .version-deploy-form { margin: 0; }
+
   button.version-deploy[type=submit] {
     width: auto;
     margin: 0.35rem 0 0;
     padding: 0.2rem 0.55rem;
     font-size: 0.8rem;
   }
+
+  .version-deploy-confirmed {
+    display: inline-block;
+    margin-top: 0.35rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: var(--pico-border-radius);
+    background: rgba(23, 181, 130, 0.12);
+    color: var(--pico-color);
+    font-weight: 600;
+  }
+
+  .version-deploy-confirmed::before { content: "✓ "; color: var(--pico-primary); }
 
   .version-empty p:last-child,
   .version-setup p:last-child {
@@ -252,9 +266,9 @@
         if (!response.ok || !response.headers.get('Content-Type')?.startsWith('text/plain')) {
           throw new Error('Dispatch not confirmed');
         }
-        status.textContent = await response.text();
-        button.textContent = 'Sent';
-        button.setAttribute('aria-label', status.textContent);
+        status.textContent = 'Request sent';
+        status.classList.add('version-deploy-confirmed');
+        button.hidden = true;
       } catch {
         status.textContent = 'Could not confirm request. Check GitHub Actions before trying again.';
         button.disabled = false;
