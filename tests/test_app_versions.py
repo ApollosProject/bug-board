@@ -860,7 +860,7 @@ class AppVersionsRouteTest(unittest.TestCase):
         with (
             patch.dict(app_versions.os.environ, {"GITHUB_ACTIONS_TOKEN": "test-token"}),
             patch.object(app_versions.requests, "get", side_effect=[first, second]) as get,
-            patch.object(app_versions.requests, "post") as post,
+            patch.object(app_versions.requests, "post", create=True) as post,
         ):
             post.return_value.status_code = 204
             app_versions.dispatch_app_deploy("church_one", "ios")
