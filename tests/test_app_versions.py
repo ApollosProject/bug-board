@@ -1189,7 +1189,9 @@ class AppVersionsRouteTest(unittest.TestCase):
         self.assertIn('class="secondary outline version-deploy"', body)
         self.assertIn('class="version-deploy-form"', body)
         self.assertIn("event.preventDefault();", body)
-        self.assertIn("button.setAttribute('aria-label', status.textContent);", body)
+        self.assertIn("status.textContent = 'Request sent';", body)
+        self.assertIn("status.classList.add('version-deploy-confirmed');", body)
+        self.assertIn("button.hidden = true;", body)
         self.assertIn('role="status" aria-live="polite"', body)
         self.assertIn(
             'aria-label="Deploy iOS for apollos_preview (com.differential.apollospreview)"',
