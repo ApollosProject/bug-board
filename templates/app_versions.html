@@ -116,6 +116,13 @@
     font-size: 0.9rem;
   }
 
+  button.version-deploy[type=submit] {
+    width: auto;
+    margin: 0.35rem 0 0;
+    padding: 0.2rem 0.55rem;
+    font-size: 0.8rem;
+  }
+
   .version-empty p:last-child,
   .version-setup p:last-child {
     margin-bottom: 0;
@@ -200,10 +207,10 @@
                     {% if row.live_status_detail and (row.version_status_label == "Unverified" or not tab.uses_store_runtime) %}
                       <br /><small class="version-muted">{{ row.live_status_detail }}</small>
                     {% endif %}
-                    {% if config.GITHUB_OAUTH_ENABLED and session.get('github_user_id') and session.get('app_deploy_csrf') and tab.key in ('ios', 'android', 'tvos', 'androidtv', 'amazon', 'roku') and row.church and row.bundle_id %}
+                    {% if row.deployable %}
                       <form method="post" action="{{ url_for('deploy_app', platform=tab.key, bundle=row.bundle_id|lower, church=row.church) }}">
                         <input type="hidden" name="csrf" value="{{ session.app_deploy_csrf }}" />
-                        <button type="submit">Deploy {{ tab.label }}</button>
+                        <button type="submit" class="secondary outline version-deploy" aria-label="Deploy {{ tab.label }} for {{ row.build_church or row.church }} ({{ row.bundle_id }})">Deploy {{ tab.label }}</button>
                       </form>
                     {% endif %}
                   </td>

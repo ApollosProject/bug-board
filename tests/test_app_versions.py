@@ -849,6 +849,24 @@ class AppVersionsRouteTest(unittest.TestCase):
             },
         )
 
+    def test_dispatch_searches_all_tag_pages(self):
+        first = Mock()
+        first.json.return_value = [{"name": "v2026.09.26.00"}] + [
+            {"name": f"v2026.09.27.{i:02d}-alpha.1"} for i in range(99)
+        ]
+        second = Mock()
+        second.json.return_value = [{"name": "v2026.09.28.00"}]
+        with (
+            patch.dict(app_versions.os.environ, {"GITHUB_ACTIONS_TOKEN": "test-token"}),
+            patch.object(app_versions.requests, "get", side_effect=[first, second]) as get,
+            patch.object(app_versions.requests, "post") as post,
+        ):
+            post.return_value.status_code = 204
+            app_versions.dispatch_app_deploy("church_one", "ios")
+        self.assertEqual(get.call_count, 2)
+        self.assertEqual(get.call_args_list[1].kwargs["params"]["page"], 2)
+        self.assertEqual(post.call_args.kwargs["json"]["ref"], "v2026.09.28.00")
+
     def test_apps_route_honors_forwarded_prefix_for_links(self):
         context = {
             "status": "unavailable",
@@ -1001,6 +1019,25 @@ class AppVersionsRouteTest(unittest.TestCase):
         self.assertIn("<th>Observed version</th>", body)
         self.assertNotIn("<th>Live runtime</th>", body)
 
+    def test_deploy_button_only_for_unique_valid_targets(self):
+        rows = [
+            {"apollos_platform": "ios", "bundle_id": "com.unknown", "church": "Unknown church"},
+            {"apollos_platform": "ios", "bundle_id": "com.duplicate", "church": "church_one"},
+            {"apollos_platform": "ios", "bundle_id": "com.duplicate", "church": "church_one"},
+        ]
+        context = {
+            "status": "ready",
+            "rows": rows,
+            "platform_tabs": app_versions.build_platform_tabs(rows),
+            "lookback_days": 30,
+        }
+        app_module.app.config["GITHUB_OAUTH_ENABLED"] = True
+        with self.client.session_transaction() as session:
+            session.update(github_login="engineer", github_user_id=42, github_org="ApollosProject")
+        with patch.object(app_module, "get_app_versions_context", return_value=context):
+            body = self.client.get("/apps").get_data(as_text=True)
+        self.assertNotIn('action="/apps/deploy/', body)
+
     def test_preview_shows_build_slug_without_extra_build_columns(self):
         row = {
             "church": "apollos_demo",
@@ -1035,6 +1072,12 @@ class AppVersionsRouteTest(unittest.TestCase):
             body = self.client.get("/apps").get_data(as_text=True)
         self.assertIn(
             'action="/apps/deploy/ios/com.differential.apollospreview/apollos_demo"',
+            body,
+        )
+        self.assertIn("button.version-deploy[type=submit] {\n    width: auto;", body)
+        self.assertIn('class="secondary outline version-deploy"', body)
+        self.assertIn(
+            'aria-label="Deploy iOS for apollos_preview (com.differential.apollospreview)"',
             body,
         )
         self.assertIn(">Deploy iOS</button>", body)

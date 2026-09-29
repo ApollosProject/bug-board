@@ -496,6 +496,20 @@ def apps_dashboard():
     if app.config.get("GITHUB_OAUTH_ENABLED") and session.get("github_user_id"):
         if "app_deploy_csrf" not in session:
             session["app_deploy_csrf"] = secrets.token_urlsafe(32)
+        # ponytail: scans visible rows for each control; index identities if 1k rows gets slow.
+        for row in context.get("rows", []):
+            target = app_control_row(
+                context,
+                str(row.get("apollos_platform", "")).lower(),
+                str(row.get("bundle_id", "")).lower(),
+                str(row.get("church", "")),
+            )
+            row["deployable"] = bool(
+                row.get("church")
+                and row.get("bundle_id")
+                and app_control_slug(row)
+                and row is target
+            )
     return render_template("app_versions.html", **context)
 
 

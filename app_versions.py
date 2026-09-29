@@ -205,22 +205,29 @@ def dispatch_app_deploy(church: str, platform: str) -> None:
     token = os.getenv("GITHUB_ACTIONS_TOKEN", "").strip()
     if not token:
         raise AppVersionsError("GITHUB_ACTIONS_TOKEN is not configured")
-    response = requests.get(
-        f"{PLATFORMS_GITHUB_API_URL}/tags",
-        params={"per_page": "100"},
-        headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
-        timeout=GITHUB_TIMEOUT_SECONDS,
-        allow_redirects=False,
-    )
-    response.raise_for_status()
-    ref = max(
-        (
-            tag["name"]
-            for tag in response.json()
-            if STABLE_RELEASE_TAG_PATTERN.fullmatch(tag.get("name", ""))
-        ),
-        default=None,
-    )
+    ref = ""
+    page = 1
+    while True:
+        response = requests.get(
+            f"{PLATFORMS_GITHUB_API_URL}/tags",
+            params={"per_page": 100, "page": page},
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+            timeout=GITHUB_TIMEOUT_SECONDS,
+            allow_redirects=False,
+        )
+        response.raise_for_status()
+        tags = response.json()
+        ref = max(
+            [ref]
+            + [
+                tag["name"]
+                for tag in tags
+                if STABLE_RELEASE_TAG_PATTERN.fullmatch(tag.get("name", ""))
+            ]
+        )
+        if len(tags) < 100:
+            break
+        page += 1
     if not ref:
         raise AppVersionsError("No stable release tag found")
     response = requests.post(
