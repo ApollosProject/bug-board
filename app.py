@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
 from datetime import datetime, timedelta, timezone
@@ -10,12 +11,30 @@ from functools import lru_cache
 from typing import Any, TypedDict, TypeVar
 from urllib.parse import quote
 
-from flask import Flask, Response, abort, jsonify, render_template, request
+import requests
+from flask import (
+    Flask,
+    Response,
+    abort,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from airflow_fleet_health import AirflowFleetHealthError, evaluate_fleet_health
 from api import person_metrics_payload, require_api_key
-from app_versions import get_app_versions_context
+from app_versions import (
+    AppVersionsError,
+    app_control_row,
+    app_control_slug,
+    dispatch_app_deploy,
+    get_app_versions_context,
+)
 from config import get_linear_team_key, load_config
 from constants import ENGINEERING_TEAM_SLUG, PRIORITY_TO_SCORE
 from fleet_health_cache import (
@@ -473,7 +492,32 @@ def dags_dashboard():
 
 @app.route("/apps")
 def apps_dashboard():
-    return render_template("app_versions.html", **get_app_versions_context())
+    context = get_app_versions_context()
+    if app.config.get("GITHUB_OAUTH_ENABLED") and session.get("github_user_id"):
+        if "app_deploy_csrf" not in session:
+            session["app_deploy_csrf"] = secrets.token_urlsafe(32)
+    return render_template("app_versions.html", **context)
+
+
+@app.post("/apps/deploy/<platform>/<bundle>/<church>")
+def deploy_app(platform: str, bundle: str, church: str):
+    # Never expose writes on an unauthenticated local instance.
+    if not app.config.get("GITHUB_OAUTH_ENABLED") or not session.get("github_user_id"):
+        abort(403)
+    csrf = session.get("app_deploy_csrf", "")
+    if not csrf or not secrets.compare_digest(request.form.get("csrf", ""), csrf):
+        abort(403)
+    row = app_control_row(get_app_versions_context(), platform, bundle, church)
+    slug = app_control_slug(row) if row else None
+    if not slug:
+        abort(404)
+    try:
+        dispatch_app_deploy(slug, platform)
+    except (AppVersionsError, requests.RequestException, KeyError):
+        app.logger.exception("App deploy failed for %s %s", slug, platform)
+        abort(502)
+    flash(f"Deployment started for {slug} ({platform}).")
+    return redirect(url_for("apps_dashboard"), code=303)
 
 
 @app.route("/app-versions")

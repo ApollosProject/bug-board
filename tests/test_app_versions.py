@@ -13,8 +13,12 @@ def _install_import_shims() -> None:
     sys.modules.setdefault("dotenv", dotenv_module)
 
     requests_module = cast(Any, types.ModuleType("requests"))
-    requests_module.RequestException = Exception
-    requests_module.HTTPError = Exception
+
+    class RequestException(Exception):
+        pass
+
+    requests_module.RequestException = RequestException
+    requests_module.HTTPError = RequestException
 
     class DummySession:
         def __init__(self):
@@ -775,6 +779,80 @@ class AppVersionsContextTest(unittest.TestCase):
 class AppVersionsRouteTest(unittest.TestCase):
     def setUp(self):
         self.client = app_module.app.test_client()
+        self.original_config = dict(app_module.app.config)
+        app_module.app.config.update(
+            GITHUB_OAUTH_CLIENT_ID="test-client",
+            GITHUB_OAUTH_CLIENT_SECRET="test-secret",
+            GITHUB_OAUTH_CALLBACK_URL="http://localhost/auth/github/callback",
+            GITHUB_OAUTH_ORG="ApollosProject",
+            SECRET_KEY="test-secret-key-at-least-32-characters",
+        )
+
+    def tearDown(self):
+        app_module.app.config.clear()
+        app_module.app.config.update(self.original_config)
+
+    def test_deploy_requires_auth_and_csrf_and_uses_cached_build_slug(self):
+        path = "/apps/deploy/ios/com.preview/apollos_demo"
+        row = {
+            "apollos_platform": "ios",
+            "bundle_id": "com.preview",
+            "church": "apollos_demo",
+            "build_church": "apollos_preview",
+        }
+        context = {"status": "ready", "rows": [row], "platform_tabs": [], "lookback_days": 30}
+        with patch.object(app_module, "get_app_versions_context", return_value=context):
+            self.assertEqual(self.client.post(path).status_code, 403)
+            app_module.app.config["GITHUB_OAUTH_ENABLED"] = True
+            with self.client.session_transaction() as session:
+                session.update(
+                    github_login="engineer", github_user_id=42, github_org="ApollosProject"
+                )
+            with patch.object(app_module, "dispatch_app_deploy") as dispatch:
+                self.assertEqual(self.client.post(path).status_code, 403)
+                self.assertEqual(self.client.get("/apps").status_code, 200)
+                with self.client.session_transaction() as session:
+                    csrf = session["app_deploy_csrf"]
+                self.assertEqual(self.client.post(path, data={"csrf": "invalid"}).status_code, 403)
+                self.assertEqual(
+                    self.client.post(
+                        "/apps/deploy/ios/com.other/apollos_demo", data={"csrf": csrf}
+                    ).status_code,
+                    404,
+                )
+                self.assertEqual(
+                    self.client.post(
+                        "/apps/deploy/tv/com.preview/apollos_demo", data={"csrf": csrf}
+                    ).status_code,
+                    404,
+                )
+                dispatch.assert_not_called()
+                response = self.client.post(path, data={"csrf": csrf})
+                self.assertEqual(response.status_code, 303)
+                dispatch.assert_called_once_with("apollos_preview", "ios")
+                self.assertIn("Deployment started", self.client.get("/apps").get_data(as_text=True))
+            app_module.app.config["GITHUB_OAUTH_ENABLED"] = False
+            self.assertEqual(self.client.post(path, data={"csrf": csrf}).status_code, 403)
+
+    def test_dispatch_uses_stable_release_and_production_track(self):
+        tags = Mock()
+        tags.json.return_value = [
+            {"name": "v2026.09.27.00-alpha.1"},
+            {"name": "v2026.09.26.00"},
+        ]
+        with patch.dict(app_versions.os.environ, {"GITHUB_ACTIONS_TOKEN": "test-token"}):
+            with patch.object(app_versions.requests, "get", return_value=tags) as get:
+                with patch.object(app_versions.requests, "post", create=True) as post:
+                    post.return_value.status_code = 204
+                    app_versions.dispatch_app_deploy("church_one", "roku")
+        get.assert_called_once()
+        self.assertEqual(
+            post.call_args.kwargs["json"],
+            {
+                "ref": "v2026.09.26.00",
+                "inputs": {"church": "church_one", "platform": "roku", "track": "production"},
+            },
+        )
 
     def test_apps_route_honors_forwarded_prefix_for_links(self):
         context = {
@@ -955,8 +1033,17 @@ class AppVersionsRouteTest(unittest.TestCase):
             "platform_tabs": app_versions.build_platform_tabs(rows),
             "lookback_days": 30,
         }
+        app_module.app.config["GITHUB_OAUTH_ENABLED"] = True
+        with self.client.session_transaction() as session:
+            session.update(github_login="engineer", github_user_id=42, github_org="ApollosProject")
         with patch.object(app_module, "get_app_versions_context", return_value=context):
             body = self.client.get("/apps").get_data(as_text=True)
+        self.assertIn(
+            'action="/apps/deploy/ios/com.differential.apollospreview/apollos_demo"',
+            body,
+        )
+        self.assertIn(">Deploy iOS</button>", body)
+        self.assertNotIn("production ready", body.lower())
         self.assertIn("apollos_preview", body)
         self.assertIn("Apollos Preview", body)
         self.assertNotIn("Checked 2026-09-25", body)

@@ -61,6 +61,7 @@ ALPHA_RELEASE_TAG_PATTERN = re.compile(r"^(v\d{4}\.\d{2}\.\d{2}\.\d{2})-alpha\.\
 SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{7,40}$")
 RUNTIME_VERSION_PATTERN = re.compile(r"\d+(?:\.\d+)*")
 INTERNAL_DEPLOYMENT_TRACKS = {"beta", "development", "internal", "preview", "prerelease"}
+DEPLOY_PLATFORMS = {"ios", "android", "tvos", "androidtv", "amazon", "roku"}
 
 
 @dataclass(frozen=True)
@@ -178,6 +179,64 @@ def fetch_app_versions(config: AppVersionsConfig) -> tuple[list[dict[str, Any]],
         _annotate_version_status(latest_rows, source_context)[: config.limit],
         discovered_tables,
     )
+
+
+def app_control_row(
+    context: dict[str, Any], platform: str, bundle: str, church: str
+) -> dict[str, Any] | None:
+    if context.get("status") != "ready" or platform not in DEPLOY_PLATFORMS:
+        return None
+    matches = [
+        row
+        for row in context["rows"]
+        if _app_identity_key(row)
+        == (church if bundle in {"unknown", "roku"} else "", platform, bundle)
+        and _string_value(row.get("church")) == church
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def app_control_slug(row: dict[str, Any]) -> str | None:
+    slug = _string_value(row.get("build_church")) or _string_value(row.get("church"))
+    return slug if slug and re.fullmatch(r"[A-Za-z0-9_-]+", slug) else None
+
+
+def dispatch_app_deploy(church: str, platform: str) -> None:
+    token = os.getenv("GITHUB_ACTIONS_TOKEN", "").strip()
+    if not token:
+        raise AppVersionsError("GITHUB_ACTIONS_TOKEN is not configured")
+    response = requests.get(
+        f"{PLATFORMS_GITHUB_API_URL}/tags",
+        params={"per_page": "100"},
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+        timeout=GITHUB_TIMEOUT_SECONDS,
+        allow_redirects=False,
+    )
+    response.raise_for_status()
+    ref = max(
+        (
+            tag["name"]
+            for tag in response.json()
+            if STABLE_RELEASE_TAG_PATTERN.fullmatch(tag.get("name", ""))
+        ),
+        default=None,
+    )
+    if not ref:
+        raise AppVersionsError("No stable release tag found")
+    response = requests.post(
+        f"{PLATFORMS_GITHUB_API_URL}/actions/workflows/"
+        f"{os.getenv('GITHUB_DEPLOY_WORKFLOW_ID', '173574865')}/dispatches",
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"},
+        json={
+            "ref": ref,
+            "inputs": {"church": church, "platform": platform, "track": "production"},
+        },
+        timeout=GITHUB_TIMEOUT_SECONDS,
+        allow_redirects=False,
+    )
+    response.raise_for_status()
+    if response.status_code != 204:
+        raise AppVersionsError("GitHub did not confirm workflow dispatch")
 
 
 def _build_bigquery_client(project_id: str):
