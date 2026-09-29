@@ -26,13 +26,15 @@ def fetch_live_mobile_releases(rows: list[dict[str, Any]]) -> dict[tuple[str, st
         bundle = str(row.get("bundle_id") or "").strip()
         if platform not in STORE_PLATFORMS or not re.fullmatch(r"[\w.-]+", bundle):
             continue
+        churches = candidates.setdefault((platform, bundle), set())
         church = str(row.get("build_church") or row.get("church") or "")
         if re.fullmatch(r"[A-Za-z0-9_-]+", church):
-            candidates.setdefault((platform, bundle), set()).add(church)
+            churches.add(church)
     if not os.getenv("APOLLOS_API_KEY") or not candidates:
         return {}
 
     # Older analytics may identify the selected church, not the app's build church.
+    directory_targets: dict[tuple[str, str], set[str]] = {}
     for app_church in _fetch_app_churches():
         slug = app_church.get("slug") or ""
         if not isinstance(slug, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", slug):
@@ -45,14 +47,22 @@ def fetch_live_mobile_releases(rows: list[dict[str, Any]]) -> dict[tuple[str, st
             key = (platform, directory_bundle)
             if key in candidates:
                 candidates[key].add(slug)
+                directory_targets.setdefault(key, set()).add(slug)
 
     def lookup(item):
         (platform, bundle), churches = item
+        identity = {}
+        targets = directory_targets.get((platform, bundle), set())
+        if targets:
+            identity = {
+                "build_church": next(iter(targets)) if len(targets) == 1 else None,
+                "deploy_target_count": len(targets),
+            }
         for church in sorted(churches):
             release = _fetch_release(church, platform, bundle)
             if release is not None:
-                return (platform, bundle.lower()), release
-        return (platform, bundle.lower()), {}
+                return (platform, bundle.lower()), {**release, **identity}
+        return (platform, bundle.lower()), identity
 
     with ThreadPoolExecutor(max_workers=min(16, len(candidates))) as executor:
         return dict(executor.map(lookup, candidates.items()))

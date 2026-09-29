@@ -147,12 +147,41 @@ class MobileReleasesTest(unittest.TestCase):
         ):
             self.assertEqual(
                 mobile_releases.fetch_live_mobile_releases(rows),
-                {("ios", "com.preview"): release},
+                {
+                    ("ios", "com.preview"): {
+                        **release,
+                        "build_church": "preview",
+                        "deploy_target_count": 1,
+                    }
+                },
             )
         self.assertEqual(
             [call.args for call in fetch.call_args_list],
             [("demo", "ios", "com.preview"), ("preview", "ios", "com.preview")],
         )
+
+    def test_directory_identity_survives_missing_analytics_slug_and_store_failure(self):
+        rows = [{"apollos_platform": "ios", "bundle_id": "com.preview"}]
+        for slugs in (["preview", "preview"], ["preview", "duplicate"]):
+            with (
+                self.subTest(slugs=slugs),
+                patch.dict(mobile_releases.os.environ, {"APOLLOS_API_KEY": "test"}),
+                patch.object(
+                    mobile_releases,
+                    "_fetch_app_churches",
+                    return_value=[{"slug": slug, "appleBundleId": "com.preview"} for slug in slugs],
+                ),
+                patch.object(mobile_releases, "_fetch_release", return_value=None),
+            ):
+                self.assertEqual(
+                    mobile_releases.fetch_live_mobile_releases(rows),
+                    {
+                        ("ios", "com.preview"): {
+                            "build_church": "preview" if len(set(slugs)) == 1 else None,
+                            "deploy_target_count": len(set(slugs)),
+                        }
+                    },
+                )
 
     def test_directory_rejects_errors_and_malformed_responses(self):
         directory = [{"slug": "preview", "appleBundleId": "com.preview"}]

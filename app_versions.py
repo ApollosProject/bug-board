@@ -776,6 +776,9 @@ def _select_live_mobile_versions(
         updated["apollos_version"] = None
         updated["live_status_detail"] = "Store release could not be verified"
         release = releases.get((platform, bundle))
+        if release and "deploy_target_count" in release:
+            updated["build_church"] = release["build_church"]
+            updated["deploy_target_count"] = release["deploy_target_count"]
         builds = release.get("builds") if release else None
         if builds == []:
             updated["live_status_detail"] = "No published store build"

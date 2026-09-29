@@ -243,6 +243,10 @@ The configured bundle/package must match the observed app before its credentials
 that field is absent. Cluster's existing church directory supplies additional lookup hints by
 exact platform bundle/package ID, including Preview when older analytics identify Demo instead.
 Directory failures fall back to analytics hints; the configuration bundle check still applies.
+Deploy buttons also use the directory's unique platform/bundle match, so older analytics with
+missing `build_church` or multiple selected churches do not hide a known app's deployment control.
+Multiple directory matches remain non-deployable, and store verification failures do not hide
+an otherwise identified deployment target.
 Credentials stay in memory and are never logged or cached.
 With `REDIS_URL` configured, `jobs.py` refreshes the dashboard every three minutes and the
 public version snapshot expires after five minutes. Web requests only read the cache, avoiding
