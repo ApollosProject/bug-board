@@ -100,7 +100,7 @@ def get_app_versions_context() -> dict[str, Any]:
 
 
 def _app_versions_cache_key() -> str:
-    return f"apps:live-runtime:v2:{_get_app_versions_config()!r}"
+    return f"apps:live-runtime:v3:{_get_app_versions_config()!r}"
 
 
 def refresh_app_versions_cache() -> None:
@@ -193,6 +193,7 @@ def app_control_rows(context: dict[str, Any]) -> dict[tuple[str, str, str], dict
         for key, row in matches.items()
         if row is not None
         and key[1] in DEPLOY_PLATFORMS
+        and row.get("deploy_target_count") == 1
         and row.get("church")
         and row.get("bundle_id")
         and app_control_slug(row)
@@ -458,7 +459,12 @@ def _build_app_versions_query(
               LIMIT 1
             )[SAFE_OFFSET(0)] AS church,
             ARRAY_AGG(build_church IGNORE NULLS ORDER BY seen_at DESC LIMIT 1)
-              [SAFE_OFFSET(0)] AS build_church
+              [SAFE_OFFSET(0)] AS build_church,
+            IF(
+              COUNT(DISTINCT build_church) > 0,
+              COUNT(DISTINCT build_church),
+              COUNT(DISTINCT IF(apollos_version IS NOT NULL, church, NULL))
+            ) AS deploy_target_count
           FROM app_identity_events
           GROUP BY app_identity_key
         ),
@@ -467,6 +473,7 @@ def _build_app_versions_query(
             events.app_identity_key,
             display_churches.church,
             display_churches.build_church,
+            display_churches.deploy_target_count,
             events.apollos_platform,
             events.application_name,
             events.bundle_id,
@@ -490,6 +497,7 @@ def _build_app_versions_query(
             events.app_identity_key,
             display_churches.church,
             display_churches.build_church,
+            display_churches.deploy_target_count,
             events.apollos_platform,
             events.application_name,
             events.bundle_id,
@@ -508,6 +516,7 @@ def _build_app_versions_query(
         SELECT
           observation.church,
           observation.build_church,
+          observation.deploy_target_count,
           observation.apollos_platform,
           observation.application_name,
           observation.bundle_id,

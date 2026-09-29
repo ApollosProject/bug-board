@@ -749,6 +749,9 @@ class AppVersionsContextTest(unittest.TestCase):
         self.assertIn("[SAFE_OFFSET(0)] AS church", query)
         self.assertIn("[SAFE_OFFSET(0)] AS build_church", query)
         self.assertIn("observation.build_church", query)
+        self.assertIn("COUNT(DISTINCT build_church)", query)
+        self.assertIn("COUNT(DISTINCT IF(apollos_version IS NOT NULL, church, NULL))", query)
+        self.assertIn("observation.deploy_target_count", query)
         self.assertNotIn("AND `apollos_version` IS NOT NULL", query)
         self.assertIn("WHERE apollos_version IS NOT NULL OR build_church IS NOT NULL", query)
         self.assertIn("IF(apollos_version IS NOT NULL, church, NULL) IGNORE NULLS", query)
@@ -800,6 +803,7 @@ class AppVersionsRouteTest(unittest.TestCase):
             "bundle_id": "com.preview",
             "church": "apollos_demo",
             "build_church": "apollos_preview",
+            "deploy_target_count": 1,
         }
         context = {"status": "ready", "rows": [row], "platform_tabs": [], "lookback_days": 30}
         with patch.object(app_module, "get_app_versions_context", return_value=context):
@@ -825,6 +829,9 @@ class AppVersionsRouteTest(unittest.TestCase):
                 context["rows"].append({**row, "church": "other_church"})
                 self.assertEqual(self.client.post(path, data={"csrf": csrf}).status_code, 404)
                 context["rows"].pop()
+                row["deploy_target_count"] = 2
+                self.assertEqual(self.client.post(path, data={"csrf": csrf}).status_code, 404)
+                row["deploy_target_count"] = 1
                 dispatch.assert_not_called()
                 response = self.client.post(path, data={"csrf": csrf})
                 self.assertEqual(response.status_code, 303)
@@ -1025,9 +1032,37 @@ class AppVersionsRouteTest(unittest.TestCase):
 
     def test_deploy_button_only_for_unique_valid_targets(self):
         rows = [
-            {"apollos_platform": "ios", "bundle_id": "com.unknown", "church": "Unknown church"},
-            {"apollos_platform": "ios", "bundle_id": "com.duplicate", "church": "church_one"},
-            {"apollos_platform": "ios", "bundle_id": "com.duplicate", "church": "church_two"},
+            {
+                "apollos_platform": "ios",
+                "bundle_id": "com.unknown",
+                "church": "Unknown church",
+                "deploy_target_count": 1,
+            },
+            {
+                "apollos_platform": "ios",
+                "bundle_id": "com.duplicate",
+                "church": "church_one",
+                "deploy_target_count": 1,
+            },
+            {
+                "apollos_platform": "ios",
+                "bundle_id": "com.duplicate",
+                "church": "church_two",
+                "deploy_target_count": 1,
+            },
+            {
+                "apollos_platform": "ios",
+                "bundle_id": "com.ambiguous",
+                "church": "church_one",
+                "build_church": "slug_one",
+                "deploy_target_count": 2,
+            },
+            {
+                "apollos_platform": "ios",
+                "bundle_id": "com.stale",
+                "church": "church_one",
+                "build_church": "slug_one",
+            },
         ]
         context = {
             "status": "ready",
@@ -1052,6 +1087,7 @@ class AppVersionsRouteTest(unittest.TestCase):
         row = {
             "church": "apollos_demo",
             "build_church": "apollos_preview",
+            "deploy_target_count": 1,
             "bundle_id": "com.differential.apollospreview",
             "application_name": "Apollos Preview",
             "app_version": "1.0.0",
