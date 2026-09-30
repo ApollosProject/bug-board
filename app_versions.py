@@ -750,6 +750,7 @@ def _annotate_version_status(
     annotated.sort(
         key=lambda row: (
             not row.get("is_outdated"),
+            row.get("version_status_label") != "Unverified",
             str(row.get("apollos_platform") or ""),
             str(row.get("church") or ""),
             str(row.get("application_name") or ""),

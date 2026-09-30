@@ -458,6 +458,28 @@ class AppVersionsContextTest(unittest.TestCase):
         unavailable = app_versions._annotate_version_status(rows)
         self.assertTrue(all(row["version_status_label"] == "Unverified" for row in unavailable))
 
+    def test_unverified_sorts_before_at_release_but_after_behind_release(self):
+        rows = [
+            {"apollos_platform": platform, "church": church, "apollos_version": version}
+            for platform in ("ios", "android", "androidtv")
+            for church, version in (
+                ("a_current", "112"),
+                ("z_unverified", None),
+                ("b_unverified", None),
+                ("z_behind", "111"),
+                ("b_current", "112"),
+            )
+        ]
+        annotated = app_versions._annotate_version_status(
+            rows, {"mobile_release_runtime": "112", "tv_release_runtime": "112"}
+        )
+        for tab in app_versions.build_platform_tabs(annotated):
+            with self.subTest(platform=tab["key"]):
+                self.assertEqual(
+                    [row["church"] for row in tab["rows"]],
+                    ["z_behind", "b_unverified", "z_unverified", "a_current", "b_current"],
+                )
+
     def test_source_context_uses_latest_stable_tag_runtime(self):
         def github(path, params=None):
             if path == "tags":
