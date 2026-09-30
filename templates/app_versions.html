@@ -151,6 +151,10 @@
     50% { opacity: 0.55; }
   }
 
+  @media (prefers-reduced-motion: reduce) {
+    .version-deploy-sending { animation: none; }
+  }
+
   .version-empty p:last-child,
   .version-setup p:last-child {
     margin-bottom: 0;
