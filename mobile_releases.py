@@ -77,6 +77,33 @@ def fetch_live_mobile_releases(rows: list[dict[str, Any]]) -> dict[tuple[str, st
 def _lookup_release(platform: str, bundle: str, churches: set[str]) -> dict[str, Any] | None:
     client = _get_redis_client()
     cache_key = f"apps:store-release:v1:{platform}:{bundle}"
+    lock = None
+    if client is not None:
+        try:
+            # Cover each candidate's config/store request timeouts, including token refresh.
+            lock = client.lock(
+                cache_key + ":lock", timeout=60 * (len(churches) + 1), blocking_timeout=5
+            )
+            if not lock.acquire():
+                return {"live_status_detail": "Store release lookup is refreshing"}
+        except Exception:
+            logging.warning("Store release cache lock unavailable for %s %s", platform, bundle)
+            client = lock = None
+    try:
+        return _load_release(client, cache_key, platform, bundle, churches)
+    finally:
+        if lock is not None:
+            try:
+                lock.release()
+            except Exception:
+                logging.warning(
+                    "Store release cache lock release failed for %s %s", platform, bundle
+                )
+
+
+def _load_release(
+    client: Any, cache_key: str, platform: str, bundle: str, churches: set[str]
+) -> dict[str, Any] | None:
     if client is not None:
         try:
             raw = client.get(cache_key)

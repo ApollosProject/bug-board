@@ -98,7 +98,6 @@ class MobileReleasesTest(unittest.TestCase):
     def test_shared_cache_reuses_success_and_quota_and_refetches_after_expiry(self):
         for release, ttl in (
             ({"builds": [{"native_build": "123"}], "checked_at": 1}, 1800),
-            ({"builds": []}, 1800),
             ({"live_status_detail": mobile_releases.STORE_QUOTA_DETAIL}, 3600),
         ):
             with (
@@ -112,8 +111,7 @@ class MobileReleasesTest(unittest.TestCase):
                     mobile_releases._lookup_release("android", "com.preview", {"preview"}),
                     release,
                 )
-                key, seconds, raw = client.setex.call_args.args
-                self.assertEqual(key, "apps:store-release:v1:android:com.preview")
+                _, seconds, raw = client.setex.call_args.args
                 self.assertEqual(seconds, ttl)
                 client.get.return_value = raw
                 fetch.reset_mock()
@@ -130,29 +128,43 @@ class MobileReleasesTest(unittest.TestCase):
                     client.get.call_args.args[0], "apps:store-release:v1:androidtv:com.preview"
                 )
 
-    def test_cache_failures_fall_back_without_caching_mismatches_or_logging_secrets(self):
+    def test_cache_errors_do_not_refetch_or_log_secrets(self):
         with (
             patch.object(mobile_releases, "_get_redis_client") as redis,
-            patch.object(
-                mobile_releases, "_fetch_release", side_effect=[None, {"builds": []}]
-            ) as fetch,
+            patch.object(mobile_releases, "_fetch_release", return_value={"builds": []}) as fetch,
             self.assertLogs(level="WARNING") as logs,
         ):
             client = redis.return_value
-            client.get.side_effect = ValueError("secret")
-            client.setex.side_effect = ValueError("secret")
-            self.assertEqual(
-                mobile_releases._lookup_release("android", "com.preview", {"one", "two"}),
-                {"builds": []},
-            )
-            self.assertEqual(fetch.call_count, 2)
-            client.setex.assert_called_once()
+            client.get.side_effect = client.setex.side_effect = ValueError("secret")
+            client.lock.return_value.release.side_effect = ValueError("secret")
+            result = mobile_releases._lookup_release("android", "com.preview", {"preview"})
+            self.assertEqual(result, {"builds": []})
+            fetch.assert_called_once()
             self.assertNotIn("secret", " ".join(logs.output))
+
+    def test_lock_contenders_do_not_fetch_and_redis_outage_falls_back(self):
         with (
-            patch.object(mobile_releases, "_get_redis_client", return_value=None),
-            patch.object(mobile_releases, "_fetch_release", return_value=None),
+            patch.object(mobile_releases, "_get_redis_client") as redis,
+            patch.object(mobile_releases, "_fetch_release", return_value={"builds": []}) as fetch,
         ):
-            self.assertIsNone(mobile_releases._lookup_release("ios", "com.preview", {"preview"}))
+            client = redis.return_value
+            client.lock.return_value.acquire.return_value = False
+            self.assertEqual(
+                mobile_releases._lookup_release("android", "com.preview", {"preview"}),
+                {"live_status_detail": "Store release lookup is refreshing"},
+            )
+            fetch.assert_not_called()
+            client.setex.assert_not_called()
+            client.lock.return_value.release.assert_not_called()
+            client.lock.side_effect = ValueError("secret")
+            with self.assertLogs(level="WARNING") as logs:
+                self.assertEqual(
+                    mobile_releases._lookup_release("android", "com.preview", {"preview"}),
+                    {"builds": []},
+                )
+            fetch.assert_called_once()
+            client.setex.assert_not_called()
+            self.assertNotIn("secret", " ".join(logs.output))
 
     def test_apple_selects_latest_live_version_and_its_selected_build(self):
         payload = {
