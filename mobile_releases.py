@@ -11,12 +11,21 @@ from typing import Any
 
 import requests
 
+from fleet_health_cache import _get_redis_client
+
 CLUSTER_API_URL = "https://cluster.apollos.app/api/config"
 APPLE_API_URL = "https://api.appstoreconnect.apple.com/v1"
 GOOGLE_API_URL = "https://androidpublisher.googleapis.com/androidpublisher/v3/applications"
 TIMEOUT_SECONDS = 5
 GOOGLE_TRACKS = {"android": "production", "androidtv": "tv:production"}
 STORE_PLATFORMS = {"ios", *GOOGLE_TRACKS}
+STORE_RELEASE_CACHE_SECONDS = 1800
+STORE_QUOTA_BACKOFF_SECONDS = 3600
+STORE_QUOTA_DETAIL = "Store API quota exceeded; retrying later"
+
+
+class StoreQuotaExceeded(Exception):
+    pass
 
 
 def fetch_live_mobile_releases(rows: list[dict[str, Any]]) -> dict[tuple[str, str], dict[str, Any]]:
@@ -58,14 +67,44 @@ def fetch_live_mobile_releases(rows: list[dict[str, Any]]) -> dict[tuple[str, st
                 "build_church": next(iter(targets)) if len(targets) == 1 else None,
                 "deploy_target_count": len(targets),
             }
-        for church in sorted(churches):
-            release = _fetch_release(church, platform, bundle)
-            if release is not None:
-                return (platform, bundle), {**release, **identity}
-        return (platform, bundle), identity
+        release = _lookup_release(platform, bundle, churches)
+        return (platform, bundle), {**(release or {}), **identity}
 
     with ThreadPoolExecutor(max_workers=min(16, len(candidates))) as executor:
         return dict(executor.map(lookup, candidates.items()))
+
+
+def _lookup_release(platform: str, bundle: str, churches: set[str]) -> dict[str, Any] | None:
+    client = _get_redis_client()
+    cache_key = f"apps:store-release:v1:{platform}:{bundle}"
+    if client is not None:
+        try:
+            raw = client.get(cache_key)
+            if raw:
+                cached = json.loads(raw)
+                if isinstance(cached, dict) and (
+                    "builds" in cached or cached.get("live_status_detail") == STORE_QUOTA_DETAIL
+                ):
+                    return cached
+        except Exception:
+            logging.warning("Store release cache read unavailable for %s %s", platform, bundle)
+    for church in sorted(churches):
+        release = _fetch_release(church, platform, bundle)
+        if release is not None:
+            if client is not None:
+                ttl = (
+                    STORE_QUOTA_BACKOFF_SECONDS
+                    if release.get("live_status_detail") == STORE_QUOTA_DETAIL
+                    else STORE_RELEASE_CACHE_SECONDS
+                )
+                try:
+                    client.setex(cache_key, ttl, json.dumps(release))
+                except Exception:
+                    logging.warning(
+                        "Store release cache write unavailable for %s %s", platform, bundle
+                    )
+            return release
+    return None
 
 
 def _fetch_app_churches() -> list[dict[str, Any]]:
@@ -115,6 +154,9 @@ def _fetch_release(church: str, platform: str, bundle: str) -> dict[str, Any] | 
             else _android_builds(church, configured_bundle, GOOGLE_TRACKS[platform])
         )
         return {"builds": builds, "checked_at": time.time()}
+    except StoreQuotaExceeded:
+        logging.warning("Store API quota exceeded for %s %s", platform, bundle)
+        return {"live_status_detail": STORE_QUOTA_DETAIL}
     except Exception as exc:
         # API errors can contain credentials; do not log exception text or response bodies.
         logging.warning(
@@ -205,6 +247,12 @@ def _android_builds(church: str, bundle: str, track: str) -> list[dict[str, str]
         response = session.get(
             f"{GOOGLE_API_URL}/{bundle}/tracks/{track}/releases", timeout=TIMEOUT_SECONDS
         )
+        if response.status_code == 429 or (
+            response.status_code == 403
+            and response.json().get("error", {}).get("message")
+            == "Listing releases quota exceeded."
+        ):
+            raise StoreQuotaExceeded
         response.raise_for_status()
         return _published_android_builds(response.json(), track)
 

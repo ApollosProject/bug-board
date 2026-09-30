@@ -71,6 +71,89 @@ class MobileReleasesTest(unittest.TestCase):
                     f"{mobile_releases.GOOGLE_API_URL}/com.church/tracks/{track}/releases",
                 )
 
+    def test_google_quota_errors_are_safe_and_permission_errors_remain_failures(self):
+        for status, message, quota in (
+            (403, "Listing releases quota exceeded.", True),
+            (429, "secret", True),
+            (403, "Permission denied: secret", False),
+        ):
+            with (
+                self.subTest(status=status, message=message),
+                patch.object(mobile_releases, "_config", side_effect=["com.church", "e30="]),
+                patch("google.oauth2.service_account.Credentials.from_service_account_info"),
+                patch("google.auth.transport.requests.AuthorizedSession") as session_class,
+                self.assertLogs(level="WARNING") as logs,
+            ):
+                response = session_class.return_value.__enter__.return_value.get.return_value
+                response.status_code = status
+                response.json.return_value = {"error": {"message": message}}
+                response.raise_for_status.side_effect = mobile_releases.requests.HTTPError("secret")
+                result = mobile_releases._fetch_release("church", "android", "com.church")
+                self.assertEqual(
+                    result,
+                    {"live_status_detail": mobile_releases.STORE_QUOTA_DETAIL} if quota else None,
+                )
+                self.assertNotIn("secret", " ".join(logs.output))
+
+    def test_shared_cache_reuses_success_and_quota_and_refetches_after_expiry(self):
+        for release, ttl in (
+            ({"builds": [{"native_build": "123"}], "checked_at": 1}, 1800),
+            ({"builds": []}, 1800),
+            ({"live_status_detail": mobile_releases.STORE_QUOTA_DETAIL}, 3600),
+        ):
+            with (
+                self.subTest(release=release),
+                patch.object(mobile_releases, "_get_redis_client") as redis,
+                patch.object(mobile_releases, "_fetch_release", return_value=release) as fetch,
+            ):
+                client = redis.return_value
+                client.get.return_value = None
+                self.assertEqual(
+                    mobile_releases._lookup_release("android", "com.preview", {"preview"}),
+                    release,
+                )
+                key, seconds, raw = client.setex.call_args.args
+                self.assertEqual(key, "apps:store-release:v1:android:com.preview")
+                self.assertEqual(seconds, ttl)
+                client.get.return_value = raw
+                fetch.reset_mock()
+                self.assertEqual(
+                    mobile_releases._lookup_release("android", "com.preview", {"preview"}),
+                    release,
+                )
+                fetch.assert_not_called()
+                client.get.return_value = None  # Redis TTL expired; never reuse old builds.
+                mobile_releases._lookup_release("android", "com.preview", {"preview"})
+                fetch.assert_called_once()
+                mobile_releases._lookup_release("androidtv", "com.preview", {"preview"})
+                self.assertEqual(
+                    client.get.call_args.args[0], "apps:store-release:v1:androidtv:com.preview"
+                )
+
+    def test_cache_failures_fall_back_without_caching_mismatches_or_logging_secrets(self):
+        with (
+            patch.object(mobile_releases, "_get_redis_client") as redis,
+            patch.object(
+                mobile_releases, "_fetch_release", side_effect=[None, {"builds": []}]
+            ) as fetch,
+            self.assertLogs(level="WARNING") as logs,
+        ):
+            client = redis.return_value
+            client.get.side_effect = ValueError("secret")
+            client.setex.side_effect = ValueError("secret")
+            self.assertEqual(
+                mobile_releases._lookup_release("android", "com.preview", {"one", "two"}),
+                {"builds": []},
+            )
+            self.assertEqual(fetch.call_count, 2)
+            client.setex.assert_called_once()
+            self.assertNotIn("secret", " ".join(logs.output))
+        with (
+            patch.object(mobile_releases, "_get_redis_client", return_value=None),
+            patch.object(mobile_releases, "_fetch_release", return_value=None),
+        ):
+            self.assertIsNone(mobile_releases._lookup_release("ios", "com.preview", {"preview"}))
+
     def test_apple_selects_latest_live_version_and_its_selected_build(self):
         payload = {
             "data": [
