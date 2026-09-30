@@ -32,12 +32,11 @@ def _name_to_slug_map(config: Dict) -> Dict[str, str]:
 
 
 def _is_active_today(project: Dict) -> bool:
-    """Return True if today is within the project's start/target date window."""
+    """Return True when the project has started and is not completed or inactive."""
     status = ((project.get("status") or {}).get("name") or "").strip().lower()
     if project.get("completedAt") or status in INACTIVE_PROJECT_STATUS_NAMES:
         return False
     start = project.get("startDate")
-    target = project.get("targetDate")
     if not start:
         return False
     try:
@@ -45,24 +44,7 @@ def _is_active_today(project: Dict) -> bool:
     except Exception:
         return False
     today = datetime.utcnow().date()
-    if start_dt > today:
-        return False
-
-    if target:
-        try:
-            target_dt = datetime.fromisoformat(target).date()
-        except Exception:
-            # If target can't be parsed, assume work is ongoing as long as it has
-            # started.
-            return True
-        if today <= target_dt:
-            return True
-        # The target date has passed but the project is still marked active.
-        # Treat it as ongoing so the assignees remain off the support rotation
-        # until the project is completed.
-        return True
-
-    return True
+    return start_dt <= today
 
 
 def get_support_slugs(
@@ -74,8 +56,8 @@ def get_support_slugs(
     Compute the set of people slugs who are on support today.
 
     Anyone not assigned to an active project today (lead or member) is considered
-    on support. If assigned but today's date is outside the project's
-    start/target window, they are on support.
+    on support. A project is active once it has started and until it is completed
+    or marked inactive. An overdue target date does not end that assignment.
     """
     if config is None:
         config = load_config()
