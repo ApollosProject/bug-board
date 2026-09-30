@@ -291,7 +291,7 @@ def get_active_change_request_reviewers(pr):
         submitted_at = _parse_github_timestamp(review.get("submittedAt"))
         if not reviewer or submitted_at is None:
             continue
-        if reviewer not in latest_reviews or submitted_at > latest_reviews[reviewer][0]:
+        if reviewer not in latest_reviews or submitted_at >= latest_reviews[reviewer][0]:
             latest_reviews[reviewer] = (submitted_at, review["state"])
 
     active_reviewers = set()
@@ -725,12 +725,13 @@ def get_prs_waiting_for_review_by_reviewer():
             latest_review = max(
                 (
                     (submitted_at, review["state"])
-                    for review in pr["reviews"]["nodes"]
+                    for review in reversed(pr["reviews"]["nodes"])
                     if (review.get("author") or {}).get("login") == reviewer
                     and review.get("state") in ("APPROVED", "CHANGES_REQUESTED", "DISMISSED")
                     and (submitted_at := _parse_github_timestamp(review.get("submittedAt")))
                     and submitted_at >= requested_at
                 ),
+                key=lambda review: review[0],
                 default=None,
             )
             if latest_review and latest_review[1] == "APPROVED":

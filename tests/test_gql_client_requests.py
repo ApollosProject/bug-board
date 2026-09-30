@@ -791,6 +791,55 @@ class GraphQLClientRequestTests(unittest.TestCase):
             pr["reviews"]["nodes"] = []
             self.assertEqual(github.get_prs_waiting_for_review_by_reviewer(), {})
 
+    def test_waiting_for_review_uses_later_review_when_timestamps_tie(self):
+        pr = {
+            "additions": 1,
+            "baseRefName": "main",
+            "repository": {"defaultBranchRef": {"name": "main"}},
+            "reviewDecision": "CHANGES_REQUESTED",
+            "reviewRequests": {
+                "nodes": [
+                    {"requestedReviewer": {"login": login}} for login in ("michael", "conrad")
+                ]
+            },
+            "timelineItems": {
+                "nodes": [
+                    {
+                        "createdAt": "2020-01-01T00:00:00Z",
+                        "requestedReviewer": {"login": login},
+                    }
+                    for login in ("michael", "conrad")
+                ]
+            },
+            "reviews": {
+                "nodes": [
+                    {
+                        "author": {"login": login},
+                        "state": state,
+                        "submittedAt": "2020-01-02T00:00:00Z",
+                    }
+                    for login, state in (
+                        ("michael", "CHANGES_REQUESTED"),
+                        ("michael", "APPROVED"),
+                        ("conrad", "CHANGES_REQUESTED"),
+                    )
+                ]
+            },
+        }
+        with patch.object(github, "_get_all_prs", return_value=[pr]):
+            self.assertEqual(github.get_active_change_request_reviewers(pr), {"conrad"})
+            self.assertEqual(github.get_prs_waiting_for_review_by_reviewer(), {"conrad": [pr]})
+            pr["reviewDecision"] = "REVIEW_REQUIRED"
+            self.assertEqual(github.get_prs_waiting_for_review_by_reviewer(), {"conrad": [pr]})
+            pr["reviewDecision"] = "CHANGES_REQUESTED"
+            # A later objection in the same second must supersede the approval too.
+            pr["reviews"]["nodes"].append(pr["reviews"]["nodes"][0].copy())
+            self.assertEqual(github.get_active_change_request_reviewers(pr), {"michael", "conrad"})
+            self.assertEqual(
+                github.get_prs_waiting_for_review_by_reviewer(),
+                {"michael": [pr], "conrad": [pr]},
+            )
+
     def test_waiting_for_review_allows_cleared_change_requests(self):
         class FixedDateTime(datetime):
             @classmethod
