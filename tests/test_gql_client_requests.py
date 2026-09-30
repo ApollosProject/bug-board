@@ -563,7 +563,9 @@ class GraphQLClientRequestTests(unittest.TestCase):
             self.assertEqual(github.get_prs_waiting_for_review_by_reviewer(), {})
         pr["baseRefName"] = "master"
         with patch.object(github, "_get_all_prs", return_value=[pr]):
-            self.assertIn("redreceipt", github.get_prs_waiting_for_review_by_reviewer())
+            self.assertEqual(
+                github.get_prs_waiting_for_review_by_reviewer(), {"dylan-manchester": [pr]}
+            )
         for base, default in ((None, "master"), ("master", None)):
             with self.subTest(base=base, default=default):
                 pr["baseRefName"] = base
@@ -649,11 +651,11 @@ class GraphQLClientRequestTests(unittest.TestCase):
             self.assertEqual(github.get_prs_waiting_for_review_by_reviewer(), {})
         latest_review = {"author": {"login": "michael"}, "submittedAt": "2020-01-06T00:00:00Z"}
         pr["reviews"]["nodes"].append(latest_review)
-        for state, expected in (("COMMENTED", {}), ("DISMISSED", {"michael": [pr]})):
+        for state in ("COMMENTED", "DISMISSED"):
             with self.subTest(state=state):
                 latest_review["state"] = state
                 with patch.object(github, "_get_all_prs", return_value=[pr]):
-                    self.assertEqual(github.get_prs_waiting_for_review_by_reviewer(), expected)
+                    self.assertEqual(github.get_prs_waiting_for_review_by_reviewer(), {})
 
     def test_waiting_for_review_only_notifies_active_change_request_reviewer(self):
         class FixedDateTime(datetime):
@@ -712,6 +714,131 @@ class GraphQLClientRequestTests(unittest.TestCase):
 
         self.assertEqual(waiting["dylan-manchester"], [pr])
         self.assertNotIn("michael", waiting)
+
+    def test_waiting_for_review_keeps_rerequested_changes_scoped_to_objector(self):
+        class FixedDateTime(datetime):
+            current = datetime(2026, 9, 30, 14, 1)
+
+            @classmethod
+            def now(cls, tz=None):
+                return cls.current.replace(tzinfo=tz)
+
+        pr = {
+            "number": 7501,
+            "additions": 139,
+            "baseRefName": "master",
+            "repository": {"defaultBranchRef": {"name": "master"}},
+            "mergeable": "MERGEABLE",
+            "reviewDecision": "CHANGES_REQUESTED",
+            "statusCheckRollup": {"state": "SUCCESS"},
+            "reviewRequests": {
+                "nodes": [
+                    {"requestedReviewer": {"login": login}}
+                    for login in ("redreceipt", "vitlelis", "conrad-vanl")
+                ]
+            },
+            "reviews": {
+                "nodes": [
+                    {
+                        "author": {"login": "mary-pr-poppins"},
+                        "state": "APPROVED",
+                        "submittedAt": "2026-09-30T02:38:56Z",
+                    },
+                    {
+                        "author": {"login": "conrad-vanl"},
+                        "state": "CHANGES_REQUESTED",
+                        "submittedAt": "2026-09-30T02:41:59Z",
+                    },
+                ]
+            },
+            "timelineItems": {
+                "nodes": [
+                    {
+                        "createdAt": "2026-09-28T06:44:04Z",
+                        "requestedReviewer": {"login": login},
+                    }
+                    for login in ("redreceipt", "vitlelis")
+                ]
+                + [
+                    {
+                        "createdAt": "2026-09-30T13:56:29Z",
+                        "requestedReviewer": {"login": "conrad-vanl"},
+                    }
+                ]
+            },
+        }
+        with (
+            patch.object(github, "_get_all_prs", return_value=[pr]),
+            patch.object(github, "datetime", FixedDateTime),
+        ):
+            self.assertEqual(github.get_active_change_request_reviewers(pr), {"conrad-vanl"})
+            self.assertEqual(github.get_prs_waiting_for_review_by_reviewer(), {})
+            FixedDateTime.current = datetime(2026, 10, 1, 14, 1)
+            self.assertEqual(github.get_prs_waiting_for_review_by_reviewer(), {"conrad-vanl": [pr]})
+            latest_review = {
+                "author": {"login": "conrad-vanl"},
+                "submittedAt": "2026-10-01T13:00:00Z",
+            }
+            pr["reviews"]["nodes"].append(latest_review)
+            for state, expected in (
+                ("COMMENTED", {"conrad-vanl": [pr]}),
+                ("APPROVED", {}),
+                ("DISMISSED", {}),
+            ):
+                with self.subTest(state=state):
+                    latest_review["state"] = state
+                    self.assertEqual(github.get_prs_waiting_for_review_by_reviewer(), expected)
+            pr["reviews"]["nodes"] = []
+            self.assertEqual(github.get_prs_waiting_for_review_by_reviewer(), {})
+
+    def test_waiting_for_review_uses_later_review_when_timestamps_tie(self):
+        pr = {
+            "additions": 1,
+            "baseRefName": "main",
+            "repository": {"defaultBranchRef": {"name": "main"}},
+            "reviewDecision": "CHANGES_REQUESTED",
+            "reviewRequests": {
+                "nodes": [
+                    {"requestedReviewer": {"login": login}} for login in ("michael", "conrad")
+                ]
+            },
+            "timelineItems": {
+                "nodes": [
+                    {
+                        "createdAt": "2020-01-01T00:00:00Z",
+                        "requestedReviewer": {"login": login},
+                    }
+                    for login in ("michael", "conrad")
+                ]
+            },
+            "reviews": {
+                "nodes": [
+                    {
+                        "author": {"login": login},
+                        "state": state,
+                        "submittedAt": "2020-01-02T00:00:00Z",
+                    }
+                    for login, state in (
+                        ("michael", "CHANGES_REQUESTED"),
+                        ("michael", "APPROVED"),
+                        ("conrad", "CHANGES_REQUESTED"),
+                    )
+                ]
+            },
+        }
+        with patch.object(github, "_get_all_prs", return_value=[pr]):
+            self.assertEqual(github.get_active_change_request_reviewers(pr), {"conrad"})
+            self.assertEqual(github.get_prs_waiting_for_review_by_reviewer(), {"conrad": [pr]})
+            pr["reviewDecision"] = "REVIEW_REQUIRED"
+            self.assertEqual(github.get_prs_waiting_for_review_by_reviewer(), {"conrad": [pr]})
+            pr["reviewDecision"] = "CHANGES_REQUESTED"
+            # A later objection in the same second must supersede the approval too.
+            pr["reviews"]["nodes"].append(pr["reviews"]["nodes"][0].copy())
+            self.assertEqual(github.get_active_change_request_reviewers(pr), {"michael", "conrad"})
+            self.assertEqual(
+                github.get_prs_waiting_for_review_by_reviewer(),
+                {"michael": [pr], "conrad": [pr]},
+            )
 
     def test_waiting_for_review_allows_cleared_change_requests(self):
         class FixedDateTime(datetime):
