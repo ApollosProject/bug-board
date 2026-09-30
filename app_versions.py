@@ -780,6 +780,8 @@ def _select_live_mobile_versions(
         if release and "deploy_target_count" in release:
             updated["build_church"] = release["build_church"]
             updated["deploy_target_count"] = release["deploy_target_count"]
+        if release and release.get("live_status_detail"):
+            updated["live_status_detail"] = release["live_status_detail"]
         builds = release.get("builds") if release else None
         if builds == []:
             updated["live_status_detail"] = "No published store build"

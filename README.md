@@ -247,7 +247,10 @@ Deploy buttons also use the directory's unique platform/bundle match, so older a
 missing `build_church` or multiple selected churches do not hide a known app's deployment control.
 Multiple directory matches remain non-deployable, and store verification failures do not hide
 an otherwise identified deployment target.
-Credentials stay in memory and are never logged or cached.
+Credentials stay in memory and are never logged or cached. Published store build lookups
+are cached in Redis for 30 minutes, separately for each platform and bundle ID. Google
+quota failures back off for one hour and show an explicit quota message; expired build
+records are not reused as verified live runtimes. Without Redis, lookups remain uncached.
 With `REDIS_URL` configured, `jobs.py` refreshes the dashboard every three minutes and the
 public version snapshot expires after five minutes. Web requests only read the cache, avoiding
 per-app store lookups within Gunicorn's request timeout; an empty/expired cache is unavailable,

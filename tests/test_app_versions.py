@@ -388,6 +388,24 @@ class AppVersionsContextTest(unittest.TestCase):
                     unmatched[0]["live_status_detail"], "Live build has no unique runtime match"
                 )
 
+    def test_mobile_quota_failure_is_unverified_with_safe_reason_not_stale_runtime(self):
+        row = {
+            "church": "apollos_preview",
+            "apollos_platform": "android",
+            "bundle_id": "com.preview",
+            "apollos_version": "112",
+        }
+        reason = "Store API quota exceeded; retrying later"
+        selected = app_versions._select_live_mobile_versions(
+            [row], {("android", "com.preview"): {"live_status_detail": reason}}
+        )
+        annotated = app_versions._annotate_version_status(
+            selected, {"mobile_release_runtime": "112"}
+        )
+        self.assertIsNone(annotated[0]["apollos_version"])
+        self.assertEqual(annotated[0]["version_status_label"], "Unverified")
+        self.assertEqual(annotated[0]["live_status_detail"], reason)
+
     def test_mobile_does_not_guess_from_marketing_version_or_conflicting_runtimes(self):
         row = {
             "apollos_platform": "ios",
