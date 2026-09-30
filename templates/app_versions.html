@@ -125,17 +125,35 @@
     font-size: 0.8rem;
   }
 
-  .version-deploy-confirmed {
+  .version-deploy-confirmed,
+  .version-deploy-sending {
     display: inline-block;
     margin-top: 0.35rem;
     padding: 0.2rem 0.55rem;
     border-radius: var(--pico-border-radius);
-    background: rgba(23, 181, 130, 0.12);
-    color: var(--pico-color);
     font-weight: 600;
   }
 
+  .version-deploy-confirmed {
+    background: rgba(23, 181, 130, 0.12);
+    color: var(--pico-color);
+  }
+
   .version-deploy-confirmed::before { content: "✓ "; color: var(--pico-primary); }
+
+  .version-deploy-sending {
+    background: rgba(1, 114, 173, 0.12);
+    color: var(--pico-color);
+    animation: version-deploy-pulse 1.2s ease-in-out infinite;
+  }
+
+  @keyframes version-deploy-pulse {
+    50% { opacity: 0.55; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .version-deploy-sending { animation: none; }
+  }
 
   .version-empty p:last-child,
   .version-setup p:last-child {
@@ -255,8 +273,9 @@
       event.preventDefault();
       const button = form.querySelector('button');
       const status = form.querySelector('[role="status"]');
-      button.disabled = true;
+      button.hidden = true;
       status.textContent = 'Sending…';
+      status.classList.add('version-deploy-sending');
       try {
         const response = await fetch(form.action, {
           method: 'POST',
@@ -267,11 +286,12 @@
           throw new Error('Dispatch not confirmed');
         }
         status.textContent = 'Request sent';
+        status.classList.remove('version-deploy-sending');
         status.classList.add('version-deploy-confirmed');
-        button.hidden = true;
       } catch {
         status.textContent = 'Could not confirm request. Check GitHub Actions before trying again.';
-        button.disabled = false;
+        status.classList.remove('version-deploy-sending');
+        button.hidden = false;
       }
     });
   }
