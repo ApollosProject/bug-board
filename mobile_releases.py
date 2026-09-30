@@ -23,7 +23,7 @@ def fetch_live_mobile_releases(rows: list[dict[str, Any]]) -> dict[tuple[str, st
     candidates: dict[tuple[str, str], set[str]] = {}
     for row in rows:
         platform = str(row.get("apollos_platform") or "").lower()
-        bundle = str(row.get("bundle_id") or "").strip()
+        bundle = str(row.get("bundle_id") or "").strip().lower()
         if platform not in STORE_PLATFORMS or not re.fullmatch(r"[\w.-]+", bundle):
             continue
         churches = candidates.setdefault((platform, bundle), set())
@@ -44,7 +44,7 @@ def fetch_live_mobile_releases(rows: list[dict[str, Any]]) -> dict[tuple[str, st
             directory_bundle = app_church.get(field)
             if not isinstance(directory_bundle, str):
                 continue
-            key = (platform, directory_bundle)
+            key = (platform, directory_bundle.lower())
             if key in candidates:
                 candidates[key].add(slug)
                 directory_targets.setdefault(key, set()).add(slug)
@@ -61,8 +61,8 @@ def fetch_live_mobile_releases(rows: list[dict[str, Any]]) -> dict[tuple[str, st
         for church in sorted(churches):
             release = _fetch_release(church, platform, bundle)
             if release is not None:
-                return (platform, bundle.lower()), {**release, **identity}
-        return (platform, bundle.lower()), identity
+                return (platform, bundle), {**release, **identity}
+        return (platform, bundle), identity
 
     with ThreadPoolExecutor(max_workers=min(16, len(candidates))) as executor:
         return dict(executor.map(lookup, candidates.items()))
@@ -106,12 +106,13 @@ def _config(church: str, key: str) -> Any:
 def _fetch_release(church: str, platform: str, bundle: str) -> dict[str, Any] | None:
     try:
         key = "APP.APPLE_BUNDLE_ID" if platform == "ios" else "APP.ANDROID_PKG_ID"
-        if _config(church, key) != bundle:
+        configured_bundle = _config(church, key)
+        if not isinstance(configured_bundle, str) or configured_bundle.lower() != bundle.lower():
             return None  # Selected church is only a lookup hint, not app identity.
         builds = (
-            _apple_builds(church, bundle)
+            _apple_builds(church, configured_bundle)
             if platform == "ios"
-            else _android_builds(church, bundle, GOOGLE_TRACKS[platform])
+            else _android_builds(church, configured_bundle, GOOGLE_TRACKS[platform])
         )
         return {"builds": builds, "checked_at": time.time()}
     except Exception as exc:

@@ -132,6 +132,67 @@ class MobileReleasesTest(unittest.TestCase):
                         mobile_releases._apple_builds("demo", "com.demo")
                     self.assertEqual(session.get.call_count, 1)
 
+    def test_bundle_casing_merges_hints_and_preserves_configured_store_identifier(self):
+        bundle = "com.subsplashconsulting.ND38ZC"
+        for platform, field, helper in (
+            ("ios", "appleBundleId", "_apple_builds"),
+            ("android", "androidPkgId", "_android_builds"),
+            ("androidtv", "androidPkgId", "_android_builds"),
+        ):
+            for bundles in ([bundle.lower()], [bundle, bundle.lower()], [bundle.lower(), bundle]):
+                for directory in ([], [{"slug": "city_first", field: bundle}]):
+                    with (
+                        self.subTest(platform=platform, bundles=bundles, directory=directory),
+                        patch.dict(mobile_releases.os.environ, {"APOLLOS_API_KEY": "test"}),
+                        patch.object(
+                            mobile_releases, "_fetch_app_churches", return_value=directory
+                        ),
+                        patch.object(mobile_releases, "_config", return_value=bundle) as config,
+                        patch.object(
+                            mobile_releases, helper, return_value=[{"native_build": "123"}]
+                        ) as store,
+                    ):
+                        releases = mobile_releases.fetch_live_mobile_releases(
+                            [
+                                {
+                                    "apollos_platform": platform,
+                                    "bundle_id": b,
+                                    "church": "city_first",
+                                }
+                                for b in bundles
+                            ]
+                        )
+                        release = releases[(platform, bundle.lower())]
+                        self.assertEqual(release["builds"], [{"native_build": "123"}])
+                        self.assertEqual(len(releases), 1)
+                        config.assert_called_once()
+                        args = ("city_first", bundle)
+                        if platform != "ios":
+                            args += (mobile_releases.GOOGLE_TRACKS[platform],)
+                        store.assert_called_once_with(*args)
+                        if directory:
+                            self.assertEqual(release["build_church"], "city_first")
+                            self.assertEqual(release["deploy_target_count"], 1)
+
+    def test_case_variant_directory_targets_remain_ambiguous(self):
+        with (
+            patch.dict(mobile_releases.os.environ, {"APOLLOS_API_KEY": "test"}),
+            patch.object(
+                mobile_releases,
+                "_fetch_app_churches",
+                return_value=[
+                    {"slug": "one", "appleBundleId": "com.App"},
+                    {"slug": "two", "appleBundleId": "com.app"},
+                ],
+            ),
+            patch.object(mobile_releases, "_fetch_release", return_value={"builds": []}),
+        ):
+            release = mobile_releases.fetch_live_mobile_releases(
+                [{"apollos_platform": "ios", "bundle_id": "com.app"}]
+            )[("ios", "com.app")]
+        self.assertIsNone(release["build_church"])
+        self.assertEqual(release["deploy_target_count"], 2)
+
     def test_directory_resolves_build_church_without_crossing_platforms(self):
         rows = [{"apollos_platform": "ios", "bundle_id": "com.preview", "church": "demo"}]
         directory = [
