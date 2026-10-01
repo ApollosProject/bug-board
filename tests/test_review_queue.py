@@ -362,13 +362,53 @@ class SearchOpenPrsTest(unittest.TestCase):
             github.search_open_prs(include_approved=True)
 
         queries = [call.args[1] for call in search.call_args_list]
-        self.assertIn("reviewRequests(first: 100)", print_ast(search.call_args.args[0].document))
+        query = print_ast(search.call_args.args[0].document)
+        self.assertIn("reviewRequests(first: 100)", query)
+        self.assertIn("reviews: latestReviews(first: 100)", query)
+        self.assertNotIn("timelineItems", query)
         # 20 pages of 50 reads every one of GitHub search's 1,000 results.
         self.assertEqual({call.kwargs["max_pages"] for call in search.call_args_list}, {20})
         self.assertIn(
             "repo:apollosproject/apollos-admin is:pr is:open draft:false -review:approved", queries
         )
         self.assertIn("repo:apollosproject/apollos-admin is:pr is:open draft:false", queries)
+
+
+class ReviewTimelineTest(unittest.TestCase):
+    def test_search_batches_timelines_ten_at_a_time_and_pages_back(self):
+        prs = [{"id": f"PR_{n}", "number": n} for n in range(23)]
+        older = {"pageInfo": {"hasPreviousPage": False}, "nodes": [{"createdAt": "old"}]}
+
+        def fake_execute(query, variable_values):
+            if "before" in variable_values:
+                return {"node": {"timelineItems": older}}
+            return {
+                f"pr{key[2:]}": {
+                    "timelineItems": {
+                        "pageInfo": {"hasPreviousPage": pr_id == "PR_0", "startCursor": "c"},
+                        "nodes": [{"createdAt": pr_id}],
+                    }
+                }
+                for key, pr_id in variable_values.items()
+            }
+
+        with (
+            patch.object(github, "token", "token"),
+            patch.object(github, "_search_prs", side_effect=[prs] + [[]] * 7),
+            patch.object(github, "_execute", side_effect=fake_execute) as execute,
+        ):
+            found = github.search_open_prs()
+
+        batch_sizes = sorted(
+            len(call.kwargs["variable_values"])
+            for call in execute.call_args_list
+            if "before" not in call.kwargs["variable_values"]
+        )
+        self.assertEqual(batch_sizes, [3, 10, 10])
+        self.assertEqual(found[5]["timelineItems"]["nodes"], [{"createdAt": "PR_5"}])
+        self.assertEqual(
+            [n["createdAt"] for n in found[0]["timelineItems"]["nodes"]], ["old", "PR_0"]
+        )
 
 
 class IssuesByNumberTest(unittest.TestCase):
