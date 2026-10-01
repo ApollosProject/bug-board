@@ -88,7 +88,8 @@ def classify(pr: dict[str, Any]) -> tuple[str, str | None]:
     if ci == "failing":
         return NOT_READY, "CI failing"
     change_requesters = get_active_change_request_reviewers(pr)
-    if change_requesters and not change_requesters & set(_requested_reviewers(pr)):
+    # Each change request blocks until that reviewer is re-requested.
+    if change_requesters - set(_requested_reviewers(pr)):
         return NOT_READY, "Changes requested"
     if ci == "running":
         return CI_RUNNING, None

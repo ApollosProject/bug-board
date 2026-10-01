@@ -353,11 +353,11 @@ def _merged_search_qualifier(days: int = 30, window: TimeWindow | None = None) -
 
 
 def _search_prs(
-    query, search_query: str, *, require_complete: bool = False
+    query, search_query: str, *, require_complete: bool = False, max_pages: int = 10
 ) -> List[Dict[str, Any]]:
     prs: List[Dict[str, Any]] = []
     cursor = None
-    for _ in range(10):
+    for _ in range(max_pages):
         try:
             data = _execute(query, variable_values={"query": search_query, "cursor": cursor})
         except Exception as exc:
@@ -441,6 +441,8 @@ def search_open_prs(include_approved: bool = False) -> List[Dict[str, Any]]:
             query,
             f"repo:{repo} is:pr is:open draft:false{approval_filter}",
             require_complete=True,
+            # GitHub search returns at most 1,000 results; read all of them.
+            max_pages=1000 // REVIEW_QUEUE_SEARCH_PAGE_SIZE,
         )
 
     with ThreadPoolExecutor(max_workers=len(TRACKED_REPOSITORIES)) as executor:

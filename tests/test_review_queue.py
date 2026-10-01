@@ -105,6 +105,21 @@ class ClassifyTest(unittest.TestCase):
         pr["reviewRequests"] = requested("bkraeling")
         self.assertEqual(classify(pr), (READY, None))
 
+    def test_every_change_request_must_be_re_requested(self):
+        reviews = [
+            {"author": {"login": login}, "state": "CHANGES_REQUESTED", "submittedAt": at}
+            for login, at in (
+                ("bkraeling", "2026-09-30T13:00:00Z"),
+                ("nlewis84", "2026-09-30T14:00:00Z"),
+            )
+        ]
+        pr = make_pr(
+            reviewDecision="CHANGES_REQUESTED",
+            reviews={"nodes": reviews},
+            reviewRequests=requested("bkraeling"),
+        )
+        self.assertEqual(classify(pr), (NOT_READY, "Changes requested"))
+
 
 class TicketNumberTest(unittest.TestCase):
     def test_branch_wins_over_title(self):
@@ -345,10 +360,29 @@ class SearchOpenPrsTest(unittest.TestCase):
             github.search_open_prs(include_approved=True)
 
         queries = [call.args[1] for call in search.call_args_list]
+        # 20 pages of 50 reads every one of GitHub search's 1,000 results.
+        self.assertEqual({call.kwargs["max_pages"] for call in search.call_args_list}, {20})
         self.assertIn(
             "repo:apollosproject/apollos-admin is:pr is:open draft:false -review:approved", queries
         )
         self.assertIn("repo:apollosproject/apollos-admin is:pr is:open draft:false", queries)
+
+
+class IssuesByNumberTest(unittest.TestCase):
+    def test_batches_past_linears_page_size(self):
+        from linear import issues as linear_issues
+
+        def fake_execute(query, variable_values):
+            nodes = [{"number": number} for number in variable_values["numbers"]]
+            return {"issues": {"nodes": nodes}}
+
+        with patch.object(linear_issues, "_execute", side_effect=fake_execute) as execute:
+            found = linear_issues.get_issues_by_number(list(range(1, 301)) + [1])
+
+        self.assertEqual(len(found), 300)
+        self.assertEqual(
+            [call.kwargs["variable_values"]["first"] for call in execute.call_args_list], [250, 50]
+        )
 
 
 if __name__ == "__main__":

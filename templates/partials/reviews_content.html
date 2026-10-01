@@ -22,7 +22,7 @@
   </label>
 {%- endmacro %}
 <h2>PRs to Review</h2>
-<p><small>Grouped by Linear priority, then smallest diff, then longest waiting.</small></p>
+<p><small>Grouped by Linear priority, then size (XS ≤50 changed lines, S ≤200, M ≤500, L), then longest waiting.</small></p>
 <div class="time-window review-filters">
   {% if viewer %}
     <form method="get" action="{{ url_for('reviews') }}" class="time-window-presets" aria-label="Whose PRs">
