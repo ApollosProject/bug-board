@@ -107,6 +107,17 @@ class ClassifyTest(unittest.TestCase):
         pr["reviewRequests"] = requested("bkraeling")
         self.assertEqual(classify(pr), (READY, None))
 
+    def test_a_later_comment_does_not_clear_a_change_request(self):
+        reviews = [
+            {"author": {"login": "bkraeling"}, "state": state, "submittedAt": at}
+            for state, at in (
+                ("CHANGES_REQUESTED", "2026-09-30T13:00:00Z"),
+                ("COMMENTED", "2026-09-30T15:00:00Z"),
+            )
+        ]
+        pr = make_pr(reviewDecision="CHANGES_REQUESTED", reviews={"nodes": reviews})
+        self.assertEqual(classify(pr), (NOT_READY, "Changes requested"))
+
     def test_every_change_request_must_be_re_requested(self):
         reviews = [
             {"author": {"login": login}, "state": "CHANGES_REQUESTED", "submittedAt": at}
@@ -371,7 +382,7 @@ class SearchOpenPrsTest(unittest.TestCase):
         queries = [call.args[1] for call in search.call_args_list]
         query = print_ast(search.call_args.args[0].document)
         self.assertIn("reviewRequests(first: 100)", query)
-        self.assertIn("reviews: latestReviews(first: 100)", query)
+        self.assertIn("reviews: latestOpinionatedReviews(first: 100)", query)
         self.assertNotIn("timelineItems", query)
         # 20 pages of 50 reads every one of GitHub search's 1,000 results.
         self.assertEqual({call.kwargs["max_pages"] for call in search.call_args_list}, {20})

@@ -462,8 +462,9 @@ def search_open_prs(include_approved: bool = False) -> List[Dict[str, Any]]:
                 author { login }
                 repository { nameWithOwner defaultBranchRef { name } }
                 statusCheckRollup { state }
-                # One latest review per reviewer, so long review histories never truncate.
-                reviews: latestReviews(first: 100) {
+                # Each reviewer's latest approval, change request, or dismissal. latestReviews
+                # would let a later COMMENTED thread reply hide an open change request.
+                reviews: latestOpinionatedReviews(first: 100) {
                   nodes { author { login } state submittedAt }
                 }
                 reviewRequests(first: 100) {
