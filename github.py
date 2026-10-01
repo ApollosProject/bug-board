@@ -418,7 +418,7 @@ def search_open_prs(include_approved: bool = False) -> List[Dict[str, Any]]:
                     }
                   }
                 }
-                reviewRequests(first: 10) {
+                reviewRequests(first: 100) {
                   nodes { requestedReviewer { ... on User { login } } }
                 }
               }

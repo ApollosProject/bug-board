@@ -2,6 +2,8 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import patch
 
+from graphql import print_ast
+
 import app as app_module
 import github
 from review_queue import (
@@ -274,7 +276,7 @@ class ReviewsRouteTest(unittest.TestCase):
 
     def test_page_renders_and_passes_filters_to_the_partial(self):
         body = self.client.get("/reviews?reviewer=dylan&author=").get_data(as_text=True)
-        self.assertIn("/partials/reviews/content?reviewer=dylan'", body)
+        self.assertIn('"/partials/reviews/content?reviewer=dylan")', body)
 
     def test_empty_states(self):
         self.assertIn("Nothing is waiting for review.", self.partial()[0])
@@ -360,6 +362,7 @@ class SearchOpenPrsTest(unittest.TestCase):
             github.search_open_prs(include_approved=True)
 
         queries = [call.args[1] for call in search.call_args_list]
+        self.assertIn("reviewRequests(first: 100)", print_ast(search.call_args.args[0].document))
         # 20 pages of 50 reads every one of GitHub search's 1,000 results.
         self.assertEqual({call.kwargs["max_pages"] for call in search.call_args_list}, {20})
         self.assertIn(
