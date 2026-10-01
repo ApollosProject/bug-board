@@ -134,6 +134,9 @@ class TicketNumberTest(unittest.TestCase):
     def test_no_ticket(self):
         self.assertIsNone(ticket_number(make_pr(headRefName="xapo-1x"), "APO"))
 
+    def test_underscores_delimit_a_ticket(self):
+        self.assertEqual(ticket_number(make_pr(headRefName="feature/APO-123_fix"), "APO"), 123)
+
 
 class WaitingSinceTest(unittest.TestCase):
     def test_latest_ready_or_teammate_request_wins_and_bot_requests_are_ignored(self):
@@ -302,6 +305,10 @@ class ReviewsRouteTest(unittest.TestCase):
             '(apollos-admin#7, <a href="https://linear.app/x/APO-9">APO-9</a>, XS +10/−5', body
         )
         self.assertIn("Brandon → <strong>Dylan</strong>", body)
+
+    def test_deleted_author_reads_as_deleted_user(self):
+        body, _ = self.partial(prs=[make_pr(3, author=None)])
+        self.assertIn(", Deleted user)", body)
 
     def test_reviewer_filter_takes_a_person_slug(self):
         prs = [

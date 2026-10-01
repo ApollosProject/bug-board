@@ -1,5 +1,5 @@
 {% macro person(login) -%}
-  {%- set name = names.get((login or '')|lower, login) -%}
+  {%- set name = names.get((login or '')|lower, login) or 'Deleted user' -%}
   {%- if viewer and (login or '')|lower == viewer.github_username|lower %}<strong>{{ name }}</strong>{% else %}{{ name }}{% endif -%}
 {%- endmacro %}
 {% macro pr_card(row) -%}

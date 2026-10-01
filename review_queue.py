@@ -27,7 +27,10 @@ SIZE_BUCKETS: tuple[tuple[int | None, str], ...] = ((50, "XS"), (200, "S"), (500
 
 def ticket_number(pr: dict[str, Any], team_key: str) -> int | None:
     """Return the Linear issue number from the branch name, else the title."""
-    pattern = re.compile(rf"\b{re.escape(team_key)}-(\d+)\b", re.IGNORECASE)
+    # Alphanumeric lookarounds, not \b, so underscores delimit too (feature/APO-123_fix).
+    pattern = re.compile(
+        rf"(?<![A-Za-z0-9]){re.escape(team_key)}-(\d+)(?![A-Za-z0-9])", re.IGNORECASE
+    )
     for text in (pr.get("headRefName"), pr.get("title")):
         match = pattern.search(text or "")
         if match:
