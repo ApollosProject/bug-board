@@ -71,6 +71,15 @@ def _execute(query, variable_values=None):
     return client.execute(request)
 
 
+def _retrying(fn, *args, **kwargs):
+    return Retrying(
+        reraise=True,
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(max=4),
+        before_sleep=before_sleep_log(logging.getLogger(__name__), logging.WARNING),
+    )(fn, *args, **kwargs)
+
+
 def _format_failure(name: str, exc: Exception) -> str:
     message = str(exc)
     if message:
@@ -215,12 +224,7 @@ def get_prs(repo_id, pr_states, repo_name=None):
         params = {"repo_id": repo_id, "pr_states": pr_states, "cursor": cursor}
         try:
             # Retry this page, not every repository and already-fetched page.
-            data = Retrying(
-                reraise=True,
-                stop=stop_after_attempt(3),
-                wait=wait_exponential(max=4),
-                before_sleep=before_sleep_log(logging.getLogger(__name__), logging.WARNING),
-            )(_execute, query, variable_values=params)
+            data = _retrying(_execute, query, variable_values=params)
         except Exception as exc:
             raise GitHubDataError(
                 f"Failed to fetch GitHub pull requests for {repo_context}: {_format_exception(exc)}"
@@ -359,7 +363,10 @@ def _search_prs(
     cursor = None
     for _ in range(max_pages):
         try:
-            data = _execute(query, variable_values={"query": search_query, "cursor": cursor})
+            # Retry this page, not the pages already fetched.
+            data = _retrying(
+                _execute, query, variable_values={"query": search_query, "cursor": cursor}
+            )
         except Exception as exc:
             if require_complete:
                 raise GitHubDataError(f"GitHub PR search failed: {_format_exception(exc)}") from exc
@@ -392,15 +399,6 @@ REVIEW_TIMELINE_ARGS = "last: 100, itemTypes: [REVIEW_REQUESTED_EVENT, READY_FOR
 # GitHub silently returns empty or partial timelines when one query asks for more than about
 # ten of them (measured 2026-10-01: 45 of 107 admin PRs wrong at 50 per query, 0 at 10).
 REVIEW_TIMELINE_BATCH_SIZE = 10
-
-
-def _retrying(fn, *args, **kwargs):
-    return Retrying(
-        reraise=True,
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(max=4),
-        before_sleep=before_sleep_log(logging.getLogger(__name__), logging.WARNING),
-    )(fn, *args, **kwargs)
 
 
 def _attach_review_timelines(batch: List[Dict[str, Any]]) -> None:
@@ -481,8 +479,7 @@ def search_open_prs(include_approved: bool = False) -> List[Dict[str, Any]]:
     approval_filter = "" if include_approved else " -review:approved"
 
     def search_repo(repo: str) -> List[Dict[str, Any]]:
-        return _retrying(
-            _search_prs,
+        return _search_prs(
             query,
             f"repo:{repo} is:pr is:open draft:false{approval_filter}",
             require_complete=True,

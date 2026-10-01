@@ -381,6 +381,27 @@ class SearchOpenPrsTest(unittest.TestCase):
         self.assertIn("repo:apollosproject/apollos-admin is:pr is:open draft:false", queries)
 
 
+class SearchRetryTest(unittest.TestCase):
+    def test_a_failed_page_is_retried_without_refetching_earlier_pages(self):
+        page = {
+            "issueCount": 2,
+            "nodes": [{"n": 1}],
+            "pageInfo": {"hasNextPage": True, "endCursor": "c1"},
+        }
+        last = {"issueCount": 2, "nodes": [{"n": 2}], "pageInfo": {"hasNextPage": False}}
+        responses = [{"search": page}, TimeoutError(), {"search": last}]
+
+        with (
+            patch("time.sleep"),
+            patch.object(github, "_execute", side_effect=responses) as execute,
+        ):
+            prs = github._search_prs("query", "repo:x", require_complete=True)
+
+        self.assertEqual(prs, [{"n": 1}, {"n": 2}])
+        cursors = [call.kwargs["variable_values"]["cursor"] for call in execute.call_args_list]
+        self.assertEqual(cursors, [None, "c1", "c1"])
+
+
 class ReviewTimelineTest(unittest.TestCase):
     def test_search_batches_timelines_ten_at_a_time_and_pages_back(self):
         prs = [{"id": f"PR_{n}", "number": n} for n in range(23)]
