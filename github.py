@@ -362,9 +362,7 @@ def _search_prs(
             data = _execute(query, variable_values={"query": search_query, "cursor": cursor})
         except Exception as exc:
             if require_complete:
-                raise GitHubDataError(
-                    f"GitHub merged PR search failed: {_format_exception(exc)}"
-                ) from exc
+                raise GitHubDataError(f"GitHub PR search failed: {_format_exception(exc)}") from exc
             return []
         payload = data.get("search", {}) or {}
         if require_complete and (payload.get("issueCount", 0) or 0) > 1000:
@@ -376,6 +374,78 @@ def _search_prs(
             break
         cursor = next_cursor
     return prs
+
+
+REVIEW_QUEUE_SEARCH_PAGE_SIZE = 50  # 100 heavy PR nodes per page intermittently 502s
+
+
+def search_open_prs(include_approved: bool = False) -> List[Dict[str, Any]]:
+    """Return open, non-draft PRs across tracked repositories; drafts are filtered by GitHub."""
+    if not token:
+        return []
+    query = gql(
+        """
+        query ReviewQueuePRs($query: String!, $cursor: String) {
+          search(type: ISSUE, query: $query, first: %d, after: $cursor) {
+            issueCount
+            pageInfo { endCursor hasNextPage }
+            nodes {
+              ... on PullRequest {
+                number
+                title
+                url
+                createdAt
+                baseRefName
+                headRefName
+                additions
+                deletions
+                mergeable
+                reviewDecision
+                author { login }
+                repository { nameWithOwner defaultBranchRef { name } }
+                statusCheckRollup { state }
+                reviews(last: 100) { nodes { author { login } state submittedAt } }
+                timelineItems(
+                  last: 100
+                  itemTypes: [REVIEW_REQUESTED_EVENT, READY_FOR_REVIEW_EVENT]
+                ) {
+                  nodes {
+                    __typename
+                    ... on ReadyForReviewEvent { createdAt }
+                    ... on ReviewRequestedEvent {
+                      createdAt
+                      requestedReviewer { ... on User { login } }
+                    }
+                  }
+                }
+                reviewRequests(first: 10) {
+                  nodes { requestedReviewer { ... on User { login } } }
+                }
+              }
+            }
+          }
+        }
+        """
+        % REVIEW_QUEUE_SEARCH_PAGE_SIZE
+    )
+    approval_filter = "" if include_approved else " -review:approved"
+
+    def search_repo(repo: str) -> List[Dict[str, Any]]:
+        return Retrying(
+            reraise=True,
+            stop=stop_after_attempt(3),
+            wait=wait_exponential(max=4),
+            before_sleep=before_sleep_log(logging.getLogger(__name__), logging.WARNING),
+        )(
+            _search_prs,
+            query,
+            f"repo:{repo} is:pr is:open draft:false{approval_filter}",
+            require_complete=True,
+        )
+
+    with ThreadPoolExecutor(max_workers=len(TRACKED_REPOSITORIES)) as executor:
+        results = list(executor.map(search_repo, TRACKED_REPOSITORIES))
+    return [pr for prs in results for pr in prs]
 
 
 def _search_complete_merged_pr_range(

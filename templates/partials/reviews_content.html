@@ -1,0 +1,59 @@
+{% from "partials/priority_icon.html" import priority_icon %}
+{% macro pr_table(groups, last_column="CI") -%}
+  <div class="review-table" role="region" tabindex="0">
+    <table>
+      <thead><tr>
+        <th scope="col">PR</th>
+        <th scope="col">Ticket</th>
+        <th scope="col">Size</th>
+        <th scope="col">Waiting</th>
+        <th scope="col">{{ last_column }}</th>
+        <th scope="col">Author</th>
+        <th scope="col">Reviewers</th>
+      </tr></thead>
+      {% for group in groups %}
+        <tbody>
+          {% if group.label %}<tr class="review-group"><th scope="rowgroup" colspan="7">{{ group.label }} ({{ group.rows|length }})</th></tr>{% endif %}
+          {% for row in group.rows %}
+            <tr>
+              <th scope="row"><a href="{{ row.url }}">{{ row.repo }}#{{ row.number }}</a> {{ row.title }}</th>
+              <td>{% if row.issue %}<a href="{{ row.issue.url }}" title="Priority: {{ row.issue.priorityLabel }}">{{ priority_icon(row.issue) }}{{ row.issue.identifier }}</a>{% else %}<small>No ticket</small>{% endif %}</td>
+              <td><span class="review-size">{{ row.size }}</span> <small>+{{ row.additions }} −{{ row.deletions }}</small></td>
+              <td class="review-waiting review-waiting--{{ row.waiting_level or 'ok' }}">{{ row.waiting }}</td>
+              <td><span class="review-reason" title="{{ row.reason or row.ci }}">{{ row.reason or row.ci }}</span></td>
+              <td>{{ row.author }}</td>
+              <td class="review-reviewers">{% for login in row.reviewers %}{% if login == session.get('github_login') %}<strong>{{ login }}</strong>{% else %}{{ login }}{% endif %}{% if not loop.last %}, {% endif %}{% else %}<small>None requested</small>{% endfor %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      {% endfor %}
+    </table>
+  </div>
+{%- endmacro %}
+<div class="review-heading">
+  <h2>PRs to Review</h2>
+  <small>Grouped by Linear priority, then smallest diff first, then longest waiting. Default-branch PRs with passing (or no) CI, no conflicts, not approved, and not waiting on the author.
+    {% if include_approved %}<a href="{{ url_for('reviews') }}">Hide approved</a>{% else %}<a href="{{ url_for('reviews', approved='1') }}">Show approved</a>{% endif %}</small>
+</div>
+<h3>Ready for review ({{ ready_count }})</h3>
+{% if ready_groups %}
+  {{ pr_table(ready_groups) }}
+{% else %}
+  <article>Nothing is waiting for review.</article>
+{% endif %}
+{% if running %}
+  <h3>CI running ({{ running|length }})</h3>
+  {{ pr_table([{"rows": running}]) }}
+{% endif %}
+{% if not_ready %}
+  <details>
+    <summary>Not ready ({{ not_ready|length }})</summary>
+    {{ pr_table([{"rows": not_ready}], last_column="Reason") }}
+  </details>
+{% endif %}
+{% if include_approved %}
+  <details>
+    <summary>Approved, not merged ({{ approved|length }})</summary>
+    {{ pr_table([{"rows": approved}]) }}
+  </details>
+{% endif %}

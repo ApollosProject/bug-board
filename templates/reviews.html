@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Reviews{% endblock %}
+
+{% block content %}
+      <div id="reviews-content" aria-busy="true"></div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  async function loadSection(id, url) {
+    const container = document.getElementById(id);
+    if (!container) {
+      return;
+    }
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to load ${id}`);
+      }
+      const html = await response.text();
+      container.innerHTML = html;
+      container.removeAttribute('aria-busy');
+    } catch (error) {
+      container.innerHTML = '<article>Unable to load section.</article>';
+      container.removeAttribute('aria-busy');
+    }
+  }
+
+  loadSection('reviews-content', '{{ url_for("reviews_content_partial", **({"approved": "1"} if include_approved else {})) }}');
+</script>
+{% endblock %}

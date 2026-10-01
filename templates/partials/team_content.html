@@ -1,15 +1,4 @@
-{% macro priority_icon(project) -%}
-  {% set priority = project.priorityLabel or 'No priority' %}
-  {% set paths = {
-    'Urgent': 'M7 2h2v8H7zM7 12h2v2H7z',
-    'High': 'M2 10h3v4H2zM6.5 6h3v8h-3zM11 2h3v12h-3z',
-    'Medium': 'M2 10h3v4H2zM6.5 6h3v8h-3z',
-    'Low': 'M2 10h3v4H2z'
-  } %}
-  <svg class="project-priority" viewBox="0 0 16 16" fill="currentColor" role="img" aria-label="Priority: {{ priority }}" focusable="false">
-    <path d="{{ paths.get(priority, 'M3 7h10v2H3z') }}"/>
-  </svg>
-{%- endmacro %}
+{% from "partials/priority_icon.html" import priority_icon %}
 <h2>Projects</h2>
 <div class="project-timeline-heading">
   <h3>Timeline</h3>
