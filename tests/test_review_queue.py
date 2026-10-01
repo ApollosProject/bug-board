@@ -189,6 +189,14 @@ class BuildReviewQueueTest(unittest.TestCase):
         self.assertEqual(groups, [("High", [3, 4, 2]), ("Low", [1]), ("No priority", [5])])
         self.assertEqual(queue["ready_count"], 5)
 
+    def test_wait_ties_within_an_hour_still_sort_longest_first(self):
+        prs = [
+            make_pr(1, createdAt="2026-09-30T12:59:00Z"),
+            make_pr(2, createdAt="2026-09-30T12:01:00Z"),
+        ]
+        rows = build_review_queue(prs, {}, NOW, "APO", TEAM)["ready_groups"][0]["rows"]
+        self.assertEqual([row["number"] for row in rows], [2, 1])
+
     def test_row_values(self):
         pr = make_pr(
             createdAt="2026-09-27T12:00:00Z",
@@ -309,6 +317,13 @@ class ReviewsRouteTest(unittest.TestCase):
     def test_deleted_author_reads_as_deleted_user(self):
         body, _ = self.partial(prs=[make_pr(3, author=None)])
         self.assertIn(", Deleted user)", body)
+
+    def test_filter_matching_only_not_ready_prs_does_not_claim_no_matches(self):
+        prs = [make_pr(1, author={"login": "bkraeling"}, mergeable="CONFLICTING")]
+        body, _ = self.partial("?author=brandon", prs=prs)
+        self.assertIn("Nothing is waiting for review.", body)
+        self.assertNotIn("No PRs match these filters.", body)
+        self.assertIn("<summary>Conflicts (1)</summary>", body)
 
     def test_reviewer_filter_takes_a_person_slug(self):
         prs = [

@@ -129,7 +129,8 @@ def _row(
     deletions = pr.get("deletions") or 0
     size_rank, size_label = size_bucket(additions + deletions)
     since = waiting_since(pr, team_logins) or now
-    hours = max(int((now - since).total_seconds() // 3600), 0)
+    seconds = max((now - since).total_seconds(), 0)
+    hours = int(seconds // 3600)
     return {
         "url": pr.get("url"),
         "repo": ((pr.get("repository") or {}).get("nameWithOwner") or "").split("/")[-1],
@@ -143,7 +144,7 @@ def _row(
         "deletions": deletions,
         "size": size_label,
         "size_rank": size_rank,
-        "waiting_hours": hours,
+        "waiting_seconds": seconds,
         "waiting": _format_waiting(hours),
         "ci": ci_state(pr),
         "reviewers": [login for login in _requested_reviewers(pr) if login.lower() in team_logins],
@@ -153,7 +154,7 @@ def _row(
 
 def _review_order(row: dict[str, Any]) -> tuple[int, int, int]:
     band = next(rank for rank, (value, _) in enumerate(PRIORITY_BANDS) if value == row["priority"])
-    return band, row["size_rank"], -row["waiting_hours"]
+    return band, row["size_rank"], -row["waiting_seconds"]
 
 
 def build_review_queue(
@@ -186,8 +187,8 @@ def build_review_queue(
         ],
         "ready_count": len(ready),
         "running": sorted(sections[CI_RUNNING], key=_review_order),
-        "not_ready": sorted(sections[NOT_READY], key=lambda row: -row["waiting_hours"]),
-        "approved": sorted(sections[APPROVED], key=lambda row: -row["waiting_hours"]),
+        "not_ready": sorted(sections[NOT_READY], key=lambda row: -row["waiting_seconds"]),
+        "approved": sorted(sections[APPROVED], key=lambda row: -row["waiting_seconds"]),
     }
 
 

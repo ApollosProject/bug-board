@@ -46,7 +46,9 @@
     {% for row in group.rows %}{{ pr_card(row) }}{% endfor %}
   </details>
 {% else %}
-  <article>{% if selected.author or selected.reviewer %}No PRs match these filters.{% else %}Nothing is waiting for review.{% endif %}</article>
+  {% set filtered = selected.author or selected.reviewer %}
+  {% set nothing_matches = not (running or not_ready or (include_approved and approved)) %}
+  <article>{% if filtered and nothing_matches %}No PRs match these filters.{% else %}Nothing is waiting for review.{% endif %}</article>
 {% endfor %}
 {% if running or not_ready %}
   <hr />
