@@ -24,9 +24,6 @@ PRIORITY_BANDS = ((1, "Urgent"), (2, "High"), (3, "Medium"), (4, "Low"), (0, "No
 # (max changed lines, label); smallest first so quick reviews clear fastest.
 SIZE_BUCKETS: tuple[tuple[int | None, str], ...] = ((50, "XS"), (200, "S"), (500, "M"), (None, "L"))
 
-WAITING_AMBER_HOURS = 24
-WAITING_RED_HOURS = 72
-
 
 def ticket_number(pr: dict[str, Any], team_key: str) -> int | None:
     """Return the Linear issue number from the branch name, else the title."""
@@ -84,7 +81,7 @@ def classify(pr: dict[str, Any]) -> tuple[str, str | None]:
         return APPROVED, None
     default_branch = ((pr.get("repository") or {}).get("defaultBranchRef") or {}).get("name")
     if pr.get("baseRefName") != default_branch:
-        return NOT_READY, f"Stacked (base: {pr.get('baseRefName')})"
+        return NOT_READY, "Stacked"
     if has_known_merge_conflicts(pr):
         return NOT_READY, "Conflicts"
     ci = ci_state(pr)
@@ -130,14 +127,6 @@ def _format_waiting(hours: int) -> str:
     return f"{hours}h" if hours < 24 else f"{hours // 24}d"
 
 
-def _waiting_level(hours: int) -> str:
-    if hours > WAITING_RED_HOURS:
-        return "red"
-    if hours > WAITING_AMBER_HOURS:
-        return "amber"
-    return ""
-
-
 def _row(
     pr: dict[str, Any], issue: dict[str, Any] | None, now: datetime, team_logins: set[str]
 ) -> dict[str, Any]:
@@ -152,6 +141,7 @@ def _row(
         "number": pr.get("number"),
         "title": pr.get("title"),
         "author": (pr.get("author") or {}).get("login"),
+        "base": pr.get("baseRefName"),
         "issue": issue,
         "priority": int((issue or {}).get("priority") or 0),
         "additions": additions,
@@ -160,7 +150,6 @@ def _row(
         "size_rank": size_rank,
         "waiting_hours": hours,
         "waiting": _format_waiting(hours),
-        "waiting_level": _waiting_level(hours),
         "ci": ci_state(pr),
         "reviewers": [login for login in _requested_reviewers(pr) if login.lower() in team_logins],
         "reason": None,

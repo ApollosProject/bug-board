@@ -1,83 +1,80 @@
-{% from "partials/priority_icon.html" import priority_icon %}
-{% macro pr_table(groups, last_column="CI") -%}
-  <div class="review-table" role="region" tabindex="0">
-    <table>
-      <thead><tr>
-        <th scope="col">PR</th>
-        <th scope="col">Ticket</th>
-        <th scope="col">Size</th>
-        <th scope="col">Waiting</th>
-        <th scope="col">{{ last_column }}</th>
-        <th scope="col">Author</th>
-        <th scope="col">Reviewers</th>
-      </tr></thead>
-      {% for group in groups %}
-        <tbody>
-          {% if group.label %}<tr class="review-group"><th scope="rowgroup" colspan="7">{{ group.label }} ({{ group.rows|length }})</th></tr>{% endif %}
-          {% for row in group.rows %}
-            <tr>
-              <th scope="row"><a href="{{ row.url }}">{{ row.repo }}#{{ row.number }}</a> {{ row.title }}</th>
-              <td>{% if row.issue %}<a href="{{ row.issue.url }}" title="Priority: {{ row.issue.priorityLabel }}">{{ priority_icon(row.issue) }}{{ row.issue.identifier }}</a>{% else %}<small>No ticket</small>{% endif %}</td>
-              <td><span class="review-size">{{ row.size }}</span> <small>+{{ row.additions }} −{{ row.deletions }}</small></td>
-              <td class="review-waiting review-waiting--{{ row.waiting_level or 'ok' }}">{{ row.waiting }}</td>
-              <td><span class="review-reason" title="{{ row.reason or row.ci }}">{{ row.reason or row.ci }}</span></td>
-              <td>{{ row.author }}</td>
-              <td class="review-reviewers">{% for login in row.reviewers %}{% if login == session.get('github_login') %}<strong>{{ login }}</strong>{% else %}{{ login }}{% endif %}{% if not loop.last %}, {% endif %}{% else %}<small>None requested</small>{% endfor %}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      {% endfor %}
-    </table>
+{% macro person(login) -%}
+  {%- set name = names.get((login or '')|lower, login) -%}
+  {%- if viewer and (login or '')|lower == viewer.github_username|lower %}<strong>{{ name }}</strong>{% else %}{{ name }}{% endif -%}
+{%- endmacro %}
+{% macro pr_card(row) -%}
+  <div class="card">
+    <article>
+      <a href="{{ row.url }}">{{ row.title }}</a>
+      <small>({{ row.repo }}#{{ row.number }},{% if row.issue %} <a href="{{ row.issue.url }}">{{ row.issue.identifier }}</a>,{% endif %}{% if row.reason == "Stacked" %} on {{ row.base }},{% endif %} {{ row.size }} +{{ row.additions }}/−{{ row.deletions }}, {{ row.waiting }}, {{ person(row.author) }}{% if row.reviewers %} → {% for login in row.reviewers %}{{ person(login) }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %})</small>
+    </article>
   </div>
 {%- endmacro %}
-<div class="review-heading">
-  <h2>PRs to Review</h2>
-  <small>Grouped by Linear priority, then smallest diff first, then longest waiting. Default-branch PRs with passing (or no) CI, no conflicts, not approved, and not waiting on the author.
-    {% if include_approved %}<a href="{{ reviews_link(approved=None) }}">Hide approved</a>{% else %}<a href="{{ reviews_link(approved='1') }}">Show approved</a>{% endif %}</small>
-</div>
-{% macro login_select(name, label) -%}
-  <label>{{ label }}
-    <select name="{{ name }}" onchange="this.form.submit()">
+{% macro login_select(field, label) -%}
+  <label>
+    <span>{{ label }}</span>
+    <select name="{{ field }}" aria-label="{{ label }}">
       <option value="">Anyone</option>
-      {% for login in team_logins %}
-        <option value="{{ login }}"{% if login|lower == (query[name] or '')|lower %} selected{% endif %}>{{ login }}</option>
+      {% for member in people %}
+        <option value="{{ member.slug }}"{% if member.github_username|lower == selected[field] %} selected{% endif %}>{{ member.name }}</option>
       {% endfor %}
     </select>
   </label>
 {%- endmacro %}
-<form class="review-filters" method="get" action="{{ url_for('reviews') }}">
-  {% if include_approved %}<input type="hidden" name="approved" value="1" />{% endif %}
-  {{ login_select("author", "Author") }}
-  {{ login_select("reviewer", "Reviewer") }}
-  <noscript><button type="submit">Filter</button></noscript>
-</form>
-{% set me = session.get('github_login') %}
-{% if me %}
-  <p class="review-shortcuts">
-    <a href="{{ reviews_link(author=me, reviewer=None) }}">My PRs waiting on review</a>
-    · <a href="{{ reviews_link(author=None, reviewer=me) }}">Waiting on my review</a>
-    {% if query.author or query.reviewer %}· <a href="{{ reviews_link(author=None, reviewer=None) }}">Everyone</a>{% endif %}
-  </p>
-{% endif %}
-<h3>Ready for review ({{ ready_count }})</h3>
-{% if ready_groups %}
-  {{ pr_table(ready_groups) }}
+<h2>PRs to Review</h2>
+<p><small>Grouped by Linear priority, then smallest diff, then longest waiting.</small></p>
+<div class="time-window review-filters">
+  {% if viewer %}
+    <form method="get" action="{{ url_for('reviews') }}" class="time-window-presets" aria-label="Whose PRs">
+      {% if include_approved %}<input type="hidden" name="approved" value="1">{% endif %}
+      <button type="submit" aria-pressed="{{ 'true' if not selected.author and not selected.reviewer else 'false' }}">Everyone</button>
+      <button type="submit" name="reviewer" value="{{ viewer.slug }}" aria-pressed="{{ 'true' if selected.reviewer == viewer.github_username|lower and not selected.author else 'false' }}">Waiting on me</button>
+      <button type="submit" name="author" value="{{ viewer.slug }}" aria-pressed="{{ 'true' if selected.author == viewer.github_username|lower and not selected.reviewer else 'false' }}">My PRs</button>
+    </form>
+  {% endif %}
+  <form method="get" action="{{ url_for('reviews') }}" class="time-window-custom">
+    {% if include_approved %}<input type="hidden" name="approved" value="1">{% endif %}
+    {{ login_select("author", "Author") }}
+    {{ login_select("reviewer", "Reviewer") }}
+    <button type="submit">Apply</button>
+  </form>
+</div>
+<h2>Waiting on Review ({{ ready_count }})</h2>
+{% for group in ready_groups %}
+  <details open>
+    <summary>{{ group.label }} ({{ group.rows|length }})</summary>
+    {% for row in group.rows %}{{ pr_card(row) }}{% endfor %}
+  </details>
 {% else %}
-  <article>{% if query.author or query.reviewer %}No PRs match these filters.{% else %}Nothing is waiting for review.{% endif %}</article>
+  <article>{% if selected.author or selected.reviewer %}No PRs match these filters.{% else %}Nothing is waiting for review.{% endif %}</article>
+{% endfor %}
+{% if running or not_ready %}
+  <hr />
+  <h2>Not Ready Yet ({{ running|length + not_ready|length }})</h2>
+  {% if running %}
+    <details>
+      <summary>CI running ({{ running|length }})</summary>
+      {% for row in running %}{{ pr_card(row) }}{% endfor %}
+    </details>
+  {% endif %}
+  {% for reason in ["Changes requested", "CI failing", "Conflicts", "Stacked"] %}
+    {% set rows = not_ready|selectattr("reason", "equalto", reason)|list %}
+    {% if rows %}
+      <details>
+        <summary>{{ reason }} ({{ rows|length }})</summary>
+        {% for row in rows %}{{ pr_card(row) }}{% endfor %}
+      </details>
+    {% endif %}
+  {% endfor %}
 {% endif %}
-{% if running %}
-  <h3>CI running ({{ running|length }})</h3>
-  {{ pr_table([{"rows": running}]) }}
-{% endif %}
-{% if not_ready %}
-  <details>
-    <summary>Not ready ({{ not_ready|length }})</summary>
-    {{ pr_table([{"rows": not_ready}], last_column="Reason") }}
-  </details>
-{% endif %}
+<hr />
 {% if include_approved %}
+  <h2>Approved, Not Merged ({{ approved|length }})</h2>
   <details>
-    <summary>Approved, not merged ({{ approved|length }})</summary>
-    {{ pr_table([{"rows": approved}]) }}
+    <summary>Approved ({{ approved|length }})</summary>
+    {% for row in approved %}{{ pr_card(row) }}{% endfor %}
   </details>
+  <a href="{{ reviews_link(approved=None) }}">Hide approved PRs</a>
+{% else %}
+  <a href="{{ reviews_link(approved='1') }}">Show approved PRs</a>
 {% endif %}

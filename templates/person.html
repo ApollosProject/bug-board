@@ -16,6 +16,11 @@
 {% block header_nav %}{% endblock %}
 
 {% block content %}
+      {% set first = person_name|first_name %}
+      <p class="person-review-links">
+        <a href="{{ url_for('reviews', reviewer=person_slug) }}">PRs waiting on {{ first }}'s review</a>
+        · <a href="{{ url_for('reviews', author=person_slug) }}">{{ first }}'s PRs waiting on review</a>
+      </p>
       <div id="person-content" aria-busy="true"></div>
 {% endblock %}
 

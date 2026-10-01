@@ -81,7 +81,7 @@ class ClassifyTest(unittest.TestCase):
 
     def test_not_ready_reasons(self):
         cases = {
-            "Stacked (base: feature-0)": make_pr(baseRefName="feature-0"),
+            "Stacked": make_pr(baseRefName="feature-0"),
             "Conflicts": make_pr(mergeable="CONFLICTING"),
             "CI failing": make_pr(statusCheckRollup={"state": "FAILURE"}),
         }
@@ -179,7 +179,7 @@ class BuildReviewQueueTest(unittest.TestCase):
 
         self.assertEqual(row["repo"], "apollos-admin")
         self.assertEqual((row["size"], row["additions"], row["deletions"]), ("XS", 10, 5))
-        self.assertEqual((row["waiting"], row["waiting_level"]), ("4d", "red"))
+        self.assertEqual(row["waiting"], "4d")
         self.assertEqual(row["reviewers"], ["dylan-manchester"])
         self.assertIsNone(row["issue"])
 
@@ -239,93 +239,100 @@ class FilterQueueTest(unittest.TestCase):
 
 
 class ReviewsRouteTest(unittest.TestCase):
+    SECRET = "test-secret-key-at-least-32-characters"
+
     def setUp(self):
         app_module._build_reviews_context.cache_clear()
         self.client = app_module.app.test_client()
 
-    def test_page_renders(self):
-        response = self.client.get("/reviews")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("/partials/reviews/content", response.get_data(as_text=True))
-
-    def test_partial_renders_empty_state_without_prs(self):
-        with patch.object(app_module, "search_open_prs", return_value=[]):
-            response = self.client.get("/partials/reviews/content")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("Nothing is waiting for review.", response.get_data(as_text=True))
-
-    def test_partial_bolds_the_viewer_and_links_the_ticket(self):
-        pr = make_pr(7, headRefName="apo-9", reviewRequests=requested("dylan-manchester"))
-        issue = {
-            "number": 9,
-            "identifier": "APO-9",
-            "url": "https://linear.app/differential/issue/APO-9",
-            "priority": 1,
-            "priorityLabel": "Urgent",
-        }
+    def partial(self, query="", prs=(), issues=None, viewer=None):
         with (
-            patch.dict(app_module.app.config, SECRET_KEY="test-secret-key-at-least-32-characters"),
-            patch.object(app_module, "search_open_prs", return_value=[pr]),
-            patch.object(app_module, "get_issues_by_number", return_value={9: issue}),
+            patch.dict(app_module.app.config, SECRET_KEY=self.SECRET),
+            patch.object(app_module, "search_open_prs", return_value=list(prs)) as search,
+            patch.object(app_module, "get_issues_by_number", return_value=issues or {}),
         ):
-            with self.client.session_transaction() as session:
-                session["github_login"] = "dylan-manchester"
-            body = self.client.get("/partials/reviews/content").get_data(as_text=True)
+            if viewer:
+                with self.client.session_transaction() as session:
+                    session["github_login"] = viewer
+            body = self.client.get(f"/partials/reviews/content{query}").get_data(as_text=True)
+        return body, search
 
-        self.assertIn(">Urgent (1)</th>", body)
-        self.assertIn("apollos-admin#7", body)
-        self.assertIn(">APO-9</a>", body)
-        self.assertIn("<strong>dylan-manchester</strong>", body)
+    def test_page_renders_and_passes_filters_to_the_partial(self):
+        body = self.client.get("/reviews?reviewer=dylan&author=").get_data(as_text=True)
+        self.assertIn("/partials/reviews/content?reviewer=dylan'", body)
 
-    def test_approved_toggle_fetches_and_shows_approved_prs(self):
-        with patch.object(
-            app_module, "search_open_prs", return_value=[make_pr(8, reviewDecision="APPROVED")]
-        ) as search:
-            off = self.client.get("/partials/reviews/content").get_data(as_text=True)
-            on = self.client.get("/partials/reviews/content?approved=1").get_data(as_text=True)
+    def test_empty_states(self):
+        self.assertIn("Nothing is waiting for review.", self.partial()[0])
+        self.assertIn("No PRs match these filters.", self.partial("?reviewer=brandon")[0])
 
-        self.assertEqual([call.args for call in search.call_args_list], [(False,), (True,)])
-        self.assertNotIn("Approved, not merged", off)
-        self.assertIn("Approved, not merged (1)", on)
-        self.assertIn('href="/reviews?approved=1"', off)
-        shell = self.client.get("/reviews?approved=1").get_data(as_text=True)
-        self.assertIn("/partials/reviews/content?approved=1", shell)
+    def test_card_shows_ticket_size_wait_and_first_names(self):
+        pr = make_pr(
+            7,
+            headRefName="apo-9",
+            author={"login": "bkraeling"},
+            reviewRequests=requested("dylan-manchester"),
+        )
+        issue = {"identifier": "APO-9", "url": "https://linear.app/x/APO-9", "priority": 1}
 
-    def test_filters_flow_from_the_page_to_the_partial_and_keep_each_other(self):
+        body, _ = self.partial(prs=[pr], issues={9: issue}, viewer="dylan-manchester")
+
+        self.assertIn("<summary>Urgent (1)</summary>", body)
+        self.assertIn(
+            '<a href="https://github.com/apollosproject/apollos-admin/pull/7">PR 7</a>', body
+        )
+        self.assertIn('<a href="https://linear.app/x/APO-9">APO-9</a>', body)
+        self.assertIn(
+            '(apollos-admin#7, <a href="https://linear.app/x/APO-9">APO-9</a>, XS +10/−5', body
+        )
+        self.assertIn("Brandon → <strong>Dylan</strong>", body)
+
+    def test_reviewer_filter_takes_a_person_slug(self):
         prs = [
-            make_pr(1, author={"login": "dylan-manchester"}),
-            make_pr(2, author={"login": "bkraeling"}),
+            make_pr(1, reviewRequests=requested("dylan-manchester")),
+            make_pr(2, reviewRequests=requested("bkraeling")),
         ]
-        with patch.object(app_module, "search_open_prs", return_value=prs):
-            body = self.client.get("/partials/reviews/content?author=dylan-manchester").get_data(
-                as_text=True
-            )
-            empty = self.client.get("/partials/reviews/content?reviewer=bkraeling").get_data(
-                as_text=True
-            )
+        body, _ = self.partial("?reviewer=dylan", prs=prs)
+        self.assertIn("pull/1", body)
+        self.assertNotIn("pull/2", body)
+        self.assertIn('<option value="dylan" selected>Dylan</option>', body)
 
-        self.assertIn("apollos-admin#1", body)
-        self.assertNotIn("apollos-admin#2", body)
-        self.assertIn('<option value="dylan-manchester" selected>', body)
-        self.assertIn('href="/reviews?author=dylan-manchester&amp;approved=1"', body)
-        self.assertIn("No PRs match these filters.", empty)
-        shell = self.client.get("/reviews?author=dylan-manchester&reviewer=").get_data(as_text=True)
-        self.assertIn("/partials/reviews/content?author=dylan-manchester'", shell)
+    def test_not_ready_groups_by_reason(self):
+        prs = [
+            make_pr(1, statusCheckRollup={"state": "PENDING"}),
+            make_pr(2, mergeable="CONFLICTING"),
+            make_pr(3, baseRefName="apo-1-parent"),
+        ]
+        body, _ = self.partial(prs=prs)
+        self.assertIn("<h2>Not Ready Yet (3)</h2>", body)
+        self.assertIn("<summary>CI running (1)</summary>", body)
+        self.assertIn("<summary>Conflicts (1)</summary>", body)
+        self.assertIn("<summary>Stacked (1)</summary>", body)
+        self.assertIn("on apo-1-parent,", body)
 
-    def test_signed_in_viewer_gets_my_prs_and_my_reviews_shortcuts(self):
-        with (
-            patch.dict(app_module.app.config, SECRET_KEY="test-secret-key-at-least-32-characters"),
-            patch.object(app_module, "search_open_prs", return_value=[]),
-        ):
-            with self.client.session_transaction() as session:
-                session["github_login"] = "dylan-manchester"
-            body = self.client.get("/partials/reviews/content?reviewer=bkraeling").get_data(
-                as_text=True
-            )
+    def test_approved_toggle_fetches_and_shows_approved_prs_and_keeps_filters(self):
+        prs = [make_pr(8, reviewDecision="APPROVED")]
+        off, search = self.partial("?reviewer=dylan", prs=prs)
+        self.assertNotIn("Approved, Not Merged", off)
+        self.assertIn('href="/reviews?reviewer=dylan&amp;approved=1"', off)
+        self.assertEqual(search.call_args.args, (False,))
 
-        self.assertIn('href="/reviews?author=dylan-manchester">My PRs waiting on review', body)
-        self.assertIn('href="/reviews?reviewer=dylan-manchester">Waiting on my review', body)
-        self.assertIn('href="/reviews">Everyone</a>', body)
+        on, search = self.partial("?approved=1", prs=prs)
+        self.assertIn("<h2>Approved, Not Merged (1)</h2>", on)
+        self.assertEqual(search.call_args.args, (True,))
+
+    def test_signed_in_viewer_gets_presets_with_the_active_one_pressed(self):
+        body, _ = self.partial("?reviewer=dylan", viewer="dylan-manchester")
+        self.assertIn(
+            'name="reviewer" value="dylan" aria-pressed="true">Waiting on me</button>', body
+        )
+        self.assertIn('name="author" value="dylan" aria-pressed="false">My PRs</button>', body)
+        self.client = app_module.app.test_client()
+        self.assertNotIn("Waiting on me", self.partial()[0])
+
+    def test_person_page_links_to_their_reviews(self):
+        body = self.client.get("/team/dylan").get_data(as_text=True)
+        self.assertIn('href="/reviews?reviewer=dylan">PRs waiting on Dylan\'s review</a>', body)
+        self.assertIn('href="/reviews?author=dylan">Dylan\'s PRs waiting on review</a>', body)
 
 
 class SearchOpenPrsTest(unittest.TestCase):

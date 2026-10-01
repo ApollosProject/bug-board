@@ -1297,12 +1297,30 @@ def _reviews_link(query: dict[str, str], **changes: str | None) -> str:
     return url_for("reviews") + (f"?{urlencode(params)}" if params else "")
 
 
-def _team_github_logins() -> list[str]:
-    people = load_config().get("people", {}).values()
-    return sorted(
-        (person["github_username"] for person in people if person.get("github_username")),
-        key=str.lower,
-    )
+def _review_people() -> list[dict[str, str]]:
+    """Team members with a GitHub login, named the way the rest of Bug Board names them."""
+    people = [
+        {
+            "slug": slug,
+            "name": first_name_filter(
+                person.get("linear_username", slug).replace(".", " ").replace("-", " ").title()
+            ),
+            "github_username": person["github_username"],
+        }
+        for slug, person in load_config().get("people", {}).items()
+        if person.get("github_username")
+    ]
+    return sorted(people, key=lambda person: person["name"].lower())
+
+
+def _github_login_for(value: str | None, people: list[dict[str, str]]) -> str | None:
+    """Accept a person slug (``dylan``) or a GitHub login and return the GitHub login."""
+    if not value:
+        return None
+    for person in people:
+        if value.lower() in (person["slug"].lower(), person["github_username"].lower()):
+            return person["github_username"]
+    return value
 
 
 @app.route("/reviews")
@@ -1314,18 +1332,23 @@ def reviews():
 def reviews_content_partial():
     query = _reviews_query()
     include_approved = query.get("approved") == "1"
+    people = _review_people()
+    author = _github_login_for(query.get("author"), people)
+    reviewer = _github_login_for(query.get("reviewer"), people)
+    viewer = _github_login_for(session.get("github_login"), people)
     cache_epoch = int(time.time() / INDEX_CACHE_TTL_SECONDS)
     context = filter_queue(
-        _build_reviews_context(cache_epoch, include_approved),
-        author=query.get("author"),
-        reviewer=query.get("reviewer"),
+        _build_reviews_context(cache_epoch, include_approved), author=author, reviewer=reviewer
     )
     return render_template(
         "partials/reviews_content.html",
         include_approved=include_approved,
         query=query,
         reviews_link=lambda **changes: _reviews_link(query, **changes),
-        team_logins=_team_github_logins(),
+        people=people,
+        names={person["github_username"].lower(): person["name"] for person in people},
+        selected={"author": (author or "").lower(), "reviewer": (reviewer or "").lower()},
+        viewer=next((p for p in people if p["github_username"] == viewer), None),
         **context,
     )
 
@@ -1333,7 +1356,7 @@ def reviews_content_partial():
 @lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
 def _build_reviews_context(_cache_epoch: int, include_approved: bool) -> dict:
     team_key = get_linear_team_key()
-    team_logins = {login.lower() for login in _team_github_logins()}
+    team_logins = {person["github_username"].lower() for person in _review_people()}
     prs = search_open_prs(include_approved)
     numbers = [number for pr in prs if (number := ticket_number(pr, team_key))]
     issues = get_issues_by_number(numbers)
