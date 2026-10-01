@@ -1302,9 +1302,7 @@ def _review_people() -> list[dict[str, str]]:
     people = [
         {
             "slug": slug,
-            "name": first_name_filter(
-                person.get("linear_username", slug).replace(".", " ").replace("-", " ").title()
-            ),
+            "name": first_name_filter(format_display_name(person.get("linear_username", slug))),
             "github_username": person["github_username"],
         }
         for slug, person in load_config().get("people", {}).items()

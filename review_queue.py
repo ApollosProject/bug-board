@@ -61,20 +61,11 @@ def _requested_reviewers(pr: dict[str, Any]) -> list[str]:
 def _is_approved(pr: dict[str, Any]) -> bool:
     if has_required_approval(pr):
         return True
-    # Repos without required reviews leave reviewDecision empty; use each reviewer's latest review.
+    # Repos without required reviews leave reviewDecision empty. Reviews are already each
+    # reviewer's latest opinionated review (latestOpinionatedReviews).
     if pr.get("reviewDecision") is not None:
         return False
-    latest: dict[str, tuple[datetime, str]] = {}
-    for review in (pr.get("reviews") or {}).get("nodes", []):
-        login = (review.get("author") or {}).get("login")
-        submitted_at = _parse_github_timestamp(review.get("submittedAt"))
-        if not login or submitted_at is None:
-            continue
-        if review.get("state") not in ("APPROVED", "CHANGES_REQUESTED", "DISMISSED"):
-            continue
-        if login not in latest or submitted_at >= latest[login][0]:
-            latest[login] = (submitted_at, review["state"])
-    states = {state for _, state in latest.values()}
+    states = {review.get("state") for review in (pr.get("reviews") or {}).get("nodes", [])}
     return "APPROVED" in states and "CHANGES_REQUESTED" not in states
 
 

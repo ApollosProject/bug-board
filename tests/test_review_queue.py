@@ -107,17 +107,6 @@ class ClassifyTest(unittest.TestCase):
         pr["reviewRequests"] = requested("bkraeling")
         self.assertEqual(classify(pr), (READY, None))
 
-    def test_a_later_comment_does_not_clear_a_change_request(self):
-        reviews = [
-            {"author": {"login": "bkraeling"}, "state": state, "submittedAt": at}
-            for state, at in (
-                ("CHANGES_REQUESTED", "2026-09-30T13:00:00Z"),
-                ("COMMENTED", "2026-09-30T15:00:00Z"),
-            )
-        ]
-        pr = make_pr(reviewDecision="CHANGES_REQUESTED", reviews={"nodes": reviews})
-        self.assertEqual(classify(pr), (NOT_READY, "Changes requested"))
-
     def test_every_change_request_must_be_re_requested(self):
         reviews = [
             {"author": {"login": login}, "state": "CHANGES_REQUESTED", "submittedAt": at}
