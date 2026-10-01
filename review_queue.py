@@ -205,3 +205,32 @@ def build_review_queue(
         "not_ready": sorted(sections[NOT_READY], key=lambda row: -row["waiting_hours"]),
         "approved": sorted(sections[APPROVED], key=lambda row: -row["waiting_hours"]),
     }
+
+
+def filter_queue(
+    queue: dict[str, Any], author: str | None = None, reviewer: str | None = None
+) -> dict[str, Any]:
+    """Keep rows authored by ``author`` and/or awaiting ``reviewer`` (GitHub logins)."""
+    author = (author or "").lower()
+    reviewer = (reviewer or "").lower()
+    if not author and not reviewer:
+        return queue
+
+    def keep(row: dict[str, Any]) -> bool:
+        if author and (row["author"] or "").lower() != author:
+            return False
+        return not reviewer or reviewer in {login.lower() for login in row["reviewers"]}
+
+    groups = [
+        {**group, "rows": rows}
+        for group in queue["ready_groups"]
+        if (rows := [row for row in group["rows"] if keep(row)])
+    ]
+    return {
+        "ready_groups": groups,
+        "ready_count": sum(len(group["rows"]) for group in groups),
+        **{
+            section: [row for row in queue[section] if keep(row)]
+            for section in ("running", "not_ready", "approved")
+        },
+    }

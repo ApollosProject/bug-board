@@ -415,7 +415,10 @@ a.team-metrics-export:is(:hover, :focus) { color: var(--pico-primary); }
 .review-table td.review-reviewers { min-width: 10rem; white-space: normal; }
 .review-reason { display: inline-block; max-width: 8rem; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
 .review-size { font-weight: 600; }
-.review-heading { margin-bottom: 1.5rem; }
+.review-heading { margin-bottom: 1rem; }
+.review-filters { display: flex; flex-wrap: wrap; gap: 0 1rem; }
+.review-filters label { flex: 1 1 12rem; font-size: 0.8rem; }
+.review-shortcuts { font-size: 0.8rem; }
 .review-group th { background: var(--pico-muted-border-color); font-weight: 600; }
 .review-waiting--amber { color: #b26b00; font-weight: 600; }
 .review-waiting--red { color: #c62828; font-weight: 600; }

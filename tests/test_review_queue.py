@@ -11,6 +11,7 @@ from review_queue import (
     READY,
     build_review_queue,
     classify,
+    filter_queue,
     ticket_number,
     waiting_since,
 )
@@ -199,6 +200,44 @@ class BuildReviewQueueTest(unittest.TestCase):
         )
 
 
+class FilterQueueTest(unittest.TestCase):
+    def setUp(self):
+        prs = [
+            make_pr(1, headRefName="apo-1", author={"login": "Dylan-Manchester"}),
+            make_pr(2, headRefName="apo-2", reviewRequests=requested("bkraeling")),
+            make_pr(
+                3,
+                author={"login": "dylan-manchester"},
+                reviewRequests=requested("bkraeling"),
+                statusCheckRollup={"state": "PENDING"},
+            ),
+            make_pr(4, author={"login": "dylan-manchester"}, mergeable="CONFLICTING"),
+        ]
+        issues = {1: {"priority": 1}, 2: {"priority": 2}}
+        self.queue = build_review_queue(prs, issues, NOW, "APO", TEAM)
+
+    def numbers(self, queue):
+        ready = [row["number"] for group in queue["ready_groups"] for row in group["rows"]]
+        return ready, [r["number"] for r in queue["running"] + queue["not_ready"]]
+
+    def test_no_filters_returns_everything(self):
+        self.assertIs(filter_queue(self.queue), self.queue)
+
+    def test_author_filter_is_case_insensitive_across_sections(self):
+        queue = filter_queue(self.queue, author="dylan-manchester")
+        self.assertEqual(self.numbers(queue), ([1], [3, 4]))
+        self.assertEqual([g["label"] for g in queue["ready_groups"]], ["Urgent"])
+        self.assertEqual(queue["ready_count"], 1)
+
+    def test_reviewer_filter_keeps_prs_awaiting_that_reviewer(self):
+        queue = filter_queue(self.queue, reviewer="BKraeling")
+        self.assertEqual(self.numbers(queue), ([2], [3]))
+
+    def test_author_and_reviewer_combine(self):
+        queue = filter_queue(self.queue, author="dylan-manchester", reviewer="bkraeling")
+        self.assertEqual(self.numbers(queue), ([], [3]))
+
+
 class ReviewsRouteTest(unittest.TestCase):
     def setUp(self):
         app_module._build_reviews_context.cache_clear()
@@ -251,6 +290,42 @@ class ReviewsRouteTest(unittest.TestCase):
         self.assertIn('href="/reviews?approved=1"', off)
         shell = self.client.get("/reviews?approved=1").get_data(as_text=True)
         self.assertIn("/partials/reviews/content?approved=1", shell)
+
+    def test_filters_flow_from_the_page_to_the_partial_and_keep_each_other(self):
+        prs = [
+            make_pr(1, author={"login": "dylan-manchester"}),
+            make_pr(2, author={"login": "bkraeling"}),
+        ]
+        with patch.object(app_module, "search_open_prs", return_value=prs):
+            body = self.client.get("/partials/reviews/content?author=dylan-manchester").get_data(
+                as_text=True
+            )
+            empty = self.client.get("/partials/reviews/content?reviewer=bkraeling").get_data(
+                as_text=True
+            )
+
+        self.assertIn("apollos-admin#1", body)
+        self.assertNotIn("apollos-admin#2", body)
+        self.assertIn('<option value="dylan-manchester" selected>', body)
+        self.assertIn('href="/reviews?author=dylan-manchester&amp;approved=1"', body)
+        self.assertIn("No PRs match these filters.", empty)
+        shell = self.client.get("/reviews?author=dylan-manchester&reviewer=").get_data(as_text=True)
+        self.assertIn("/partials/reviews/content?author=dylan-manchester'", shell)
+
+    def test_signed_in_viewer_gets_my_prs_and_my_reviews_shortcuts(self):
+        with (
+            patch.dict(app_module.app.config, SECRET_KEY="test-secret-key-at-least-32-characters"),
+            patch.object(app_module, "search_open_prs", return_value=[]),
+        ):
+            with self.client.session_transaction() as session:
+                session["github_login"] = "dylan-manchester"
+            body = self.client.get("/partials/reviews/content?reviewer=bkraeling").get_data(
+                as_text=True
+            )
+
+        self.assertIn('href="/reviews?author=dylan-manchester">My PRs waiting on review', body)
+        self.assertIn('href="/reviews?reviewer=dylan-manchester">Waiting on my review', body)
+        self.assertIn('href="/reviews">Everyone</a>', body)
 
 
 class SearchOpenPrsTest(unittest.TestCase):

@@ -9,7 +9,7 @@ from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any, TypedDict, TypeVar
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import requests
 from flask import (
@@ -79,7 +79,7 @@ from project_dates import (
 )
 from regression_cache import get_cached_regression_summary
 from regressions import REGRESSION_DAYS
-from review_queue import build_review_queue, ticket_number
+from review_queue import build_review_queue, filter_queue, ticket_number
 from rippling_pto import get_rippling_pto_calendar
 from support import get_support_slugs
 from time_window import TimeWindow
@@ -1283,33 +1283,57 @@ def api_team_person(slug):
     return response
 
 
-def _include_approved_reviews() -> bool:
-    return request.args.get("approved") == "1"
+REVIEW_QUERY_KEYS = ("approved", "author", "reviewer")
+
+
+def _reviews_query() -> dict[str, str]:
+    """The /reviews filters present on this request, for links that must keep them."""
+    return {key: value for key in REVIEW_QUERY_KEYS if (value := request.args.get(key))}
+
+
+def _reviews_link(query: dict[str, str], **changes: str | None) -> str:
+    """/reviews with ``changes`` applied to ``query``; a None change removes that filter."""
+    params = {key: value for key, value in {**query, **changes}.items() if value}
+    return url_for("reviews") + (f"?{urlencode(params)}" if params else "")
+
+
+def _team_github_logins() -> list[str]:
+    people = load_config().get("people", {}).values()
+    return sorted(
+        (person["github_username"] for person in people if person.get("github_username")),
+        key=str.lower,
+    )
 
 
 @app.route("/reviews")
 def reviews():
-    return render_template("reviews.html", include_approved=_include_approved_reviews())
+    return render_template("reviews.html", query=_reviews_query())
 
 
 @app.route("/partials/reviews/content")
 def reviews_content_partial():
-    include_approved = _include_approved_reviews()
+    query = _reviews_query()
+    include_approved = query.get("approved") == "1"
     cache_epoch = int(time.time() / INDEX_CACHE_TTL_SECONDS)
-    context = _build_reviews_context(cache_epoch, include_approved)
+    context = filter_queue(
+        _build_reviews_context(cache_epoch, include_approved),
+        author=query.get("author"),
+        reviewer=query.get("reviewer"),
+    )
     return render_template(
-        "partials/reviews_content.html", include_approved=include_approved, **context
+        "partials/reviews_content.html",
+        include_approved=include_approved,
+        query=query,
+        reviews_link=lambda **changes: _reviews_link(query, **changes),
+        team_logins=_team_github_logins(),
+        **context,
     )
 
 
 @lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
 def _build_reviews_context(_cache_epoch: int, include_approved: bool) -> dict:
     team_key = get_linear_team_key()
-    team_logins = {
-        person["github_username"].lower()
-        for person in load_config().get("people", {}).values()
-        if person.get("github_username")
-    }
+    team_logins = {login.lower() for login in _team_github_logins()}
     prs = search_open_prs(include_approved)
     numbers = [number for pr in prs if (number := ticket_number(pr, team_key))]
     issues = get_issues_by_number(numbers)

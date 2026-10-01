@@ -27,6 +27,6 @@
     }
   }
 
-  loadSection('reviews-content', '{{ url_for("reviews_content_partial", **({"approved": "1"} if include_approved else {})) }}');
+  loadSection('reviews-content', '{{ url_for("reviews_content_partial", **query) }}');
 </script>
 {% endblock %}

@@ -33,13 +33,37 @@
 <div class="review-heading">
   <h2>PRs to Review</h2>
   <small>Grouped by Linear priority, then smallest diff first, then longest waiting. Default-branch PRs with passing (or no) CI, no conflicts, not approved, and not waiting on the author.
-    {% if include_approved %}<a href="{{ url_for('reviews') }}">Hide approved</a>{% else %}<a href="{{ url_for('reviews', approved='1') }}">Show approved</a>{% endif %}</small>
+    {% if include_approved %}<a href="{{ reviews_link(approved=None) }}">Hide approved</a>{% else %}<a href="{{ reviews_link(approved='1') }}">Show approved</a>{% endif %}</small>
 </div>
+{% macro login_select(name, label) -%}
+  <label>{{ label }}
+    <select name="{{ name }}" onchange="this.form.submit()">
+      <option value="">Anyone</option>
+      {% for login in team_logins %}
+        <option value="{{ login }}"{% if login|lower == (query[name] or '')|lower %} selected{% endif %}>{{ login }}</option>
+      {% endfor %}
+    </select>
+  </label>
+{%- endmacro %}
+<form class="review-filters" method="get" action="{{ url_for('reviews') }}">
+  {% if include_approved %}<input type="hidden" name="approved" value="1" />{% endif %}
+  {{ login_select("author", "Author") }}
+  {{ login_select("reviewer", "Reviewer") }}
+  <noscript><button type="submit">Filter</button></noscript>
+</form>
+{% set me = session.get('github_login') %}
+{% if me %}
+  <p class="review-shortcuts">
+    <a href="{{ reviews_link(author=me, reviewer=None) }}">My PRs waiting on review</a>
+    · <a href="{{ reviews_link(author=None, reviewer=me) }}">Waiting on my review</a>
+    {% if query.author or query.reviewer %}· <a href="{{ reviews_link(author=None, reviewer=None) }}">Everyone</a>{% endif %}
+  </p>
+{% endif %}
 <h3>Ready for review ({{ ready_count }})</h3>
 {% if ready_groups %}
   {{ pr_table(ready_groups) }}
 {% else %}
-  <article>Nothing is waiting for review.</article>
+  <article>{% if query.author or query.reviewer %}No PRs match these filters.{% else %}Nothing is waiting for review.{% endif %}</article>
 {% endif %}
 {% if running %}
   <h3>CI running ({{ running|length }})</h3>
