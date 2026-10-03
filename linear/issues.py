@@ -758,3 +758,37 @@ def by_project(issues):
             project_issues[project] = []
         project_issues[project].append(issue)
     return project_issues
+
+
+ISSUES_BY_NUMBER_BATCH_SIZE = 250  # Linear's maximum page size
+
+
+def get_issues_by_number(numbers: list[int]) -> dict[int, dict]:
+    """Return team issues keyed by issue number (the 123 in APO-123)."""
+    query = gql(
+        """
+        query IssuesByNumber ($numbers: [Float!], $team_key: String!, $first: Int!) {
+          issues(
+            first: $first
+            filter: { team: { key: { eq: $team_key } }, number: { in: $numbers } }
+          ) {
+            nodes {
+              number
+              identifier
+              title
+              url
+              priority
+              priorityLabel
+            }
+          }
+        }
+    """
+    )
+    unique = sorted(set(numbers))
+    issues: dict[int, dict] = {}
+    for start in range(0, len(unique), ISSUES_BY_NUMBER_BATCH_SIZE):
+        batch = unique[start : start + ISSUES_BY_NUMBER_BATCH_SIZE]
+        params = {"numbers": batch, "team_key": get_linear_team_key(), "first": len(batch)}
+        data = _execute(query, variable_values=params)
+        issues.update({issue["number"]: issue for issue in data["issues"]["nodes"]})
+    return issues

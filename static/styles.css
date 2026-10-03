@@ -313,6 +313,18 @@ details.dropdown.site-menu > summary + ul {
   width: auto;
 }
 
+.person-review-links { font-size: 0.85rem; }
+
+.time-window select {
+  font-size: 0.85rem;
+  font-weight: 400;
+  height: 2.25rem;
+  margin: 0;
+  padding: 0 2rem 0 0.5rem;
+  text-transform: none;
+  width: 10.5rem;
+}
+
 .time-window input[type="date"] {
   font-size: 0.85rem;
   font-weight: 400;

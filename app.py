@@ -9,7 +9,7 @@ from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any, TypedDict, TypeVar
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import requests
 from flask import (
@@ -45,6 +45,7 @@ from fleet_health_cache import (
 from github import (
     get_merged_pr_activity,
     get_merged_pr_counts_for_user,
+    search_open_prs,
 )
 from github_oauth import register_github_oauth
 from leaderboard import calculate_cycle_project_points
@@ -61,6 +62,7 @@ from linear.issues import (
     get_completed_issues_summary,
     get_completed_issues_summary_for_labels,
     get_created_issues,
+    get_issues_by_number,
     get_open_issues,
     get_open_issues_for_person,
     get_resolution_time_by_priority,
@@ -77,6 +79,7 @@ from project_dates import (
 )
 from regression_cache import get_cached_regression_summary
 from regressions import REGRESSION_DAYS
+from review_queue import build_review_queue, filter_queue, ticket_number
 from rippling_pto import get_rippling_pto_calendar
 from support import get_support_slugs
 from time_window import TimeWindow
@@ -1278,6 +1281,84 @@ def api_team_person(slug):
     response = jsonify(person_metrics_payload(context))
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+REVIEW_QUERY_KEYS = ("approved", "author", "reviewer")
+
+
+def _reviews_query() -> dict[str, str]:
+    """The /reviews filters present on this request, for links that must keep them."""
+    return {key: value for key in REVIEW_QUERY_KEYS if (value := request.args.get(key))}
+
+
+def _reviews_link(query: dict[str, str], **changes: str | None) -> str:
+    """/reviews with ``changes`` applied to ``query``; a None change removes that filter."""
+    params = {key: value for key, value in {**query, **changes}.items() if value}
+    return url_for("reviews") + (f"?{urlencode(params)}" if params else "")
+
+
+def _review_people() -> list[dict[str, str]]:
+    """Team members with a GitHub login, named the way the rest of Bug Board names them."""
+    people = [
+        {
+            "slug": slug,
+            "name": first_name_filter(format_display_name(person.get("linear_username", slug))),
+            "github_username": person["github_username"],
+        }
+        for slug, person in load_config().get("people", {}).items()
+        if person.get("github_username")
+    ]
+    return sorted(people, key=lambda person: person["name"].lower())
+
+
+def _github_login_for(value: str | None, people: list[dict[str, str]]) -> str | None:
+    """Accept a person slug (``dylan``) or a GitHub login and return the GitHub login."""
+    if not value:
+        return None
+    for person in people:
+        if value.lower() in (person["slug"].lower(), person["github_username"].lower()):
+            return person["github_username"]
+    return value
+
+
+@app.route("/reviews")
+def reviews():
+    return render_template("reviews.html", query=_reviews_query())
+
+
+@app.route("/partials/reviews/content")
+def reviews_content_partial():
+    query = _reviews_query()
+    include_approved = query.get("approved") == "1"
+    people = _review_people()
+    author = _github_login_for(query.get("author"), people)
+    reviewer = _github_login_for(query.get("reviewer"), people)
+    viewer = _github_login_for(session.get("github_login"), people)
+    cache_epoch = int(time.time() / INDEX_CACHE_TTL_SECONDS)
+    context = filter_queue(
+        _build_reviews_context(cache_epoch, include_approved), author=author, reviewer=reviewer
+    )
+    return render_template(
+        "partials/reviews_content.html",
+        include_approved=include_approved,
+        query=query,
+        reviews_link=lambda **changes: _reviews_link(query, **changes),
+        people=people,
+        names={person["github_username"].lower(): person["name"] for person in people},
+        selected={"author": (author or "").lower(), "reviewer": (reviewer or "").lower()},
+        viewer=next((p for p in people if p["github_username"] == viewer), None),
+        **context,
+    )
+
+
+@lru_cache(maxsize=INDEX_CONTEXT_CACHE_MAXSIZE)
+def _build_reviews_context(_cache_epoch: int, include_approved: bool) -> dict:
+    team_key = get_linear_team_key()
+    team_logins = {person["github_username"].lower() for person in _review_people()}
+    prs = search_open_prs(include_approved)
+    numbers = [number for pr in prs if (number := ticket_number(pr, team_key))]
+    issues = get_issues_by_number(numbers)
+    return build_review_queue(prs, issues, datetime.now(timezone.utc), team_key, team_logins)
 
 
 @app.route("/projects")

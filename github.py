@@ -71,6 +71,15 @@ def _execute(query, variable_values=None):
     return client.execute(request)
 
 
+def _retrying(fn, *args, **kwargs):
+    return Retrying(
+        reraise=True,
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(max=4),
+        before_sleep=before_sleep_log(logging.getLogger(__name__), logging.WARNING),
+    )(fn, *args, **kwargs)
+
+
 def _format_failure(name: str, exc: Exception) -> str:
     message = str(exc)
     if message:
@@ -215,12 +224,7 @@ def get_prs(repo_id, pr_states, repo_name=None):
         params = {"repo_id": repo_id, "pr_states": pr_states, "cursor": cursor}
         try:
             # Retry this page, not every repository and already-fetched page.
-            data = Retrying(
-                reraise=True,
-                stop=stop_after_attempt(3),
-                wait=wait_exponential(max=4),
-                before_sleep=before_sleep_log(logging.getLogger(__name__), logging.WARNING),
-            )(_execute, query, variable_values=params)
+            data = _retrying(_execute, query, variable_values=params)
         except Exception as exc:
             raise GitHubDataError(
                 f"Failed to fetch GitHub pull requests for {repo_context}: {_format_exception(exc)}"
@@ -353,18 +357,19 @@ def _merged_search_qualifier(days: int = 30, window: TimeWindow | None = None) -
 
 
 def _search_prs(
-    query, search_query: str, *, require_complete: bool = False
+    query, search_query: str, *, require_complete: bool = False, max_pages: int = 10
 ) -> List[Dict[str, Any]]:
     prs: List[Dict[str, Any]] = []
     cursor = None
-    for _ in range(10):
+    for _ in range(max_pages):
         try:
-            data = _execute(query, variable_values={"query": search_query, "cursor": cursor})
+            # Retry this page, not the pages already fetched.
+            data = _retrying(
+                _execute, query, variable_values={"query": search_query, "cursor": cursor}
+            )
         except Exception as exc:
             if require_complete:
-                raise GitHubDataError(
-                    f"GitHub merged PR search failed: {_format_exception(exc)}"
-                ) from exc
+                raise GitHubDataError(f"GitHub PR search failed: {_format_exception(exc)}") from exc
             return []
         payload = data.get("search", {}) or {}
         if require_complete and (payload.get("issueCount", 0) or 0) > 1000:
@@ -375,6 +380,121 @@ def _search_prs(
         if not next_cursor or next_cursor == cursor:
             break
         cursor = next_cursor
+    return prs
+
+
+REVIEW_QUEUE_SEARCH_PAGE_SIZE = 50  # 100 heavy PR nodes per page intermittently 502s
+REVIEW_TIMELINE_FIELDS = """
+    pageInfo { hasPreviousPage startCursor }
+    nodes {
+      __typename
+      ... on ReadyForReviewEvent { createdAt }
+      ... on ReviewRequestedEvent {
+        createdAt
+        requestedReviewer { ... on User { login } }
+      }
+    }
+"""
+REVIEW_TIMELINE_ARGS = "last: 100, itemTypes: [REVIEW_REQUESTED_EVENT, READY_FOR_REVIEW_EVENT]"
+# GitHub silently returns empty or partial timelines when one query asks for more than about
+# ten of them (measured 2026-10-01: 45 of 107 admin PRs wrong at 50 per query, 0 at 10).
+REVIEW_TIMELINE_BATCH_SIZE = 10
+
+
+def _attach_review_timelines(batch: List[Dict[str, Any]]) -> None:
+    """Fetch the review-request timelines for up to REVIEW_TIMELINE_BATCH_SIZE PRs."""
+    timeline = f"timelineItems({REVIEW_TIMELINE_ARGS}) {{ {REVIEW_TIMELINE_FIELDS} }}"
+    lookups = " ".join(
+        f"pr{i}: node(id: $id{i}) {{ ... on PullRequest {{ {timeline} }} }}"
+        for i in range(len(batch))
+    )
+    variables = ", ".join(f"$id{i}: ID!" for i in range(len(batch)))
+    query = gql(f"query ReviewTimelines({variables}) {{ {lookups} }}")
+    data = _retrying(
+        _execute, query, variable_values={f"id{i}": pr["id"] for i, pr in enumerate(batch)}
+    )
+    for i, pr in enumerate(batch):
+        pr["timelineItems"] = data[f"pr{i}"]["timelineItems"]
+        _complete_review_timeline(pr)
+
+
+def _complete_review_timeline(pr: Dict[str, Any]) -> None:
+    """Prepend older review-request events; bot re-requests can push teammates past 100."""
+    query = gql(
+        "query ReviewTimeline($id: ID!, $before: String) { node(id: $id) {"
+        f" ... on PullRequest {{ timelineItems({REVIEW_TIMELINE_ARGS}, before: $before) {{"
+        f" {REVIEW_TIMELINE_FIELDS} }} }} }} }}"
+    )
+    timeline = pr["timelineItems"]
+    page_info = timeline.get("pageInfo") or {}
+    while page_info.get("hasPreviousPage"):
+        data = _retrying(
+            _execute, query, variable_values={"id": pr["id"], "before": page_info["startCursor"]}
+        )
+        page = data["node"]["timelineItems"]
+        timeline["nodes"] = page["nodes"] + timeline["nodes"]
+        page_info = page.get("pageInfo") or {}
+
+
+def search_open_prs(include_approved: bool = False) -> List[Dict[str, Any]]:
+    """Return open, non-draft PRs across tracked repositories; drafts are filtered by GitHub."""
+    if not token:
+        return []
+    query = gql(
+        """
+        query ReviewQueuePRs($query: String!, $cursor: String) {
+          search(type: ISSUE, query: $query, first: %d, after: $cursor) {
+            issueCount
+            pageInfo { endCursor hasNextPage }
+            nodes {
+              ... on PullRequest {
+                id
+                number
+                title
+                url
+                createdAt
+                baseRefName
+                headRefName
+                additions
+                deletions
+                mergeable
+                reviewDecision
+                author { login }
+                repository { nameWithOwner defaultBranchRef { name } }
+                statusCheckRollup { state }
+                # Each reviewer's latest approval, change request, or dismissal. latestReviews
+                # would let a later COMMENTED thread reply hide an open change request.
+                reviews: latestOpinionatedReviews(first: 100) {
+                  nodes { author { login } state submittedAt }
+                }
+                reviewRequests(first: 100) {
+                  nodes { requestedReviewer { ... on User { login } } }
+                }
+              }
+            }
+          }
+        }
+        """
+        % REVIEW_QUEUE_SEARCH_PAGE_SIZE
+    )
+    approval_filter = "" if include_approved else " -review:approved"
+
+    def search_repo(repo: str) -> List[Dict[str, Any]]:
+        return _search_prs(
+            query,
+            f"repo:{repo} is:pr is:open draft:false{approval_filter}",
+            require_complete=True,
+            # GitHub search returns at most 1,000 results; read all of them.
+            max_pages=1000 // REVIEW_QUEUE_SEARCH_PAGE_SIZE,
+        )
+
+    with ThreadPoolExecutor(max_workers=len(TRACKED_REPOSITORIES)) as executor:
+        prs = [pr for found in executor.map(search_repo, TRACKED_REPOSITORIES) for pr in found]
+        batches = [
+            prs[start : start + REVIEW_TIMELINE_BATCH_SIZE]
+            for start in range(0, len(prs), REVIEW_TIMELINE_BATCH_SIZE)
+        ]
+        list(executor.map(_attach_review_timelines, batches))
     return prs
 
 
