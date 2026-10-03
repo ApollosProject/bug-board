@@ -4,10 +4,6 @@
   <small class="metric-stdev" data-tooltip="{{ stat.tooltip }}" data-placement="bottom">{{ stat.label }}</small>
   {%- endif -%}
 {%- endmacro %}
-{% macro metric_heading(key, value) -%}
-  {%- set tone = (metric_stdevs or {}).get(key, {}).get('tone') -%}
-  <h1{% if tone %} class="{{ tone }}"{% endif %}>{{ value }}</h1>
-{%- endmacro %}
 {% macro regression_pr_links(pull_requests) -%}
   {%- if pull_requests -%}
   <small class="regression-pr-links">
@@ -101,14 +97,14 @@
         PRs Merged
         {% endif %}
       </header>
-      {{ metric_heading('prs_merged', prs_merged) }}
+      <h1>{{ prs_merged }}</h1>
       {{ stdev_badge('prs_merged') }}
     </article>
   </div>
   <div>
     <article>
       <header>PRs Approved</header>
-      {{ metric_heading('prs_reviewed', prs_reviewed) }}
+      <h1>{{ prs_reviewed }}</h1>
       {{ stdev_badge('prs_reviewed') }}
     </article>
   </div>
@@ -155,17 +151,14 @@
   <div>
     <article>
       <header><a href="{{ issue_metric_urls.priority_bugs_fixed }}">Priority Bugs Fixed</a></header>
-      {{ metric_heading('priority_bugs_fixed', priority_bugs_fixed) }}
+      <h1>{{ priority_bugs_fixed }}</h1>
       {{ stdev_badge('priority_bugs_fixed') }}
     </article>
   </div>
   <div>
     <article>
       <header>Priority Bug Time to Fix</header>
-      {{ metric_heading(
-        'priority_bug_avg_time_to_fix',
-        (priority_bug_avg_time_to_fix ~ 'd') if priority_bug_avg_time_to_fix is not none else 'n/a'
-      ) }}
+      <h1>{{ (priority_bug_avg_time_to_fix ~ 'd') if priority_bug_avg_time_to_fix is not none else 'n/a' }}</h1>
       {{ stdev_badge('priority_bug_avg_time_to_fix') }}
     </article>
   </div>
@@ -177,17 +170,14 @@
       <header>
         <a href="{{ issue_metric_urls.all_work_done }}">All Work Done</a>
       </header>
-      {{ metric_heading('all_work_done', all_work_done) }}
+      <h1>{{ all_work_done }}</h1>
       {{ stdev_badge('all_work_done') }}
     </article>
   </div>
   <div>
     <article>
       <header>Time to Completion</header>
-      {{ metric_heading(
-        'avg_all_time_to_fix',
-        (avg_all_time_to_fix ~ 'd') if avg_all_time_to_fix is not none else 'n/a'
-      ) }}
+      <h1>{{ (avg_all_time_to_fix ~ 'd') if avg_all_time_to_fix is not none else 'n/a' }}</h1>
       {{ stdev_badge('avg_all_time_to_fix') }}
     </article>
   </div>
@@ -196,31 +186,28 @@
   <div>
     <article>
       <header><a href="{{ project_metric_urls.lead_current_projects }}">Current Projects</a></header>
-      {{ metric_heading('lead_current_projects', lead_current_projects) }}
+      <h1>{{ lead_current_projects }}</h1>
       {{ stdev_badge('lead_current_projects') }}
     </article>
   </div>
   <div>
     <article>
       <header><a href="{{ project_metric_urls.lead_completed_projects }}">Completed Project Weeks</a></header>
-      {{ metric_heading('lead_completed_projects', lead_completed_projects) }}
+      <h1>{{ lead_completed_projects }}</h1>
       {{ stdev_badge('lead_completed_projects') }}
     </article>
   </div>
   <div>
     <article>
       <header><a href="{{ project_metric_urls.lead_incomplete_projects }}">Incomplete Projects</a></header>
-      {{ metric_heading('lead_incomplete_projects', lead_incomplete_projects) }}
+      <h1>{{ lead_incomplete_projects }}</h1>
       {{ stdev_badge('lead_incomplete_projects') }}
     </article>
   </div>
   <div>
     <article>
       <header><a href="{{ project_metric_urls.lead_completed_projects_avg_early_late }}">Avg Days Early/Late</a></header>
-      {{ metric_heading(
-        'lead_completed_projects_avg_early_late',
-        lead_completed_projects_avg_early_late or 'n/a'
-      ) }}
+      <h1>{{ lead_completed_projects_avg_early_late or 'n/a' }}</h1>
       {{ stdev_badge('lead_completed_projects_avg_early_late') }}
     </article>
   </div>

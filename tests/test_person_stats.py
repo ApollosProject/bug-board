@@ -2,7 +2,6 @@ import base64
 import json
 import unittest
 from datetime import datetime, timezone
-from pathlib import Path
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
@@ -194,7 +193,7 @@ class PersonStatsTest(unittest.TestCase):
         self.assertEqual((better["label"], better["tone"]), ("+1.0σ", "high"))
         self.assertEqual((worse["label"], worse["tone"]), ("−1.0σ", "low"))
 
-    def test_person_cards_color_headings_beyond_stdev_threshold(self):
+    def test_person_cards_stay_neutral_beyond_stdev_threshold(self):
         app_module._build_person_context.cache_clear()
         self.addCleanup(app_module._build_person_context.cache_clear)
         config = {
@@ -246,13 +245,16 @@ class PersonStatsTest(unittest.TestCase):
         self.assertEqual(context["metric_stdevs"]["lead_incomplete_projects"]["tone"], "low")
         with app_module.app.test_request_context():
             body = app_module.render_template("partials/person_content.html", **context)
-        self.assertEqual(body.count('<h1 class="high">10</h1>'), 5)
-        self.assertEqual(body.count('<h1 class="low">10</h1>'), 1)
-        self.assertNotIn('<h1 class="high">0</h1>', body)
+        self.assertEqual(body.count("<h1>10</h1>"), 6)
+        self.assertNotIn('class="high"', body)
+        self.assertNotIn('class="low"', body)
+        self.assertEqual(body.count('class="metric-stdev"'), len(context["metric_stdevs"]))
+        self.assertIn("+1.7σ</small>", body)
+        self.assertIn("−1.7σ</small>", body)
         self.assertNotIn("2/week", body)
         self.assertNotIn("5/week", body)
 
-    def test_person_cards_include_on_page_stdev_badges(self):
+    def test_person_cards_show_stdev_badges_without_color_coding(self):
         app_module._build_person_context.cache_clear()
         self.addCleanup(app_module._build_person_context.cache_clear)
         config = {
@@ -297,16 +299,23 @@ class PersonStatsTest(unittest.TestCase):
         self.assertEqual(context["metric_stdevs"]["prs_merged"]["tone"], "high")
         with app_module.app.test_request_context():
             body = app_module.render_template("partials/person_content.html", **context)
-        self.assertIn('<h1 class="high">10</h1>', body)
-        self.assertIn('<h1 class="high">8</h1>', body)
+        self.assertIn("<h1>10</h1>", body)
+        self.assertIn("<h1>8</h1>", body)
+        self.assertIn("<h1>1d</h1>", body)
+        self.assertIn("<h1>n/a</h1>", body)
+        self.assertNotIn('class="high"', body)
         self.assertIn("PRs Approved", body)
         self.assertNotIn("PRs Reviewed", body)
         self.assertNotIn('class="low"', body)
         self.assertNotIn("2/week", body)
+        self.assertIn('class="metric-stdev"', body)
         self.assertIn('data-placement="bottom"', body)
-        styles = Path(__file__).resolve().parents[1].joinpath("static/styles.css").read_text()
-        self.assertIn("max-width: min(12rem, calc(100vw - 2rem));", styles)
-        self.assertIn("white-space: normal;", styles)
+        self.assertIn('data-tooltip="eng avg 6.0 · σ 4.0"', body)
+        self.assertIn("+1.0σ</small>", body)
+        with app_module.app.test_request_context():
+            page = app_module.render_template("person.html", **context)
+        self.assertNotIn("h1.high", page)
+        self.assertNotIn("h1.low", page)
 
     def test_non_engineers_skip_relative_metrics_and_peer_fetches(self):
         app_module._build_person_context.cache_clear()
