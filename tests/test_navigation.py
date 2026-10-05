@@ -28,6 +28,7 @@ class NavigationTest(unittest.TestCase):
         self.assertIn('class="dropdown site-menu"', header)
         self.assertIn('aria-label="Open local pages menu"', header)
         self.assertIn('href="/team"', header)
+        self.assertIn('href="/reviews"', header)
         self.assertIn('href="/apps"', header)
         self.assertIn('href="/projects"', header)
         self.assertIn(">Projects</a>", header)
