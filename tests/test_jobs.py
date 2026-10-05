@@ -53,7 +53,6 @@ def _install_import_shims() -> None:
 
     github_module = cast(Any, types.ModuleType("github"))
     github_module.GitHubDataError = type("GitHubDataError", (RuntimeError,), {})
-    github_module.get_prs_waiting_for_review_by_reviewer = lambda *args, **kwargs: {}
     github_module.get_merged_pr_activity = lambda *args, **kwargs: ({}, {})
     github_module.get_merged_pr_counts_for_user = lambda *args, **kwargs: (0, 0)
     sys.modules.setdefault("github", github_module)
@@ -304,24 +303,6 @@ class PostStaleTest(unittest.TestCase):
             "<https://linear.app/issue/APO-1|Use foo - A &amp; B &lt; C>",
         )
 
-    def test_retries_transient_github_pr_fetch_failure(self):
-        reminders = {"redreceipt": [{"url": "https://github.com/example/repo/pull/1"}]}
-        timeout_error = jobs_module.GitHubDataError("GitHub timed out")
-        with patch.object(
-            jobs_module,
-            "get_prs_waiting_for_review_by_reviewer",
-            side_effect=[timeout_error, reminders],
-        ) as fetch:
-            with patch.object(jobs_module.logging, "warning") as warning:
-                result = jobs_module._get_prs_waiting_for_review_with_retry()
-
-        self.assertEqual(result, reminders)
-        self.assertEqual(fetch.call_count, 2)
-        warning.assert_called_once_with(
-            "Retrying GitHub PR review reminders after failure: %s",
-            timeout_error,
-        )
-
     def test_uses_open_stale_issues_without_label_or_priority_queries(self):
         open_issues = [{"id": "APO-7555"}]
 
@@ -346,62 +327,9 @@ class PostStaleTest(unittest.TestCase):
             return_value={"dylan": {"linear_username": "dylan", "slack_id": "U03LD9MJLNP"}},
         ):
             with patch.object(
-                jobs_module, "get_prs_waiting_for_review_by_reviewer", return_value={}
-            ):
-                with patch.object(
-                    jobs_module,
-                    "get_open_issues",
-                    side_effect=AssertionError("post_stale should use get_open_stale_issues"),
-                ):
-                    with patch.object(
-                        jobs_module, "get_open_stale_issues", return_value=open_issues
-                    ):
-                        with patch.object(
-                            jobs_module,
-                            "get_stale_issues_by_assignee",
-                            side_effect=fake_get_stale_issues,
-                        ):
-                            with patch.dict(
-                                jobs_module.os.environ,
-                                {"APP_URL": "https://bug-board.example"},
-                                clear=False,
-                            ):
-                                with patch.object(jobs_module, "post_to_slack") as post:
-                                    jobs_module.post_stale()
-
-        post.assert_called_once()
-        message = post.call_args.args[0]
-        self.assertIn("*Stale Open Issues*", message)
-        self.assertIn("APO-7555", message)
-        self.assertIn("(74d)", message)
-
-    def test_continues_with_linear_stale_issues_when_github_pr_fetch_fails(self):
-        open_issues = [{"id": "APO-7555"}]
-
-        def fake_get_stale_issues(issues, days):
-            self.assertIs(issues, open_issues)
-            self.assertEqual(days, 21)
-            return {
-                "dylan": [
-                    {
-                        "title": "Regression in Apple Pay campus/fund confirmation flow",
-                        "url": "https://linear.app/differential/issue/APO-7555",
-                        "daysStale": 74,
-                        "priority": 0,
-                        "platform": None,
-                    }
-                ]
-            }
-
-        with patch.object(
-            jobs_module,
-            "get_team_members",
-            return_value={"dylan": {"linear_username": "dylan", "slack_id": "U03LD9MJLNP"}},
-        ):
-            with patch.object(
                 jobs_module,
-                "get_prs_waiting_for_review_by_reviewer",
-                side_effect=jobs_module.GitHubDataError("GitHub timed out"),
+                "get_open_issues",
+                side_effect=AssertionError("post_stale should use get_open_stale_issues"),
             ):
                 with patch.object(jobs_module, "get_open_stale_issues", return_value=open_issues):
                     with patch.object(
@@ -414,61 +342,27 @@ class PostStaleTest(unittest.TestCase):
                             {"APP_URL": "https://bug-board.example"},
                             clear=False,
                         ):
-                            with patch.object(jobs_module.logging, "warning") as warning:
-                                with patch.object(
-                                    jobs_module, "post_to_manager_slack"
-                                ) as manager_post:
-                                    with patch.object(jobs_module, "post_to_slack") as post:
-                                        jobs_module.post_stale()
+                            with patch.object(jobs_module, "post_to_slack") as post:
+                                jobs_module.post_stale()
 
-        self.assertEqual(warning.call_count, 2)
-        self.assertEqual(
-            warning.call_args_list[-1].args[0],
-            "Skipping GitHub PR review reminders after retry: %s",
-        )
-        self.assertEqual(str(warning.call_args_list[-1].args[1]), "GitHub timed out")
-        manager_post.assert_called_once()
-        manager_message = manager_post.call_args.args[0]
-        self.assertIn("*Stale PR Check Unavailable*", manager_message)
-        self.assertIn("https://bug-board.example", manager_message)
         post.assert_called_once()
         message = post.call_args.args[0]
-        self.assertNotIn("*Stale PR Check Unavailable*", message)
         self.assertIn("*Stale Open Issues*", message)
         self.assertIn("APO-7555", message)
-        self.assertNotIn("*PRs - Checks Passing", message)
+        self.assertIn("(74d)", message)
 
-    def test_posts_degraded_notice_to_manager_when_no_stale_issues_exist(self):
+    def test_skips_post_when_no_stale_issues_exist(self):
         with patch.object(
             jobs_module,
             "get_team_members",
             return_value={"dylan": {"linear_username": "dylan", "slack_id": "U03LD9MJLNP"}},
         ):
-            with patch.object(
-                jobs_module,
-                "get_prs_waiting_for_review_by_reviewer",
-                side_effect=jobs_module.GitHubDataError("GitHub timed out"),
-            ) as fetch:
-                with patch.object(jobs_module, "get_open_stale_issues", return_value=[]):
-                    with patch.object(jobs_module, "get_stale_issues_by_assignee", return_value={}):
-                        with patch.dict(
-                            jobs_module.os.environ,
-                            {"APP_URL": "https://bug-board.example"},
-                            clear=False,
-                        ):
-                            with patch.object(jobs_module, "post_to_manager_slack") as manager_post:
-                                with patch.object(jobs_module, "post_to_slack") as post:
-                                    jobs_module.post_stale()
+            with patch.object(jobs_module, "get_open_stale_issues", return_value=[]):
+                with patch.object(jobs_module, "get_stale_issues_by_assignee", return_value={}):
+                    with patch.object(jobs_module, "post_to_slack") as post:
+                        jobs_module.post_stale()
 
-        self.assertEqual(fetch.call_count, 2)
         post.assert_not_called()
-        manager_post.assert_called_once()
-        message = manager_post.call_args.args[0]
-        self.assertIn("*Stale PR Check Unavailable*", message)
-        self.assertIn("GitHub did not return complete PR data after retrying", message)
-        self.assertIn("https://bug-board.example", message)
-        self.assertNotIn("*PRs - Checks Passing", message)
-        self.assertNotIn("*Stale Open Issues*", message)
 
 
 class AirflowFleetHeartbeatTest(unittest.TestCase):
