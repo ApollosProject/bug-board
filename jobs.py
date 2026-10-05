@@ -17,10 +17,8 @@ from config import load_config
 from constants import ENGINEERING_TEAM_SLUG, PRIORITY_TO_SCORE
 from fleet_health_cache import refresh_fleet_health_cache, should_use_redis_cache
 from github import (
-    GitHubDataError,
     get_merged_pr_activity,
     get_merged_pr_counts_for_user,
-    get_prs_waiting_for_review_by_reviewer,
 )
 from issue_timing import format_issue_sla_text, parse_linear_dt
 from leaderboard import calculate_cycle_project_points
@@ -604,97 +602,29 @@ def post_leaderboard():
     post_to_slack(markdown)
 
 
-def _get_prs_waiting_for_review_with_retry():
-    try:
-        return get_prs_waiting_for_review_by_reviewer()
-    except GitHubDataError as exc:
-        logging.warning("Retrying GitHub PR review reminders after failure: %s", exc)
-        return get_prs_waiting_for_review_by_reviewer()
-
-
 @with_retries
 def post_stale():
     engineering_team_members = get_team_members(ENGINEERING_TEAM_SLUG)
-    people_by_github_username = {
-        person.get("github_username"): person
-        for person in engineering_team_members.values()
-        if person.get("github_username")
-    }
     engineering_linear_usernames = {
         person.get("linear_username")
         for person in engineering_team_members.values()
         if person.get("linear_username")
     }
-    github_prs_unavailable = False
-    try:
-        prs = _get_prs_waiting_for_review_with_retry()
-    except GitHubDataError as exc:
-        logging.warning("Skipping GitHub PR review reminders after retry: %s", exc)
-        prs = {}
-        github_prs_unavailable = True
     stale_issues = get_stale_issues_by_assignee(
         get_open_stale_issues(),
         STALE_LINEAR_ISSUE_DAYS,
     )
-    if github_prs_unavailable:
-        post_to_manager_slack(
-            "*Stale PR Check Unavailable*\n\n"
-            "GitHub did not return complete PR data after retrying, "
-            "so review reminders were skipped.\n\n"
-            f"<{os.getenv('APP_URL')}|View Bug Board>"
-        )
-    if not prs and not stale_issues:
+    if not stale_issues:
         return
 
     markdown = ""
-    filtered = {}
-    for reviewer, pr_list in prs.items():
-        if reviewer not in people_by_github_username:
-            continue
-        if pr_list:
-            filtered[reviewer] = pr_list
-    prs = filtered
-    if prs:
-        markdown += "*PRs - Checks Passing, Waiting for Review (+24h, <200 lines added)*\n"
-        for reviewer, pr_list in prs.items():
-            if not pr_list:
-                continue
-            unique_prs = {pr["url"]: pr for pr in pr_list}.values()
-            reviewer_slack_id = people_by_github_username.get(reviewer, {}).get("slack_id")
-            if reviewer_slack_id:
-                reviewer_slack_markdown = f"<@{reviewer_slack_id}>"
-            else:
-                reviewer_slack_markdown = reviewer
-            markdown += f"\n{reviewer_slack_markdown}:\n\n"
-            pr_days = []
-            for pr in unique_prs:
-                events = [
-                    ev
-                    for ev in pr.get("timelineItems", {}).get("nodes", [])
-                    if ev.get("requestedReviewer", {}).get("login") == reviewer
-                ]
-                if events:
-                    created = max(ev["createdAt"] for ev in events)
-                    # Parse GitHub-style ISO 8601 timestamp with explicit UTC timezone
-                    dt = datetime.strptime(created, "%Y-%m-%dT%H:%M:%SZ").replace(
-                        tzinfo=timezone.utc
-                    )
-                    days_waiting = (datetime.now(timezone.utc) - dt).days
-                else:
-                    days_waiting = 0
-                pr_days.append((days_waiting, pr))
-
-            for days_waiting, pr in sorted(pr_days, key=lambda x: x[0], reverse=True):
-                markdown += f"- {_slack_link(pr['url'], pr['title'])} (+{days_waiting}d)\n"
-        markdown += "\n\n"
-
     filtered_stale_issues = {
         assignee: issues
         for assignee, issues in stale_issues.items()
         if assignee in engineering_linear_usernames and issues
     }
 
-    if not prs and not filtered_stale_issues:
+    if not filtered_stale_issues:
         return
 
     if any(filtered_stale_issues.values()):
