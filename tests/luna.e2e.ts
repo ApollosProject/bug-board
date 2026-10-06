@@ -13,7 +13,7 @@ test(
     ).toBeVisible();
     await expect(browser).toHaveURL(/author=zach.*reviewer=michael/);
     await agent.assert(
-      "This is an engineering review dashboard with author and reviewer filters, and no production deployment was initiated.",
+      "The Reviews dashboard displays Author and Reviewer filters with Zach and Michael selected, respectively.",
     );
     await app.screenshot("luna-review-filters");
   },
