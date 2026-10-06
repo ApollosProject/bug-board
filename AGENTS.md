@@ -21,6 +21,21 @@ Bug Board is a Flask app that aggregates Linear issues, GitHub PR stats, and Air
 - `static/` - CSS and static image assets.
 - `tests/` - Unit tests that document behavior. Start with the neighboring test file for the module you touch.
 
+### Bootstrap
+
+CI (`.github/workflows/ci.yml`) installs from `requirements.txt` on Python 3.12. That file is the dependency list for the app and for `ruff`, `mypy`, and `vulture`. `pyproject.toml` holds ruff and vulture settings only. `.python-version` says 3.13; use 3.12 when matching CI.
+
+A fresh shell provides `python3` and `python3.12`. The `python` command is available after the venv is activated. README's `python -m venv` step assumes a tool such as pyenv has already selected the `.python-version` interpreter.
+
+```bash
+python3.12 -m venv venv
+source venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+If `python3.12 -m venv` fails because `ensurepip` is unavailable, install `python3.12-venv` (`sudo apt-get install -y python3.12-venv`) and rerun the create command.
+
 ### Running the application
 
 ```bash
@@ -32,20 +47,24 @@ The app starts and serves pages without any API keys configured. Routes like `/`
 
 ### Local verify / QA flows
 
-Activate the venv before running commands:
+Activate the Bootstrap venv before running commands:
 
 ```bash
 source venv/bin/activate
 ```
 
-Lint, format, and type check:
+Lint, format, type check, and the unused-code check CI runs:
 
 ```bash
 ruff check .
 ruff check . --fix
 ruff format .
+ruff format --check .
 mypy .
+vulture . --config pyproject.toml
 ```
+
+`ruff format .` rewrites files. CI's formatting job is `ruff format --check .`.
 
 Run the full unit suite:
 
@@ -80,8 +99,6 @@ For OAuth changes, use `README.md` and `tests/test_github_oauth.py` as the contr
 
 For worker changes, run or inspect `python jobs.py` paths and `tests/test_jobs.py`. Slack posting requires `SLACK_WEBHOOK_URL`; message links use `APP_URL`; Redis cache refresh jobs run only when `REDIS_URL` is set.
 
-CI (`.github/workflows/ci.yml`) uses Python 3.12. The `.python-version` file says 3.13 but 3.12 works and is what CI uses.
-
 ### Environment variables
 
 The app runs without any env vars for basic page rendering. External-API-dependent features (leaderboard data, team member views, Airflow fleet health) require `LINEAR_API_KEY`, `GITHUB_TOKEN`, `AIRFLOW_API_BASE_URL`, and `AIRFLOW_API_TOKEN`. The JSON API under `/api/` requires `BUG_BOARD_API_KEY` and returns `503` without it. The worker process (`python jobs.py`) requires `SLACK_WEBHOOK_URL` and `APP_URL`. When `REDIS_URL` is set, the worker also refreshes the homepage leaderboard cache. See `README.md` for the full list.
@@ -98,6 +115,5 @@ Do not paste secrets into docs, tests, logs, or PR descriptions. Use placeholder
 
 ### Gotchas
 
-- The venv must be activated before running any commands (`source venv/bin/activate`).
-- `python3.12-venv` system package is required to create the venv (installed via `sudo apt-get install -y python3.12-venv`).
+- Run `ruff`, `mypy`, `vulture`, `gunicorn`, and `python` from the activated Bootstrap venv.
 - mypy produces advisory notes about untyped function bodies — these are informational, not errors.
