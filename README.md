@@ -26,7 +26,7 @@ npx e2e run tests/dashboard.e2e.ts --no-cache
 
 - `app/`: streamed server-rendered pages and explicit route handlers; native forms keep filters in the URL. No HTMX, client data-fetching layer, or chart CDN.
 - `lib/`: typed integrations, scoring, comparisons, attribution, and snapshot access. `config.yml` remains the single source for people, teams, platforms, and ownership; `regression_overrides.yml` retains manual attribution corrections.
-- `workflows/refresh.ts`: durable refresh orchestration. Fleet work is split into bounded DAG batches, store lookups into per-app steps, and SZZ blame into per-file steps. Expensive work never runs in a deployed page request.
+- `workflows/refresh.ts`: durable refresh orchestration. Fleet work is split into bounded DAG batches, store lookups into per-app steps, and SZZ blame into per-file steps. Fleet/store/blame work never runs in a deployed page request. Other delivery windows and review queues use Next.js Data Cache and streamed server rendering.
 - Upstash Redis REST: expiring snapshots and compare-and-delete refresh locks. Production, local, and individual preview deployments have separate namespaces. Expired records cannot establish healthy/current status.
 - Vercel Cron: authenticated triggers enqueue workflows and return `202` with a run ID, **not** a claim that the refresh finished. Inspect execution in Vercel Workflow observability (locally: `npx workflow inspect runs`).
 

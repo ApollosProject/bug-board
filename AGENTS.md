@@ -22,7 +22,7 @@ Proof artifacts, .e2e/, .next/, local Workflow state, service doubles, and crede
 ## Conventions
 
 - Prefer native Server Components, Suspense, URL filters, and forms over client state/data fetching.
-- Keep expensive fleet/store/blame work in Workflow steps; deployed pages only read fresh snapshots.
+- Keep expensive fleet/store/blame work in Workflow steps; those views only read fresh snapshots. Historical delivery windows and reviews use Next.js Data Cache.
 - Extend existing YAML/types/helpers. Don't create additional team/config/route sources of truth.
 - Only explicitly named team API and Cron routes escape OAuth; their handlers must authenticate.
 - Keep health public; all hosted deployments and partially configured OAuth fail closed.
