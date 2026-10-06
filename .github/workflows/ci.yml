@@ -33,6 +33,7 @@ jobs:
         with:
           name: browser-proof
           path: .e2e/
+          include-hidden-files: true
           retention-days: 7
   luna:
     if: github.event_name == 'workflow_dispatch' && inputs.run_ai
@@ -54,4 +55,5 @@ jobs:
         with:
           name: luna-proof
           path: .e2e/
+          include-hidden-files: true
           retention-days: 7
