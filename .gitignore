@@ -223,6 +223,8 @@ node_modules/
 .e2e/videos/
 
 # Next.js / Vercel
+.env.local
+.env.*.local
 .next/
 .vercel/
 .workflow-data/
