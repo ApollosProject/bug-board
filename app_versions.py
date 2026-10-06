@@ -25,10 +25,15 @@ DEFAULT_SEGMENT_TABLES = (
     "app_became_inactive",
 )
 DEFAULT_APP_VERSIONS_LOOKBACK_DAYS = 30
+DEFAULT_APP_VERSIONS_PARTITION_BUFFER_DAYS = 3
 DEFAULT_APP_VERSIONS_LIMIT = 1000
 GITHUB_TIMEOUT_SECONDS = 5
 REVISION_COMPARE_WORKERS = 8
 PLATFORMS_GITHUB_API_URL = "https://api.github.com/repos/ApollosProject/apollos-platforms"
+
+# Ingestion-time partitioned tables expose _PARTITIONTIME in INFORMATION_SCHEMA.COLUMNS,
+# so it arrives in the fetched schema like any other column.
+PARTITION_COLUMN_CANDIDATES = ("_PARTITIONTIME",)
 
 TIMESTAMP_COLUMN_CANDIDATES = (
     "timestamp",
@@ -71,6 +76,7 @@ class AppVersionsConfig:
     tables: tuple[str, ...]
     lookback_days: int
     limit: int
+    partition_buffer_days: int = DEFAULT_APP_VERSIONS_PARTITION_BUFFER_DAYS
 
 
 class AppVersionsError(RuntimeError):
@@ -349,11 +355,13 @@ def _build_app_versions_query(
     schema_by_table: dict[tuple[str, str], dict[str, str]],
 ) -> tuple[str, Any]:
     selects = []
+    uses_partition_pruning = False
     for (dataset, table_name), columns in schema_by_table.items():
         timestamp_column = _choose_column(columns, TIMESTAMP_COLUMN_CANDIDATES)
         version_column, version_source = _choose_version_column(dataset, columns)
         if not timestamp_column or not version_column:
             continue
+        partition_column = _choose_column(columns, PARTITION_COLUMN_CANDIDATES)
         select_fields = [
             f"CAST(`{timestamp_column}` AS TIMESTAMP) AS seen_at",
             f"NULLIF(CAST(`{version_column}` AS STRING), '') AS apollos_version",
@@ -370,6 +378,18 @@ def _build_app_versions_query(
             f"{_escape_identifier(dataset)}."
             f"{_escape_identifier(table_name)}`"
         )
+        # The Segment tables are partitioned by ingestion time, not by the event
+        # timestamp, so filtering on the timestamp column alone scans every
+        # partition. Pruning on _PARTITIONTIME keeps the scan to the lookback
+        # window plus a buffer for events that arrive with a skewed clock.
+        partition_filter = ""
+        if partition_column:
+            uses_partition_pruning = True
+            partition_filter = f"""
+              AND `{partition_column}` >= TIMESTAMP_TRUNC(
+                TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @partition_lookback_days DAY),
+                DAY
+              )"""
         selects.append(
             f"""
             SELECT
@@ -379,7 +399,7 @@ def _build_app_versions_query(
             WHERE `{timestamp_column}` >= TIMESTAMP_SUB(
               CURRENT_TIMESTAMP(),
               INTERVAL @lookback_days DAY
-            )
+            ){partition_filter}
             """
         )
 
@@ -535,9 +555,16 @@ def _build_app_versions_query(
         FROM version_observations observation
         ORDER BY observation.latest_seen_at DESC
     """
-    query_config = _query_job_config(
-        [_scalar_query_parameter("lookback_days", "INT64", config.lookback_days)]
-    )
+    query_parameters = [_scalar_query_parameter("lookback_days", "INT64", config.lookback_days)]
+    if uses_partition_pruning:
+        query_parameters.append(
+            _scalar_query_parameter(
+                "partition_lookback_days",
+                "INT64",
+                config.lookback_days + config.partition_buffer_days,
+            )
+        )
+    query_config = _query_job_config(query_parameters)
     return query, query_config
 
 
@@ -1000,6 +1027,10 @@ def _get_app_versions_config() -> AppVersionsConfig:
             DEFAULT_APP_VERSIONS_LOOKBACK_DAYS,
         ),
         limit=_get_positive_int_env("APP_VERSIONS_LIMIT", DEFAULT_APP_VERSIONS_LIMIT),
+        partition_buffer_days=_get_positive_int_env(
+            "APP_VERSIONS_PARTITION_BUFFER_DAYS",
+            DEFAULT_APP_VERSIONS_PARTITION_BUFFER_DAYS,
+        ),
     )
 
 
