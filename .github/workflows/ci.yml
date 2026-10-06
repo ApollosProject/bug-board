@@ -1,137 +1,57 @@
 name: CI
-
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
-
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_ai:
+        description: Run uncached Luna tests through AI Gateway
+        type: boolean
+        default: false
 permissions:
   contents: read
-
 jobs:
-  ruff:
+  validate:
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-
-    - name: Lint with ruff
-      run: |
-        ruff check .
-
-    - name: Check formatting with ruff
-      run: |
-        ruff format --check .
-
-  vulture:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm audit --omit=dev
+      - run: npm run build
+      - run: npx playwright-core install --with-deps chromium
+      - run: npx e2e run tests/dashboard.e2e.ts --no-cache
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-proof
+          path: .e2e/
+          retention-days: 7
+  luna:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_ai
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-
-    - name: Check for unused code with vulture
-      run: |
-        vulture . --config pyproject.toml
-
-  mypy:
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-
-    - name: Type check with mypy
-      run: |
-        mypy .
-
-  unit-tests:
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-
-    - name: Run unit tests
-      run: |
-        python -m unittest discover -s tests -p 'test_*.py'
-
-  gunicorn-smoke:
-    runs-on: ubuntu-latest
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-
-    - name: Verify Gunicorn boots the app
-      run: |
-        set -euo pipefail
-
-        LOG_FILE="$(mktemp)"
-        gunicorn app:app --bind 127.0.0.1:8000 --workers 1 --log-file "$LOG_FILE" &
-        GUNICORN_PID=$!
-
-        cleanup() {
-          kill "$GUNICORN_PID" || true
-          wait "$GUNICORN_PID" || true
-          rm -f "$LOG_FILE"
-        }
-        trap cleanup EXIT
-
-        for _ in {1..20}; do
-          if python -c "import json, urllib.request; payload = json.loads(urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2).read().decode()); assert payload == {'status': 'ok'}"
-          then
-            exit 0
-          fi
-          sleep 1
-        done
-
-        cat "$LOG_FILE"
-        exit 1
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright-core install --with-deps chromium
+      - run: npx e2e run tests/luna.e2e.ts --no-cache
+        env:
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: luna-proof
+          path: .e2e/
+          retention-days: 7

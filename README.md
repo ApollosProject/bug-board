@@ -1,289 +1,131 @@
 # Bug Board
 
-A small Flask application that displays Linear issues and GitHub pull request stats. It also includes a worker process that posts daily summaries to Slack.
+Apollos Engineering's dashboard for Linear work, GitHub delivery and reviews, app releases, project timelines, and Airflow fleet health. Built with Next.js App Router, React Server Components, TypeScript, Vercel Cron, and Vercel Workflow. No Flask server or persistent worker is needed.
 
-## Setup
+## Local development
 
-1. Create a virtual environment and install dependencies.
-   Before creating the venv, make sure your shell is using the interpreter
-   selected by `.python-version` (for example via `pyenv`):
+Use Node.js **24.8+** (Vercel: Node 24.x).
 
-```bash
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt  # includes ruff and vulture for static analysis
+```sh
+npm ci
+npm run dev
 ```
 
-To lint, format, and type check your code before committing:
+Open `http://localhost:3000`. Without credentials, pages render explicit unavailable states; they do not present missing data as zero activity or verified releases. Next.js loads `.env.local`; never commit credentials.
 
-```bash
-ruff check .
-ruff check . --fix
-ruff format .
-vulture . --config pyproject.toml
-mypy .
+```sh
+npm run check
+npm test
+npm run build
+npm run start
+npx playwright-core install chromium
+npx e2e run tests/dashboard.e2e.ts --no-cache
 ```
 
-To run unit tests locally:
+## Architecture
 
-```bash
-python -m unittest discover -s tests -p 'test_*.py'
-```
+- `app/`: streamed server-rendered pages and explicit route handlers; native forms keep filters in the URL. No HTMX, client data-fetching layer, or chart CDN.
+- `lib/`: typed integrations, scoring, comparisons, attribution, and snapshot access. `config.yml` remains the single source for people, teams, platforms, and ownership; `regression_overrides.yml` retains manual attribution corrections.
+- `workflows/refresh.ts`: durable refresh orchestration. Fleet work is split into bounded DAG batches, store lookups into per-app steps, and SZZ blame into per-file steps. Expensive work never runs in a deployed page request.
+- Upstash Redis REST: expiring snapshots and compare-and-delete refresh locks. Production, local, and individual preview deployments have separate namespaces. Expired records cannot establish healthy/current status.
+- Vercel Cron: authenticated triggers enqueue workflows and return `202` with a run ID, **not** a claim that the refresh finished. Inspect execution in Vercel Workflow observability (locally: `npx workflow inspect runs`).
 
-2. Provide the required environment variables. The application expects the following values:
+The main views are `/`, `/team`, `/team/[slug]`, `/reviews`, `/projects`, `/apps`, and `/dags`. `/healthz` stays public and returns `{"status":"ok"}`. `/team.csv` exports the selected team/window with cohort z-scores. `/app-versions` and `/failing-dags` redirect to their current pages. Flask's internal `/partials/*` transport is retired; streamed server components replace it.
 
-- `LINEAR_API_KEY` – API token for Linear
-- `GITHUB_TOKEN` – GitHub token used for pull‑request data
-- `GITHUB_ACTIONS_TOKEN` – Fine-grained token for `ApollosProject/apollos-platforms` with Actions: write and Contents: read, used to dispatch production deployments from `/apps`
-- `GITHUB_DEPLOY_WORKFLOW_ID` – Optional workflow ID for production deploys (default: `173574865`)
-- `GITHUB_OAUTH_ENABLED` – Set to `true` to require GitHub sign-in; the app also enables the gate automatically when either OAuth credential is configured
-- `GITHUB_OAUTH_CLIENT_ID` – Client ID for the GitHub OAuth app that gates dashboard access
-- `GITHUB_OAUTH_CLIENT_SECRET` – Client secret for the GitHub OAuth app
-- `GITHUB_OAUTH_CALLBACK_URL` – OAuth callback URL (for example, `https://your-app.example/auth/github/callback`); when omitted, the app uses `APP_URL` plus `/auth/github/callback`
-- `GITHUB_OAUTH_ORG` – GitHub organization whose active members can sign in (default: `ApollosProject`)
-- `FLASK_SECRET_KEY` – Random value of at least 32 characters used to sign login sessions
-- `BUG_BOARD_API_KEY` – Static key that authenticates the JSON API (see [JSON API](#json-api)); leave unset to keep the API disabled
-- `SLACK_WEBHOOK_URL` – Webhook URL used by the worker to post messages
-- `MANAGER_SLACK_WEBHOOK_URL` – Webhook URL used for manager-facing summaries
-- `APP_URL` – Public URL where the app is hosted
-- `DEBUG` – set to `true` to run the scheduled jobs immediately
-- `AIRFLOW_API_BASE_URL` – Base URL for Airflow REST API (for example: `https://airflow.example.com`)
-- `AIRFLOW_API_TOKEN` – Bearer token for Airflow API
-- `AIRFLOW_FLEET_HEARTBEAT_URL` – Optional Better Stack heartbeat URL for worker-reported Airflow fleet health
-- `REDIS_URL` – Optional Redis connection string for cached Airflow fleet-health, team metrics, and Apps responses
-- `REDIS_SSL_CERT_REQS` – Optional TLS cert verification mode for `rediss://` (`none`, `optional`, `required`; default for `rediss://` is `none` unless `REDIS_URL` already sets `ssl_cert_reqs`)
-- `AIRFLOW_FLEET_HEALTH_REFRESH_SECONDS` – Optional worker refresh interval for cached fleet health and team metrics (default: `60`)
-- `AIRFLOW_FLEET_HEALTH_MAX_STALE_SECONDS` – Optional max age accepted by the web endpoint when reading cached data (default: `180`)
-- `AIRFLOW_FLEET_HEALTH_REDIS_TTL_SECONDS` – Optional Redis TTL for cached fleet health record (default: `900`)
-- `LEADERBOARD_REDIS_TTL_SECONDS` – Optional Redis TTL for cached team metrics (default: `900`)
-- `REGRESSION_REDIS_TTL_SECONDS` – Optional Redis TTL for cached regression reports (default: `86400`)
-- `BIGQUERY_ANALYTICS_PROJECT_ID` – Optional Google Cloud project that contains the Segment BigQuery export (default: `apollos-project`)
-- `BIGQUERY_ANALYTICS_DATASETS` – Optional comma-separated BigQuery datasets containing Segment export tables (default: `apollos,apollos_tv,apollos_roku`)
-- `BIGQUERY_ANALYTICS_TABLES` – Optional comma-separated Segment tables to inspect for app runtime versions (default: `identifies,screens,app_became_active,app_became_backgrounded,app_became_inactive`)
-- `BIGQUERY_SERVICE_ACCOUNT_JSON_BASE64` – Base64-encoded Google service account JSON for BigQuery access
-- `APOLLOS_API_KEY` – Cluster API key for reading each app's existing Apple/Google store configuration; required for verified mobile live-runtime status
-- `APP_VERSIONS_LOOKBACK_DAYS` – Optional lookback window for `/apps` (default: `30`)
-- `APP_VERSIONS_LIMIT` – Optional maximum app rows rendered by `/apps` (default: `1000`)
-- `RIPPLING_PTO_CALENDAR_URL` – Optional private Rippling direct-reports calendar subscription URL used to add OOO bars to the project timeline; treat this value as a secret
-- `RIPPLING_PTO_TIMEZONE` – Optional IANA time zone used to place timed PTO entries on calendar days (default: `America/New_York`)
+### Refresh and notifications
 
-These can be placed in a `.env` file or exported in your shell.
+`vercel.json` schedules fleet and team/work snapshots every minute, apps every three minutes, regression attribution every six hours, and notification scheduling hourly. **Minute-level Cron requires a Vercel plan that supports it (normally Pro); Hobby's daily Cron is not sufficient.** There is no second worker to deploy.
 
-### GitHub access gate
+| Snapshot | Maximum accepted age |
+| --- | --- |
+| Fleet, team metrics, projects, open issues | 180 seconds |
+| Apps | 300 seconds |
+| Regression summary | 24 hours |
+| Published store builds | 30 minutes (quota backoff: 1 hour) |
 
-Create an OAuth app owned by the `ApollosProject` GitHub organization and set its authorization
-callback URL to the same value as `GITHUB_OAUTH_CALLBACK_URL`. The application requests only the
-`read:org` scope, validates both the signed-in GitHub identity and active organization membership,
-and keeps the resulting login session for at most 30 days. The temporary GitHub access token is
-not stored in the session.
+Cron only runs on production deployments. Preview snapshots require manually invoking the authenticated Cron route after configuring a preview-only Redis namespace. Notifications and Better Stack heartbeat delivery are disabled outside `VERCEL_ENV=production`.
 
-Production uses `https://engineering.apollos.app` as `APP_URL` and
-`https://engineering.apollos.app/auth/github/callback` as `GITHUB_OAUTH_CALLBACK_URL`.
+Notifications preserve the existing schedule: priority bugs at 12:00 UTC, stale work at 10:00 New York, project updates at 14:00 New York, and manager performance outliers on Friday at 13:00 UTC. New York schedules follow daylight saving time. Weekly leaderboard posting remains unscheduled, as it was previously.
 
-Set `GITHUB_OAUTH_ENABLED=true`, `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`, and
-`FLASK_SECRET_KEY` in the deployed environment. Also set either `GITHUB_OAUTH_CALLBACK_URL` or
-`APP_URL`. Once OAuth is enabled or partially configured, the dashboard fails closed with `503`
-until every required value is present. `GET /healthz` remains public for platform health checks;
-all dashboard and static-resource routes require a verified session.
+Refresh locks prevent overlapping executions. Slack digests have a per-day delivery claim: since Slack webhooks have no idempotency key, an ambiguous network failure retains the claim to prevent duplicate posts. Check Slack delivery and Workflow logs before an operator retries it; do not blindly clear the claim.
 
-For local OAuth testing, GitHub permits a loopback callback such as
-`http://127.0.0.1:8000/auth/github/callback`. Generate a session key without committing it:
+### App release evidence
 
-```bash
-python -c 'import secrets; print(secrets.token_hex(32))'
-```
+Mobile and Android TV runtime claims require published store build IDs matched uniquely against Segment native build observations. iOS also requires the exact native version. Queued events with conflicting app/native versions are excluded. Multiple published runtimes remain explicit; absent credentials, conflicting matches, incomplete store responses, or missing source targets remain unverified. Android uses the read-only release-lifecycle API, **not** `edits.tracks` or a store edit.
 
-3. Edit `config.yml` to configure team members and platform ownership.
+Non-mobile platforms show neutral **Observed** comparisons, never verified store publication. Cluster's directory resolves deployment identity by platform/bundle; ambiguous identities are not deployable. Deployment POSTs require a verified GitHub session, same-origin request, a fresh uniquely identified app row, and `GITHUB_ACTIONS_TOKEN`. They dispatch the latest stable Platforms tag; the existing workflow still checks production readiness. A dispatch is not evidence of a published build.
 
-## Running
+### Regression evidence
 
-Start the web server with:
+The durable attribution refresh traces removed lines in fixing PRs to likely inducing PRs, ranks them by recency-weighted line counts, and records human author/approval attribution. Work is bounded at 50 files and 500 deleted lines per file; exceeding either marks evidence incomplete. Manual overrides can ignore a Linear issue or select an inducing PR. Attribution is directional, not proof of causality. Regression cards always use their labeled 30-day window, independently of the page's selected delivery window.
 
-```bash
-gunicorn app:app
-```
+## Environment
 
-When `REDIS_URL` is set, production web requests serve the 30-day team metrics table from
-Redis. In local debug mode (`DEBUG=true`), a cache miss falls back to a live computation so the
-page still works without `python jobs.py`.
+See `.env.example` for names and defaults. Set server credentials in the appropriate Vercel environment; none are `NEXT_PUBLIC_*`.
 
-To run the scheduled jobs locally, start the worker:
+**Required for a production dashboard:**
 
-```bash
-python jobs.py
-```
+- `APP_URL`: canonical public origin.
+- `GITHUB_OAUTH_ENABLED=true`, `GITHUB_OAUTH_CLIENT_ID`, `GITHUB_OAUTH_CLIENT_SECRET`, `AUTH_SECRET` (at least 32 random characters).
+- `GITHUB_OAUTH_CALLBACK_URL`: defaults to `APP_URL/auth/github/callback`.
+- `GITHUB_OAUTH_ORG`: defaults to `ApollosProject`.
+- `LINEAR_API_KEY`, `GITHUB_TOKEN`: read access for the configured team and tracked repositories.
+- `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`: provision an Upstash Redis integration through the Vercel Marketplace.
+- `CRON_SECRET`: bearer secret for `/api/cron/{fleet,metrics,apps,regressions,notifications}`. Vercel adds it to scheduled requests.
 
+GitHub OAuth requests `read:org`, validates active membership, uses PKCE and a ten-minute signed state cookie, and keeps the verified identity (not the access token) in a signed HTTP-only session for at most 30 days. Partially configured auth fails closed with `503`. Vercel production and preview deployments require auth even if `GITHUB_OAUTH_ENABLED` was omitted; hosted callback URLs must use HTTPS. Sessions and authenticated responses are private/no-store. Deployment is never enabled by the no-auth local development path.
 
-The `Procfile` defines both commands for platforms such as Heroku.
+**Optional features:**
+
+- `BUG_BOARD_API_KEY`: enables `/api/team/[slug]` independently of OAuth.
+- `AIRFLOW_API_BASE_URL`, `AIRFLOW_API_TOKEN`, `AIRFLOW_FLEET_HEARTBEAT_URL`.
+- `BIGQUERY_SERVICE_ACCOUNT_JSON_BASE64`, `BIGQUERY_ANALYTICS_PROJECT_ID`, `BIGQUERY_ANALYTICS_DATASETS`, `BIGQUERY_ANALYTICS_TABLES`, `APP_VERSIONS_LOOKBACK_DAYS`, `APP_VERSIONS_LIMIT`. Explicit service-account credentials are required; no ADC fallback.
+- `APOLLOS_API_KEY`: read-only Cluster/store verification. Store credentials remain within a lookup step and are never persisted in snapshots or returned to the browser.
+- `GITHUB_ACTIONS_TOKEN`, `GITHUB_DEPLOY_WORKFLOW_ID` (default `173574865`).
+- `SLACK_WEBHOOK_URL`, `MANAGER_SLACK_WEBHOOK_URL`.
+- `RIPPLING_PTO_CALENDAR_URL`, `RIPPLING_PTO_TIMEZONE` (default `America/New_York`). Only Rippling's HTTPS PTO feed is accepted; no redirects.
+
+Legacy `FLASK_SECRET_KEY`, `REDIS_URL`, Redis TCP/TLS settings, and worker interval variables are not used. Generate a new `AUTH_SECRET`; old Flask sessions intentionally do not survive migration.
 
 ## JSON API
 
-The dashboard is gated by GitHub OAuth, which scripts cannot complete. Read-only JSON endpoints
-authenticate with a static key instead. Generate one and set `BUG_BOARD_API_KEY`:
-
-```bash
-python -c 'import secrets; print(secrets.token_urlsafe(32))'
+```sh
+curl -H "Authorization: Bearer $BUG_BOARD_API_KEY" \
+  "$APP_URL/api/team/zach?start=2026-08-31&end=2026-09-25"
 ```
 
-While `BUG_BOARD_API_KEY` is unset the API answers `503`, so the endpoints stay closed by default.
-Callers pass the key as either `Authorization: Bearer <key>` or `X-API-Key: <key>`; anything else
-gets a `401`.
+`X-API-Key` is also accepted. With no configured key: `503`; bad/missing key: `401`; unknown person: `404`; unavailable integration data: `503`. The person, window, metrics (`label`, `value`, `display`, `vs_team`), regressions, and links retain their existing shape. Positive z-scores mean better than the engineering baseline even when lower values are better. API responses are no-store. Date ranges are inclusive UTC calendar days; reversed dates are normalized, and windows are bounded to 366 days.
 
-### `GET /api/team/<slug>`
+Only the named team API and Cron routes escape OAuth; each has its own authentication. New `/api/` paths do not gain an automatic auth exemption.
 
-The JSON form of the `/team/<slug>` page. It accepts the same window parameters as the page —
-either `days=<n>` or `start=YYYY-MM-DD&end=YYYY-MM-DD` (defaults to the last 30 days).
+## E2E with Luna and AI Gateway
 
-```bash
-curl -sS -H "Authorization: Bearer $BUG_BOARD_API_KEY" \
-  "https://engineering.apollos.app/api/team/zach?start=2026-08-31&end=2026-09-25"
+`e2e.config.ts` uses **Vercel AI Gateway** and defaults to **`openai/gpt-6-luna`**, with no provider fallback. Deterministic tests do not call a model. AI tests make actual Gateway calls and fail when credentials are unavailable; they are not silently skipped.
+
+```sh
+# Put AI_GATEWAY_API_KEY in .env.local or export it without logging its value.
+npm run build
+npx e2e run --no-cache
+
+# Deterministic surface only (also run in CI):
+npx e2e run tests/dashboard.e2e.ts --no-cache
+
+# Already-running, populated local surface:
+E2E_BASE_URL=http://127.0.0.1:3000 E2E_DATA=1 \
+  npx e2e run tests/data.e2e.ts --no-cache
 ```
 
-Each entry in `metrics` carries the raw `value`, the `display` string the dashboard renders, and a
-`vs_team` comparison against the other engineers — `null` when there is no cohort to compare with.
-`z` is oriented so positive is better than the engineering average even for metrics where a lower
-raw value is better, and `eng_avg`/`eng_stdev` describe the (outlier-trimmed) cohort baseline.
+`E2E_MODEL` can override the Gateway model ID. The config explicitly loads Next's env files. `E2E_BASE_URL` selects an existing surface instead of starting a local production build. Dashboard tests expect access to the dashboard; they do not bypass GitHub auth or Vercel deployment protection. AI instructions prohibit deployment and authentication actions. Keep recordings private when testing internal data.
 
-```json
-{
-  "person": { "slug": "zach", "name": "Zach", "github_username": "solideo-gloria" },
-  "window": { "start": "2026-08-31", "end": "2026-09-25", "days": 26, "preset_days": null },
-  "metrics": {
-    "prs_merged": {
-      "label": "PRs Merged",
-      "value": 32,
-      "display": "32",
-      "vs_team": { "z": 2.41, "label": "+2.4σ", "tone": "high", "eng_avg": 12.0, "eng_stdev": 8.3 }
-    }
-  },
-  "regressions": { "status": "ready", "authored": 1, "authored_rate": 3.1 },
-  "links": { "github_merged_prs": "https://github.com/pulls?q=..." }
-}
-```
+Tests, traces, screenshots, videos, reports, and local Workflow state stay outside Git. `.e2e/` is ignored. CI runs type/lint checks, domain/security tests, a production build, and deterministic browser tests. Its manual `run_ai` input runs the Luna suite using the repository's `AI_GATEWAY_API_KEY` secret.
 
-Adding an endpoint under `/api/` does not by itself exempt it from the OAuth gate: only views
-decorated with `require_api_key` (`api.py`) are exempted, and `tests/test_api.py` fails if an
-`/api/` route skips the decorator.
+## Vercel cutover (operator approval required)
 
-## Airflow fleet outage heartbeat
+1. Create/link the **Apollos** Vercel project with the Next.js preset, Node 24.x, and a plan supporting minute-level Cron and Workflow. Connect this repository; use preview deployments for review.
+2. Configure server credentials and Upstash Redis REST access separately for preview and production. Do not copy a legacy Redis TCP URL into the REST variable.
+3. Configure a GitHub OAuth app/callback for the preview host. Confirm fail-closed behavior, active-member login, API-key access, and logout on the preview.
+4. Invoke authenticated preview refreshes for fleet, metrics, apps, and regressions. Wait for the Workflow runs to complete; compare real data against the current dashboard, including store build evidence, regression overrides, PTO, CSV, and person comparisons. Run the populated E2E suite.
+5. Add `AI_GATEWAY_API_KEY` and run the uncached Luna tests. Review all CI checks and attached runtime proof.
+6. Only after approval, set the production origin/OAuth callback and move `engineering.apollos.app` to Vercel. Verify snapshots, Workflow execution, notification delivery, and fleet heartbeat before shutting down the old Heroku web/worker processes. Running both notification systems can duplicate posts.
 
-The worker can report Airflow fleet health to Better Stack using a heartbeat, which avoids
-Better Stack polling this app as an uptime monitor. Configure a Better Stack heartbeat and set
-`AIRFLOW_FLEET_HEARTBEAT_URL` to its secret URL.
-
-On each worker refresh, the app:
-
-- Evaluates the Airflow REST API and inspects each active DAG's latest run state
-- Refreshes the Redis-backed fleet-health cache when Redis is configured
-- Sends the base heartbeat URL when fleet health is healthy
-- Sends the heartbeat URL with `/fail` appended when fleet health is degraded
-- Suppresses one-off `unknown` evaluations and only sends `/fail` after 3 consecutive unknowns
-
-The health calculation:
-
-- Computes failed/evaluated ratio across active DAGs (not time-window based)
-- Returns `503` when failure ratio is `>= 0.10` (with at least 20 DAGs evaluated), otherwise `200`
-- Includes the full active `dags` inventory plus `failed_dags` and `top_failed_dags`
-- When `REDIS_URL` is configured, reads fleet health from Redis for fast responses
-- When `REDIS_URL` is not configured, bypasses Redis and evaluates directly per request
-- With `REDIS_URL` configured, cache miss/stale returns `{"status":"unknown"}` with `503` until worker refresh succeeds
-
-For humans, `GET /dags` renders a searchable active-DAG inventory with each latest run state
-and links into Astro. The legacy `GET /failing-dags` URL remains available. The dashboard serves cached fleet-health
-data and never performs a live full-fleet Airflow scan during a web request in deployed
-environments. In local debug mode, if `REDIS_URL` is not configured, the dashboard falls back
-to a live evaluation so the page can be validated without a worker/cache setup. Without a fresh
-Redis-backed cache value outside local debug mode, it renders the unavailable/setup-required
-state instead.
-
-This checker is intentionally not highly configurable. It uses fixed settings:
-
-- failure threshold ratio: `0.10`
-- minimum evaluated DAGs: `20`
-
-When Redis caching or the Better Stack heartbeat is enabled, run the worker process
-(`python jobs.py`) so it refreshes fleet health on the configured interval.
-
-The legacy `GET /airflow-fleet-health` Better Stack monitor endpoint has been removed.
-
-## Apps dashboard
-
-`GET /apps` shows app identity, runtime/version, and status, with stacked rows on small screens.
-Signed-in users can deploy supported apps from the latest stable Platforms tag using
-`GITHUB_ACTIONS_TOKEN` (see permissions above); `GITHUB_DEPLOY_WORKFLOW_ID` defaults to `173574865`.
-The workflow checks `APP.PRODUCTION_READY` or `TV.PRODUCTION_READY`; generic `tv`/unknown apps cannot be deployed.
-iOS, Android, and Android TV rows show the **published store build's runtime**, not the highest
-runtime seen in Segment:
-
-- iOS: App Store Connect's newest live iOS version (`READY_FOR_SALE` /
-  `READY_FOR_DISTRIBUTION`) and its selected build. Match both native version and build number.
-- Android / Android TV: `applications.tracks.releases.list` on `production` / `tv:production`,
-  respectively, accepting only `RELEASE_LIFECYCLE_STATE_PUBLISHED` and its active version codes.
-  Do not use `edits.tracks`: a `completed` production-track upload can still be in review or
-  awaiting manual publication.
-  The release-lifecycle lookup is read-only and does not create an edit.
-- Match the published native build to Segment `context_app_build` (plus `context_app_version`
-  on iOS) to recover its reported `apollos_version`/Expo runtime. Android and Android TV
-  remain separate identities even when they share a package ID and version codes. Marketing version
-  alone, a GitHub tag, and a successful upload cannot establish the live runtime. Every published
-  build must have exactly one valid runtime match within the lookback window; otherwise show
-  **Unverified**. Events whose reported `app_version` disagrees with `context_app_version`
-  are excluded: queued events can retain old properties with a newer native context.
-  Multiple published runtimes are shown explicitly, never as fully current.
-  A build promoted from internal testing is eligible if the store confirms it is published.
-- Compare that live runtime with the newest stable `apollos-platforms` tag's
-  `templates/mobile/app.config.ts` runtime for mobile, or `templates/tv/app.config.ts` runtime
-  for Android TV. Missing release-target data is also **Unverified**.
-  The target is a source release; it is not evidence that any particular app has shipped it.
-
-Set `APOLLOS_API_KEY` to enable store verification using the existing Cluster configuration:
-`APP.APPLE_API_KEY_B64` (or `APP.APPLE_API_KEY`) and `APP.GOOGLE_API_KEY_B64`.
-The configured bundle/package must match the observed app before its credentials are loaded.
-`build_church` identifies the deployed app; a selected `church` is only a lookup hint when
-that field is absent. Cluster's existing church directory supplies additional lookup hints by
-exact platform bundle/package ID, including Preview when older analytics identify Demo instead.
-Directory failures fall back to analytics hints; the configuration bundle check still applies.
-Deploy buttons also use the directory's unique platform/bundle match, so older analytics with
-missing `build_church` or multiple selected churches do not hide a known app's deployment control.
-Multiple directory matches remain non-deployable, and store verification failures do not hide
-an otherwise identified deployment target.
-Credentials stay in memory and are never logged or cached. Published store build lookups
-are cached in Redis for 30 minutes, separately for each platform and bundle ID. Google
-quota failures back off for one hour and show an explicit quota message; expired build
-records are not reused as verified live runtimes. Without Redis, lookups remain uncached.
-With `REDIS_URL` configured, `jobs.py` refreshes the dashboard every three minutes and the
-public version snapshot expires after five minutes. Web requests only read the cache, avoiding
-per-app store lookups within Gunicorn's request timeout; an empty/expired cache is unavailable,
-never a stale current-status claim. Without Redis, local requests query directly.
-Missing credentials, store
-errors, missing native-build columns, and conflicting runtime evidence fail closed to
-**Unverified**, without substituting an observed runtime.
-
-Amazon, tvOS, and generic TV still select the highest observed stable release tag and compare
-within their platform; Roku compares observed source revisions with the latest Roku source commit.
-These comparisons do **not** verify store publication: they use neutral observation badges and
-an explicit store-unverified warning, never a green current-status badge. tvOS analytics currently
-lack native build IDs; matching only the marketing version would not establish a live runtime.
-Unknown platforms/source metadata remain unverified. Segment schemas are
-inspected before querying; `apollos`, `apollos_tv`, and `apollos_roku` are kept separate to avoid
-counting overlapping exports twice.
-
-To make the dashboard query live data locally, in production, or in review apps, set
-`BIGQUERY_SERVICE_ACCOUNT_JSON_BASE64`. The value should be a base64-encoded Google service
-account JSON with BigQuery read access to `apollos-project`. Application Default Credentials are
-not used by this dashboard.
-
-The legacy `/app-versions` URL renders the same dashboard for compatibility with existing links.
-
-## Regression metrics
-
-The worker analyzes completed urgent/high-priority Linear bugs, blames lines removed by
-their fixing PRs, and maps those commits back to likely inducing PR authors and approvers.
-It refreshes one 30-day Redis summary every six hours.
-
-The homepage shows team-level regression cards. Person pages show authored and approved
-regression counts, rates, and direct links to the attributed GitHub PRs. Web requests only read
-the cached summary and never run the attribution pipeline. Automated blame is directional rather
-than proof of causality;
-version-controlled corrections and exclusions can be added to
-`regression_overrides.yml`.
+This repository change does not itself provision infrastructure, modify DNS/OAuth apps, send Slack posts, or shut down production services.

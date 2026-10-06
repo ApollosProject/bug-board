@@ -1,0 +1,25 @@
+{
+  "framework": "nextjs",
+  "crons": [
+    {
+      "path": "/api/cron/fleet",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/metrics",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/apps",
+      "schedule": "*/3 * * * *"
+    },
+    {
+      "path": "/api/cron/regressions",
+      "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/notifications",
+      "schedule": "0 * * * *"
+    }
+  ]
+}
