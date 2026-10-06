@@ -53,6 +53,8 @@ Refresh locks prevent overlapping executions. Slack digests have a per-day deliv
 
 Mobile and Android TV runtime claims require published store build IDs matched uniquely against Segment native build observations. iOS also requires the exact native version. Queued events with conflicting app/native versions are excluded. Multiple published runtimes remain explicit; absent credentials, conflicting matches, incomplete store responses, or missing source targets remain unverified. Android uses the read-only release-lifecycle API, **not** `edits.tracks` or a store edit.
 
+Analytics reads retain the event-time lookback and additionally prune `_PARTITIONTIME` only on ingestion-partitioned tables, using the discovered schema (main PR #577). `APP_VERSIONS_PARTITION_BUFFER_DAYS` defaults to 3 extra days to cover device-clock skew; it is bound only when a branch can prune. Mixed unions and non-ingestion-partitioned tables remain supported.
+
 Non-mobile platforms show neutral **Observed** comparisons, never verified store publication. Cluster's directory resolves deployment identity by platform/bundle; ambiguous identities are not deployable. Deployment POSTs require a verified GitHub session, same-origin request, a fresh uniquely identified app row, and `GITHUB_ACTIONS_TOKEN`. They dispatch the latest stable Platforms tag; the existing workflow still checks production readiness. A dispatch is not evidence of a published build.
 
 ### Regression evidence
@@ -79,7 +81,7 @@ GitHub OAuth requests `read:org`, validates active membership, uses PKCE and a t
 
 - `BUG_BOARD_API_KEY`: enables `/api/team/[slug]` independently of OAuth.
 - `AIRFLOW_API_BASE_URL`, `AIRFLOW_API_TOKEN`, `AIRFLOW_FLEET_HEARTBEAT_URL`.
-- `BIGQUERY_SERVICE_ACCOUNT_JSON_BASE64`, `BIGQUERY_ANALYTICS_PROJECT_ID`, `BIGQUERY_ANALYTICS_DATASETS`, `BIGQUERY_ANALYTICS_TABLES`, `APP_VERSIONS_LOOKBACK_DAYS`, `APP_VERSIONS_LIMIT`. Explicit service-account credentials are required; no ADC fallback.
+- `BIGQUERY_SERVICE_ACCOUNT_JSON_BASE64`, `BIGQUERY_ANALYTICS_PROJECT_ID`, `BIGQUERY_ANALYTICS_DATASETS`, `BIGQUERY_ANALYTICS_TABLES`, `APP_VERSIONS_LOOKBACK_DAYS`, `APP_VERSIONS_PARTITION_BUFFER_DAYS`, `APP_VERSIONS_LIMIT`. Explicit service-account credentials are required; no ADC fallback.
 - `APOLLOS_API_KEY`: read-only Cluster/store verification. Store credentials remain within a lookup step and are never persisted in snapshots or returned to the browser.
 - `GITHUB_ACTIONS_TOKEN`, `GITHUB_DEPLOY_WORKFLOW_ID` (default `173574865`).
 - `SLACK_WEBHOOK_URL`, `MANAGER_SLACK_WEBHOOK_URL`.

@@ -53,6 +53,10 @@ const envList = (name: string, defaults: string[]) =>
     ?.split(",")
     .map((s) => s.trim())
     .filter(Boolean) || defaults;
+const positiveIntEnv = (name: string, fallback: number) => {
+  const value = Number(process.env[name]);
+  return Number.isSafeInteger(value) && value > 0 ? value : fallback;
+};
 const identifier = (s: string) => {
   if (!/^[A-Za-z0-9_-]+$/.test(s))
     throw new Error("Invalid BigQuery identifier");
@@ -102,6 +106,7 @@ export async function appObservations(): Promise<AppRow[]> {
     groups.set(key, columns);
   }
   const selects: string[] = [];
+  let usesPartitionPruning = false;
   for (const [name, columns] of groups) {
     const [dataset, table] = name.split(".");
     const choose = (candidates: string[]) =>
@@ -117,6 +122,12 @@ export async function appObservations(): Promise<AppRow[]> {
       choose(fieldCandidates.apollos_version) ||
       (dataset === "apollos_roku" ? choose(["context_library_version"]) : null);
     if (!timestamp || !version) continue;
+    const partition = choose(["_PARTITIONTIME"]);
+    if (partition) usesPartitionPruning = true;
+    // Segment ingestion partitions need their own predicate; event time alone cannot prune them.
+    const partitionFilter = partition
+      ? ` AND \`${partition}\` >= TIMESTAMP_TRUNC(TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @partition_lookback_days DAY), DAY)`
+      : "";
     const fields = Object.entries(fieldCandidates)
       .filter(([field]) => field !== "apollos_version")
       .map(([field, candidates]) => {
@@ -124,7 +135,7 @@ export async function appObservations(): Promise<AppRow[]> {
         return `${column ? `NULLIF(CAST(\`${column}\` AS STRING), '')` : "CAST(NULL AS STRING)"} AS ${field}`;
       });
     selects.push(
-      `SELECT CAST(\`${timestamp}\` AS TIMESTAMP) AS seen_at, NULLIF(CAST(\`${version}\` AS STRING), '') AS apollos_version, ${fields.join(", ")}, '${table}' AS source_table, '${choose(fieldCandidates.apollos_version) ? "runtime" : "analytics_library"}' AS version_source, '${dataset}' AS source_dataset FROM \`${project}.${dataset}.${table}\` WHERE \`${timestamp}\` >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @lookback_days DAY)`,
+      `SELECT CAST(\`${timestamp}\` AS TIMESTAMP) AS seen_at, NULLIF(CAST(\`${version}\` AS STRING), '') AS apollos_version, ${fields.join(", ")}, '${table}' AS source_table, '${choose(fieldCandidates.apollos_version) ? "runtime" : "analytics_library"}' AS version_source, '${dataset}' AS source_dataset FROM \`${project}.${dataset}.${table}\` WHERE \`${timestamp}\` >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @lookback_days DAY)${partitionFilter}`,
     );
   }
   if (!selects.length)
@@ -132,10 +143,12 @@ export async function appObservations(): Promise<AppRow[]> {
   const query = fs
     .readFileSync(path.join(process.cwd(), "lib/app-versions.sql"), "utf8")
     .replace("__SELECTS__", selects.join(" UNION ALL "));
-  const [rows] = await client.query({
-    query,
-    params: { lookback_days: lookbackDays() },
-  });
+  const params: Record<string, number> = { lookback_days: lookbackDays() };
+  if (usesPartitionPruning)
+    params.partition_lookback_days =
+      params.lookback_days +
+      positiveIntEnv("APP_VERSIONS_PARTITION_BUFFER_DAYS", 3);
+  const [rows] = await client.query({ query, params });
   return (
     rows as (Omit<AppRow, "latest_seen_at"> & {
       latest_seen_at?: { value: string } | string;
@@ -149,10 +162,7 @@ export async function appObservations(): Promise<AppRow[]> {
   }));
 }
 export const lookbackDays = () =>
-  Math.min(
-    Math.max(Number(process.env.APP_VERSIONS_LOOKBACK_DAYS) || 30, 1),
-    366,
-  );
+  Math.min(positiveIntEnv("APP_VERSIONS_LOOKBACK_DAYS", 30), 366);
 export type Source = {
   revisions: Record<string, string>;
   mobile: string | null;
