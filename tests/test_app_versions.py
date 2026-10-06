@@ -820,6 +820,93 @@ class AppVersionsContextTest(unittest.TestCase):
             [("lookback_days", "INT64", 14)],
         )
 
+    def _build_query(self, schema, **overrides):
+        kwargs = {
+            "project_id": "analytics-project",
+            "datasets": ("apollos",),
+            "tables": ("identifies",),
+            "lookback_days": 30,
+            "limit": 50,
+        }
+        kwargs.update(overrides)
+        config = app_versions.AppVersionsConfig(**kwargs)
+        with patch.object(app_versions, "_query_job_config", side_effect=lambda params: params):
+            with patch.object(
+                app_versions,
+                "_scalar_query_parameter",
+                side_effect=lambda name, field_type, value: (name, field_type, value),
+            ):
+                return app_versions._build_app_versions_query(config, schema)
+
+    def test_prunes_ingestion_time_partitions_when_available(self):
+        schema = {
+            ("apollos", "identifies"): {
+                "timestamp": "timestamp",
+                "apollos_version": "apollos_version",
+                "_partitiontime": "_PARTITIONTIME",
+            },
+        }
+
+        query, query_config = self._build_query(schema)
+
+        self.assertIn("`_PARTITIONTIME` >= TIMESTAMP_TRUNC(", query)
+        self.assertIn("INTERVAL @partition_lookback_days DAY", query)
+        # The event-time filter still bounds the window; pruning only limits the scan.
+        self.assertIn("INTERVAL @lookback_days DAY", query)
+        self.assertEqual(
+            query_config,
+            [
+                ("lookback_days", "INT64", 30),
+                ("partition_lookback_days", "INT64", 33),
+            ],
+        )
+
+    def test_partition_buffer_days_widens_the_pruned_window(self):
+        schema = {
+            ("apollos", "identifies"): {
+                "timestamp": "timestamp",
+                "apollos_version": "apollos_version",
+                "_partitiontime": "_PARTITIONTIME",
+            },
+        }
+
+        _, query_config = self._build_query(schema, lookback_days=14, partition_buffer_days=7)
+
+        self.assertIn(("partition_lookback_days", "INT64", 21), query_config)
+
+    def test_omits_partition_filter_when_table_is_not_ingestion_partitioned(self):
+        schema = {
+            ("apollos", "identifies"): {
+                "timestamp": "timestamp",
+                "apollos_version": "apollos_version",
+            },
+        }
+
+        query, query_config = self._build_query(schema)
+
+        self.assertNotIn("_PARTITIONTIME", query)
+        self.assertNotIn("@partition_lookback_days", query)
+        self.assertEqual(query_config, [("lookback_days", "INT64", 30)])
+
+    def test_prunes_only_the_partitioned_tables_in_a_mixed_union(self):
+        schema = {
+            ("apollos", "identifies"): {
+                "timestamp": "timestamp",
+                "apollos_version": "apollos_version",
+                "_partitiontime": "_PARTITIONTIME",
+            },
+            ("apollos", "screens"): {
+                "timestamp": "timestamp",
+                "apollos_version": "apollos_version",
+            },
+        }
+
+        query, query_config = self._build_query(schema, tables=("identifies", "screens"))
+
+        # One branch prunes, the other cannot, so the parameter is still bound once.
+        self.assertEqual(query.count("@partition_lookback_days"), 1)
+        self.assertIn(("partition_lookback_days", "INT64", 33), query_config)
+
 
 class AppVersionsRouteTest(unittest.TestCase):
     def setUp(self):
