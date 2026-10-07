@@ -338,6 +338,26 @@ test("review ticket parsing prefers branches and handles underscores without acc
     null,
   );
 });
+test("mixed review sections preserve priority order and longest approved wait", () => {
+  const priorities = [4, 1, 2, 4, 1];
+  const prs = priorities.map((_, index) => {
+    const number = index + 1;
+    return pr({
+      id: `pr${number}`,
+      number,
+      headRefName: `fix/APO-${number}`,
+      createdAt: `2026-09-0${number}T00:00:00Z`,
+      reviewDecision: [2, 4].includes(number) ? "APPROVED" : null,
+    });
+  });
+  const rows = reviewRows(
+    prs,
+    new Map(priorities.map((priority, index) => [index + 1, issue({ priority })])),
+    now,
+  );
+  assert.deepEqual(rows.filter((r) => r.section === "ready").map((r) => r.pr.number), [5, 3, 1]);
+  assert.deepEqual(rows.filter((r) => r.section === "approved").map((r) => r.pr.number), [2, 4]);
+});
 test("human review requests reset wait time; bot requests do not", () => {
   const rows = reviewRows(
     [

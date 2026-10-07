@@ -137,12 +137,14 @@ export function reviewRows(
         ci: ciState(pr),
       };
     })
-    .sort((a, b) =>
-      a.section === "not_ready" || a.section === "approved"
-        ? b.seconds - a.seconds
-        : (a.priority || 99) - (b.priority || 99) ||
-          a.sizeRank - b.sizeRank ||
-          b.seconds - a.seconds,
+    .sort(
+      (a, b) =>
+        a.section.localeCompare(b.section) ||
+        (a.section === "not_ready" || a.section === "approved"
+          ? b.seconds - a.seconds
+          : (a.priority || 99) - (b.priority || 99) ||
+            a.sizeRank - b.sizeRank ||
+            b.seconds - a.seconds),
     );
 }
 export async function reviewQueue(approved: boolean) {

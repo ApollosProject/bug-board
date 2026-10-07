@@ -24,7 +24,7 @@ export default async function Apps({
     data?.rows.filter(
       (row) =>
         (!platform || row.apollos_platform === platform) &&
-        `${row.church} ${row.application_name} ${row.bundle_id}`
+        `${row.build_church || ""} ${row.church} ${row.application_name} ${row.bundle_id}`
           .toLowerCase()
           .includes(query.toLowerCase()),
     ) || [];
@@ -107,7 +107,7 @@ export default async function Apps({
                       <th>
                         {row.application_name}
                         <small>
-                          {row.church} · {row.bundle_id}
+                          {church} · {row.bundle_id}
                         </small>
                       </th>
                       <td>{row.apollos_platform}</td>
