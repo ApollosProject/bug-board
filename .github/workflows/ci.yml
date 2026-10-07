@@ -28,7 +28,11 @@ jobs:
       - run: npm test
       - run: npm audit --omit=dev
       - run: npm run build
-      - run: npx playwright-core install --with-deps chromium
+      - name: Install Chromium
+        timeout-minutes: 10
+        run: |
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          npx playwright-core install --with-deps chromium
       - run: npx e2e run tests/dashboard.e2e.ts --no-cache
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -68,7 +72,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: npx playwright-core install --with-deps chromium
+      - name: Install Chromium
+        timeout-minutes: 10
+        run: |
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          npx playwright-core install --with-deps chromium
       - run: npx e2e run tests/luna.e2e.ts --no-cache
         env:
           AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
