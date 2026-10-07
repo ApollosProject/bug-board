@@ -215,6 +215,12 @@ test("z scores trim tails, reverse lower-is-better metrics, and reject zero spre
   assert.equal(comparison(1, [1, 1, 1]), null);
   assert.equal(comparison(null, [1, 2]), null);
 });
+test("CSV formats raw z scores once, without rounding through the API's two decimals", () => {
+  const rows = teamRows([], [], [], new Map(), window).slice(0, 6);
+  [0, 3, 0, 0, 0, 1].forEach((value, i) => { rows[i].urgent_issues = value; });
+  assert.equal(comparison(3, [0, 3, 0, 0, 0, 1])?.z, 6.35);
+  assert.ok(csv(rows).split("\n")[2].includes('"3","6.4"'));
+});
 test("person metrics count approval once per PR and never invent missing assignment time", () => {
   const metrics = personMetrics(
     "zach",

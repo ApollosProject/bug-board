@@ -352,13 +352,13 @@ export function csv(rows: TeamRow[]) {
       ...rows.map((row) => [
         row.person,
         row.slug,
-        ...keys.flatMap((key) => [
-          row[key],
-          comparison(
+        ...keys.flatMap((key) => {
+          const { mean, stdev } = baseline(rows.map((r) => r[key]));
+          return [
             row[key],
-            rows.map((r) => r[key]),
-          )?.z.toFixed(1) ?? "",
-        ]),
+            stdev ? ((row[key] - mean) / stdev).toFixed(1) : "",
+          ];
+        }),
       ]),
     ]
       .map((row) => row.map(escape).join(","))

@@ -57,12 +57,12 @@ Preview deployments never send notifications. The production delivery claims pre
 2. Verify the production dashboard, snapshots, and scheduled refreshes before the worker handoff.
 3. Choose a handoff time between notification schedules. Record the last Heroku deliveries in each channel.
 4. Confirm that no Heroku notification is in flight. Stop the Heroku worker only after approval for the coordinated handoff.
-5. Configure the existing Slack webhooks on Vercel. Deploy these environment changes before the next notification schedule.
-6. Verify one delivery in the intended channel and the corresponding completed Workflow step.
+5. Configure the current Slack webhooks on Vercel. Deploy these environment changes before the next notification schedule.
+6. Verify one delivery in the intended channel and its completed Workflow step.
 
 Do not run both notification systems concurrently. Do not use Heroku's `DEBUG=true` path or manually replay a digest during the handoff.
 
-Environment changes do not cancel existing Workflow runs. For rollback, disable Vercel notifications and confirm that no notification run remains in flight. Then restore the Heroku worker. If a delivery is uncertain, inspect Slack before any retry. Do not clear a delivery claim without this check.
+Environment changes do not cancel active Workflow runs. For rollback, disable Vercel notifications and confirm that no notification run remains in flight. Then restore the Heroku worker. If a delivery is uncertain, inspect Slack before any retry. Do not clear a delivery claim without this check.
 
 ### App release evidence
 
