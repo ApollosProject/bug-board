@@ -7,6 +7,7 @@ import {
   csv,
   done,
   inactive,
+  isCardBug,
   isPriorityBug,
   personMetrics,
   plannedWeeks,
@@ -147,6 +148,18 @@ test("assignment time uses the latest matching assignment before completion", ()
   assert.equal(assignmentDays(i), 2);
   assert.equal(assignmentDays(issue()), null);
   assert.equal(isPriorityBug(issue({ priority: 0 })), false);
+});
+test("person bug cards preserve unprioritized counts without widening alerts or regression candidates", () => {
+  const unprioritized = issue({ priority: 0 });
+  assert.equal(isCardBug(unprioritized), true);
+  assert.equal(isPriorityBug(unprioritized), false);
+  assert.equal(isCardBug(issue({ priority: 3 })), false);
+  assert.equal(isCardBug(issue({ labels: { nodes: [] } })), false);
+  assert.equal(
+    personMetrics("zach", [unprioritized, issue()], [], [], window)
+      .priority_bugs_fixed,
+    2,
+  );
 });
 test("completed projects, incomplete projects, and scheduled weeks remain distinct", () => {
   assert.equal(plannedWeeks(project()), 1);

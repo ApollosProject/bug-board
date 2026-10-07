@@ -50,6 +50,9 @@ export const isBug = (issue: Issue) =>
   issue.labels.nodes.some((label) => label.name === "Bug");
 export const isPriorityBug = (issue: Issue) =>
   isBug(issue) && issue.priority >= 1 && issue.priority <= 2;
+// Person cards historically include unprioritized bugs; alerts and regressions do not.
+export const isCardBug = (issue: Issue) =>
+  isBug(issue) && issue.priority >= 0 && issue.priority <= 2;
 export const isWork = (issue: Issue) =>
   issue.labels.nodes.some((label) =>
     ["Bug", "Feature Request", "Technical Change"].includes(label.name),
@@ -110,7 +113,7 @@ export function personMetrics(
     (issue) =>
       slugFor(issue.assignee?.displayName, issue.assignee?.name) === slug,
   );
-  const bugs = items.filter(isPriorityBug);
+  const bugs = items.filter(isCardBug);
   const times = items
     .map(assignmentDays)
     .filter((n): n is number => n !== null);

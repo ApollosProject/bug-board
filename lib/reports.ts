@@ -7,7 +7,7 @@ import {
   comparisons,
   done,
   inactive,
-  isPriorityBug,
+  isCardBug,
   linearListUrl,
   metricDisplay,
   metricLabels,
@@ -144,7 +144,7 @@ export async function personPayload(slug: string, window: Window) {
     github_merged_prs: `https://github.com/pulls?${new URLSearchParams({ q: `is:pr is:merged author:${person.github_username} merged:${window.start}..${window.end}` })}`,
     priority_bugs_fixed: linearListUrl(
       "issues",
-      issues.filter(isPriorityBug).map((i) => i.identifier),
+      issues.filter(isCardBug).map((i) => i.identifier),
     ),
     all_work_done: linearListUrl(
       "issues",

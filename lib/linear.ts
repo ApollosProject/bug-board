@@ -61,6 +61,19 @@ export async function fetchIssues(
         issue.history?.edges.push(...next.history.edges);
         historyPage = next.history.pageInfo;
       }
+      // Only assignment events and fixing-PR metadata are used by reports.
+      if (issue.history)
+        issue.history.edges = issue.history.edges.filter(
+          (edge) => edge.node.toAssignee,
+        );
+      if (issue.attachments)
+        issue.attachments.nodes = issue.attachments.nodes.map(({ metadata }) => ({
+          metadata: {
+            url: metadata?.url,
+            status: metadata?.status,
+            linkKind: metadata?.linkKind,
+          },
+        }));
       issues.push(issue);
     }
     if (!page.pageInfo.hasNextPage) break;

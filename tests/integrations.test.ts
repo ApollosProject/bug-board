@@ -62,6 +62,76 @@ test("Linear issues and projects paginate without silently truncating results", 
     else process.env.LINEAR_API_KEY = token;
   }
 });
+test("Linear keeps every assignment page and only report-relevant attachment metadata", async () => {
+  const fetch = globalThis.fetch,
+    token = process.env.LINEAR_API_KEY;
+  process.env.LINEAR_API_KEY = "fixture-key";
+  try {
+    const assignment = {
+      node: {
+        toAssignee: { displayName: "michael.neeley" },
+        updatedAt: "2026-08-07T00:00:00.000Z",
+      },
+    };
+    globalThis.fetch = async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      return Response.json({
+        data: body.query.includes("query History")
+          ? {
+              issue: {
+                history: {
+                  edges: [assignment],
+                  pageInfo: pageInfo(false, "history-final"),
+                },
+              },
+            }
+          : {
+              issues: {
+                nodes: [
+                  {
+                    id: "issue",
+                    history: {
+                      edges: [
+                        { node: { toAssignee: null, updatedAt: "2026-09-01" } },
+                      ],
+                      pageInfo: pageInfo(true, "history-next"),
+                    },
+                    attachments: {
+                      nodes: [
+                        {
+                          metadata: {
+                            url: "https://github.com/org/repo/pull/1",
+                            status: "merged",
+                            linkKind: "closes",
+                            unused: "large upstream payload",
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+                pageInfo: pageInfo(),
+              },
+            },
+      });
+    };
+    const [item] = await fetchIssues({}, true);
+    assert.deepEqual(item.history?.edges, [assignment]);
+    assert.deepEqual(item.attachments?.nodes, [
+      {
+        metadata: {
+          url: "https://github.com/org/repo/pull/1",
+          status: "merged",
+          linkKind: "closes",
+        },
+      },
+    ]);
+  } finally {
+    globalThis.fetch = fetch;
+    if (token === undefined) delete process.env.LINEAR_API_KEY;
+    else process.env.LINEAR_API_KEY = token;
+  }
+});
 test("GitHub partitions over-cap date searches and rejects a single overflowing day", async () => {
   const fetch = globalThis.fetch,
     token = process.env.GITHUB_TOKEN;
