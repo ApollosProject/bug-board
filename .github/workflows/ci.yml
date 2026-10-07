@@ -39,6 +39,20 @@ jobs:
           path: .e2e/
           include-hidden-files: true
           retention-days: 7
+  # ponytail: retain required legacy check names until repository rules use validate.
+  legacy-required:
+    name: ${{ matrix.check }}
+    needs: validate
+    if: always()
+    strategy:
+      matrix:
+        check: [mypy, ruff, vulture, unit-tests, gunicorn-smoke]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require native validation (legacy check-name compatibility)
+        run: test "$VALIDATION_RESULT" = success
+        env:
+          VALIDATION_RESULT: ${{ needs.validate.result }}
   luna:
     if: >-
       (github.event_name == 'workflow_dispatch' && inputs.run_ai) ||
