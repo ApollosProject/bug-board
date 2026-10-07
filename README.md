@@ -119,7 +119,7 @@ E2E_BASE_URL=http://127.0.0.1:3000 E2E_DATA=1 \
 
 `E2E_MODEL` can override the Gateway model ID. The config explicitly loads Next's env files. `E2E_BASE_URL` selects an existing surface instead of starting a local production build. Dashboard tests expect access to the dashboard; they do not bypass GitHub auth or Vercel deployment protection. AI instructions prohibit deployment and authentication actions. Keep recordings private when testing internal data.
 
-Tests, traces, screenshots, videos, reports, and local Workflow state stay outside Git. `.e2e/` is ignored. CI runs type/lint checks, domain/security tests, a production build, and deterministic browser tests. Its manual `run_ai` input runs the Luna suite using the repository's `AI_GATEWAY_API_KEY` secret.
+Tests, traces, screenshots, videos, reports, and local Workflow state stay outside Git. `.e2e/` is ignored. CI runs type/lint checks, domain/security tests, a production build, and deterministic browser tests. The manual `run_ai` input runs the Luna suite with the repository's `AI_GATEWAY_API_KEY` secret. The `e2e` label enables Luna on same-repository PRs, with the same key and budget limit. TesterArmy's native `@e2e-dev/github` reporter posts results, model usage, and artifact links as PR comments. Reruns update those comments. Manual runs write job summaries because they have no PR event context.
 
 ## Vercel cutover (operator approval required)
 

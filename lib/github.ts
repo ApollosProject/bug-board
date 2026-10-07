@@ -84,6 +84,7 @@ export const mergedPRs = cache(async (after: string, before: string) => {
       return await search(
         `${config.github_orgs.map((org) => `org:${org}`).join(" ")} is:pr is:merged merged:${date(start)}..${date(end)}`,
         mergedFields,
+        25,
       );
     } catch (error) {
       if (!(error instanceof SearchLimit) || date(start) === date(end))

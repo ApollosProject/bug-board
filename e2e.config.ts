@@ -1,5 +1,6 @@
 import type { E2EConfig } from "e2e";
 import { web } from "@e2e-dev/web";
+import { github } from "@e2e-dev/github";
 import { gateway } from "ai";
 import nextEnv from "@next/env";
 nextEnv.loadEnvConfig(process.cwd());
@@ -51,5 +52,5 @@ export default {
   retries: 0,
   trace: "on",
   video: "on",
-  reporters: ["list", "junit", "markdown"],
+  reporters: ["list", "junit", "markdown", github()],
 } satisfies E2EConfig;

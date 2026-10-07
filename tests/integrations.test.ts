@@ -68,6 +68,7 @@ test("GitHub partitions over-cap date searches and rejects a single overflowing 
         range = /merged:(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})/.exec(
           body.variables.query,
         )!;
+      assert.match(body.query, /search\(type: ISSUE,.*first: 25,/);
       ranges.push(range[0]);
       const overflow = range[1] !== range[2];
       return Response.json({
