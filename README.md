@@ -72,7 +72,7 @@ See `.env.example` for names and defaults. Set server credentials in the appropr
 - `GITHUB_OAUTH_CALLBACK_URL`: defaults to `APP_URL/auth/github/callback`.
 - `GITHUB_OAUTH_ORG`: defaults to `ApollosProject`.
 - `LINEAR_API_KEY`, `GITHUB_TOKEN`: read access for the configured team and tracked repositories.
-- `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`: provision an Upstash Redis integration through the Vercel Marketplace.
+- Redis REST credentials: Vercel Marketplace supplies `KV_REST_API_URL` / `KV_REST_API_TOKEN` with the `KV` prefix; standalone Upstash supplies `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`. The standalone pair takes precedence, and a partial pair fails closed rather than mixing credentials. Connect the preview database to **Preview only**, using sensitive variables.
 - `CRON_SECRET`: bearer secret for `/api/cron/{fleet,metrics,apps,regressions,notifications}`. Vercel adds it to scheduled requests.
 
 GitHub OAuth requests `read:org`, validates active membership, uses PKCE and a ten-minute signed state cookie, and keeps the verified identity (not the access token) in a signed HTTP-only session for at most 30 days. Partially configured auth fails closed with `503`. Vercel production and preview deployments require auth even if `GITHUB_OAUTH_ENABLED` was omitted; hosted callback URLs must use HTTPS. Sessions and authenticated responses are private/no-store. Deployment is never enabled by the no-auth local development path.
@@ -123,7 +123,7 @@ Tests, traces, screenshots, videos, reports, and local Workflow state stay outsi
 
 ## Vercel cutover (operator approval required)
 
-1. Create/link the **Apollos** Vercel project with the Next.js preset, Node 24.x, and a plan supporting minute-level Cron and Workflow. Connect this repository; use preview deployments for review.
+1. Create/link the **Apollos** Vercel project with the Next.js preset, Node 24.x, and a plan supporting minute-level Cron and Workflow. Vercel assigns a new project’s first deployment to **production**, even with CLI `--target preview`; do not assume the flag isolates that first deployment. Obtain separate approval for a harmless protected static bootstrap with no domain promotion, app credentials, or Cron before creating the real preview, and verify its actual API target. Keep Git auto-deployment disconnected until production deployment is authorized; the current main branch still contains Flask.
 2. Configure server credentials and Upstash Redis REST access separately for preview and production. Do not copy a legacy Redis TCP URL into the REST variable.
 3. Configure a GitHub OAuth app/callback for the preview host. Confirm fail-closed behavior, active-member login, API-key access, and logout on the preview.
 4. Invoke authenticated preview refreshes for fleet, metrics, apps, and regressions. Wait for the Workflow runs to complete; compare real data against the current dashboard, including store build evidence, regression overrides, PTO, CSV, and person comparisons. Run the populated E2E suite.

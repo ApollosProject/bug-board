@@ -1,9 +1,14 @@
 import { Redis } from "@upstash/redis";
 import { randomUUID } from "node:crypto";
-const redis = () =>
-  process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
-    ? Redis.fromEnv()
-    : null;
+export const redis = () => {
+  const prefix =
+    process.env.UPSTASH_REDIS_REST_URL || process.env.UPSTASH_REDIS_REST_TOKEN
+      ? "UPSTASH_REDIS_REST"
+      : "KV_REST_API";
+  const url = process.env[`${prefix}_URL`],
+    token = process.env[`${prefix}_TOKEN`];
+  return url && token ? new Redis({ url, token }) : null;
+};
 // Preview and production never share refresh locks or snapshots.
 const key = (name: string) =>
   `bug-board:${process.env.VERCEL_ENV || "local"}:${process.env.VERCEL_ENV === "preview" ? process.env.VERCEL_URL || "preview" : "shared"}:v1:${name}`;

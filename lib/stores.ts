@@ -1,6 +1,6 @@
 import { importPKCS8, SignJWT } from "jose";
 import { GoogleAuth } from "google-auth-library";
-import { readSnapshot, writeSnapshot } from "./cache";
+import { readSnapshot, redis, writeSnapshot } from "./cache";
 import { mapConcurrent, requestJson, UpstreamError } from "./http";
 import type { AppRow } from "./types";
 export const storePlatforms = new Set(["ios", "android", "androidtv"]);
@@ -218,7 +218,7 @@ export async function lookupRelease(
         platform === "ios"
           ? { builds: await apple(church, configured) }
           : await android(church, configured, platform);
-      if (process.env.UPSTASH_REDIS_REST_URL)
+      if (redis())
         await writeSnapshot(name, release, release.builds ? 1800 : 3600);
       return release;
     } catch {
