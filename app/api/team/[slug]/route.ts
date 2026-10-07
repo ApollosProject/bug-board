@@ -27,7 +27,11 @@ export async function GET(
   }
   try {
     return Response.json(await personPayload(slug, window), { headers });
-  } catch {
+  } catch (error) {
+    console.warn(
+      "Person metrics unavailable:",
+      error instanceof Error ? error.message : "Unknown integration error",
+    );
     return Response.json(
       {
         error: "metrics_unavailable",
