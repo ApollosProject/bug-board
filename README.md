@@ -49,6 +49,21 @@ Notifications preserve the existing schedule: priority bugs at 12:00 UTC, stale 
 
 Refresh locks prevent overlapping executions. Slack digests have a per-day delivery claim: since Slack webhooks have no idempotency key, an ambiguous network failure retains the claim to prevent duplicate posts. Check Slack delivery and Workflow logs before an operator retries it; do not blindly clear the claim.
 
+### Slack handoff (separate operator approval required)
+
+Preview deployments never send notifications. The production delivery claims prevent duplicates between Vercel deployments, but not between Vercel and Heroku.
+
+1. Deploy the production dashboard without `SLACK_WEBHOOK_URL` and `MANAGER_SLACK_WEBHOOK_URL`.
+2. Verify the production dashboard, snapshots, and scheduled refreshes before the worker handoff.
+3. Choose a handoff time between notification schedules. Record the last Heroku deliveries in each channel.
+4. Confirm that no Heroku notification is in flight. Stop the Heroku worker only after approval for the coordinated handoff.
+5. Configure the existing Slack webhooks on Vercel. Deploy these environment changes before the next notification schedule.
+6. Verify one delivery in the intended channel and the corresponding completed Workflow step.
+
+Do not run both notification systems concurrently. Do not use Heroku's `DEBUG=true` path or manually replay a digest during the handoff.
+
+Environment changes do not cancel existing Workflow runs. For rollback, disable Vercel notifications and confirm that no notification run remains in flight. Then restore the Heroku worker. If a delivery is uncertain, inspect Slack before any retry. Do not clear a delivery claim without this check.
+
 ### App release evidence
 
 Mobile and Android TV runtime claims require published store build IDs matched uniquely against Segment native build observations. iOS also requires the exact native version. Queued events with conflicting app/native versions are excluded. Multiple published runtimes remain explicit; absent credentials, conflicting matches, incomplete store responses, or missing source targets remain unverified. Android uses the read-only release-lifecycle API, **not** `edits.tracks` or a store edit.
@@ -128,6 +143,7 @@ Tests, traces, screenshots, videos, reports, and local Workflow state stay outsi
 3. Configure a GitHub OAuth app/callback for the preview host. Confirm fail-closed behavior, active-member login, API-key access, and logout on the preview.
 4. Invoke authenticated preview refreshes for fleet, metrics, apps, and regressions. Wait for the Workflow runs to complete; compare real data against the current dashboard, including store build evidence, regression overrides, PTO, CSV, and person comparisons. Run the populated E2E suite.
 5. Add `AI_GATEWAY_API_KEY` and run the uncached Luna tests. Review all CI checks and attached runtime proof.
-6. Only after approval, set the production origin/OAuth callback and move `engineering.apollos.app` to Vercel. Verify snapshots, Workflow execution, notification delivery, and fleet heartbeat before shutting down the old Heroku web/worker processes. Running both notification systems can duplicate posts.
+6. Only after approval, set the production origin/OAuth callback and move `engineering.apollos.app` to Vercel. Verify the production dashboard and refresh workflows without Slack webhooks.
+7. Follow the separate Slack handoff procedure above. Coordinate fleet heartbeat ownership with the worker handoff. Do not stop the legacy worker before the new dashboard and refresh jobs are ready.
 
 This repository change does not itself provision infrastructure, modify DNS/OAuth apps, send Slack posts, or shut down production services.

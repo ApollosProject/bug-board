@@ -76,7 +76,8 @@ async function completeReviews(pr: PullRequest, opinionated: boolean) {
     pr.reviews.nodes.push(...page.nodes);
   }
 }
-const mergedFields = `id url mergedAt author { login } reviews(first: 100, states: [APPROVED]) { ${reviewFields} }
+// Keep nested search pages small; completeReviews fetches any remaining approvals.
+const mergedFields = `id url mergedAt author { login } reviews(first: 10, states: [APPROVED]) { ${reviewFields} }
  commits(first: 1) { nodes { commit { author { user { login } } authors(first: 10) { nodes { user { login } } } } } }`;
 export const mergedPRs = cache(async (after: string, before: string) => {
   async function range(start: number, end: number): Promise<PullRequest[]> {
@@ -96,12 +97,13 @@ export const mergedPRs = cache(async (after: string, before: string) => {
       ];
     }
   }
+  const start = Date.parse(date(Date.parse(after))),
+    end = Date.parse(date(Date.parse(before) - 1));
+  const weeks: number[] = [];
+  for (let day = start; day <= end; day += 7 * DAY) weeks.push(day);
   const prs = (
-    await range(
-      Date.parse(date(Date.parse(after))),
-      Date.parse(date(Date.parse(before) - 1)),
-    )
-  ).filter(
+    await mapConcurrent(weeks, 4, (day) => range(day, Math.min(day + 6 * DAY, end)))
+  ).flat().filter(
     (pr) =>
       !!pr.mergedAt &&
       Date.parse(pr.mergedAt) >= Date.parse(after) &&

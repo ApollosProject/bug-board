@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fetchIssues, projects } from "../lib/linear";
 import { mergedPRs } from "../lib/github";
+import { blameFile } from "../lib/regressions";
 import {
   mapConcurrent,
   graphql,
@@ -144,6 +145,7 @@ test("GitHub partitions over-cap date searches and rejects a single overflowing 
           body.variables.query,
         )!;
       assert.match(body.query, /search\(type: ISSUE,.*first: 25,/);
+      assert.match(body.query, /reviews\(first: 10, states: \[APPROVED\]\)/);
       ranges.push(range[0]);
       const overflow = range[1] !== range[2];
       return Response.json({
@@ -177,6 +179,112 @@ test("GitHub partitions over-cap date searches and rejects a single overflowing 
       mergedPRs("2026-09-04T00:00:00Z", "2026-09-05T00:00:00Z"),
       /1,000/,
     );
+  } finally {
+    globalThis.fetch = fetch;
+    if (token === undefined) delete process.env.GITHUB_TOKEN;
+    else process.env.GITHUB_TOKEN = token;
+  }
+});
+test("weekly searches cover the full window with at most four concurrent requests", async () => {
+  const fetch = globalThis.fetch,
+    token = process.env.GITHUB_TOKEN;
+  process.env.GITHUB_TOKEN = "fixture-key";
+  try {
+    let active = 0, peak = 0;
+    const intervals: string[] = [];
+    globalThis.fetch = async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      const match = /merged:(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})/.exec(body.variables.query)!;
+      intervals.push(match[0]);
+      peak = Math.max(peak, ++active);
+      await Promise.resolve();
+      active--;
+      const nodes = [];
+      for (let day = Date.parse(match[1]); day <= Date.parse(match[2]); day += 86400000) {
+        const id = new Date(day).toISOString().slice(0, 10);
+        nodes.push({ id, mergedAt: `${id}T12:00:00Z`, reviews: { nodes: [], pageInfo: pageInfo() } });
+      }
+      return Response.json({ data: { search: { issueCount: nodes.length, nodes, pageInfo: pageInfo() } } });
+    };
+    const prs = await mergedPRs("2026-09-01T13:00:00Z", "2026-10-01T00:00:00Z");
+    assert.equal(prs.length, 29);
+    assert.equal(new Set(prs.map((pr) => pr.id)).size, 29);
+    assert.equal(peak, 4);
+    assert.deepEqual(intervals, [
+      "merged:2026-09-01..2026-09-07", "merged:2026-09-08..2026-09-14",
+      "merged:2026-09-15..2026-09-21", "merged:2026-09-22..2026-09-28",
+      "merged:2026-09-29..2026-09-30",
+    ]);
+  } finally {
+    globalThis.fetch = fetch;
+    if (token === undefined) delete process.env.GITHUB_TOKEN;
+    else process.env.GITHUB_TOKEN = token;
+  }
+});
+test("small merged-search review pages still retrieve every approval", async () => {
+  const fetch = globalThis.fetch,
+    token = process.env.GITHUB_TOKEN;
+  process.env.GITHUB_TOKEN = "fixture-key";
+  try {
+    globalThis.fetch = async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      const reviews = {
+        nodes: [{ author: { login: body.variables.id ? "second" : "first" }, state: "APPROVED" }],
+        pageInfo: pageInfo(!body.variables.id, body.variables.id ? "final" : "more"),
+      };
+      return Response.json({ data: body.variables.id
+        ? { node: { reviews } }
+        : { search: {
+            issueCount: 1, pageInfo: pageInfo(),
+            nodes: [{ id: "pr", mergedAt: "2026-08-01T12:00:00Z", reviews }],
+          } },
+      });
+    };
+    const [pr] = await mergedPRs("2026-08-01T00:00:00Z", "2026-08-02T00:00:00Z");
+    assert.deepEqual(pr.reviews.nodes.map((r) => r.author?.login), ["first", "second"]);
+  } finally {
+    globalThis.fetch = fetch;
+    if (token === undefined) delete process.env.GITHUB_TOKEN;
+    else process.env.GITHUB_TOKEN = token;
+  }
+});
+test("blame loads metadata only for removed-line commits and exposes failures for durable retry", async () => {
+  const fetch = globalThis.fetch,
+    token = process.env.GITHUB_TOKEN;
+  process.env.GITHUB_TOKEN = "fixture-key";
+  const context = {
+    owner: "org", repo: "repo", oid: "parent", complete: true,
+    url: "https://github.com/org/repo/pull/2", mergedAt: "2026-09-01T00:00:00Z",
+  };
+  const file = { filename: "file.ts", status: "modified", patch: "@@ -10,2 +10,0 @@\n-old\n-old" };
+  try {
+    const requested: string[] = [];
+    globalThis.fetch = async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      if (body.query.includes("query Blame(")) {
+        assert.ok(!body.query.includes("reviews"));
+        return Response.json({ data: { repository: { object: { blame: { ranges: [
+          { startingLine: 1, endingLine: 9, commit: { oid: "irrelevant", committedDate: "2026-01-01" } },
+          { startingLine: 10, endingLine: 10, commit: { oid: "relevant", committedDate: "2026-08-01" } },
+          { startingLine: 11, endingLine: 11, commit: { oid: "relevant", committedDate: "2026-08-01" } },
+        ] } } } } });
+      }
+      requested.push(body.variables.oid);
+      return Response.json({ data: { repository: { object: { associatedPullRequests: {
+        pageInfo: pageInfo(), nodes: [{
+          url: "https://github.com/org/repo/pull/1", mergedAt: "2026-08-01T00:00:00Z",
+          author: { login: "author" }, reviews: { nodes: [], pageInfo: pageInfo() },
+        }],
+      } } } } });
+    };
+    const result = await blameFile(context, file);
+    assert.equal(result.complete, true);
+    assert.equal(result.candidates.reduce((n, c) => n + c.line_count, 0), 2);
+    assert.deepEqual(requested, ["relevant"]);
+    globalThis.fetch = async () => Response.json({}, { status: 502 });
+    await assert.rejects(blameFile(context, file), /HTTP 502/);
+    globalThis.fetch = async () => Response.json({ data: { repository: { object: null } } });
+    assert.equal((await blameFile(context, file)).complete, false);
   } finally {
     globalThis.fetch = fetch;
     if (token === undefined) delete process.env.GITHUB_TOKEN;

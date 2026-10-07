@@ -7,6 +7,7 @@ import { engineers, people } from "./config";
 import { isPriorityBug } from "./metrics";
 import { DAY, inWindow, timeWindow } from "./window";
 import { readSnapshot } from "./cache";
+import { mapConcurrent } from "./http";
 import type { Issue, Review, Window } from "./types";
 export type Candidate = {
   url: string;
@@ -139,102 +140,104 @@ export async function blameFile(
   const allLines = deletedLines(file.patch),
     lines = allLines.slice(0, 500);
   if (!lines.length) return { candidates: [], complete: true };
-  try {
-    type PR = {
-      url: string;
-      mergedAt: string;
-      author: { login: string } | null;
-      reviews: { nodes: Review[]; pageInfo?: { hasNextPage: boolean } };
-    };
-    type Range = {
-      startingLine: number;
-      endingLine: number;
-      commit: {
-        committedDate: string;
-        associatedPullRequests: {
-          nodes: PR[];
-          pageInfo?: { hasNextPage: boolean };
-        };
-      };
-    };
-    const data = await github<{
-      repository: { object: { blame: { ranges: Range[] } } };
-    }>(
-      `query Blame($owner: String!, $repo: String!, $oid: GitObjectID!, $path: String!) { repository(owner: $owner, name: $repo) { object(oid: $oid) { ... on Commit { blame(path: $path) { ranges { startingLine endingLine commit { committedDate associatedPullRequests(first: 10) { pageInfo { hasNextPage } nodes { url mergedAt author { login } reviews(first: 100, states: [APPROVED]) { pageInfo { hasNextPage } nodes { author { login } state } } } } } } } } } } }`,
-      {
-        owner: context.owner,
-        repo: context.repo,
-        oid: context.oid,
-        path:
-          file.status === "renamed"
-            ? file.previous_filename || file.filename
-            : file.filename,
+  type PR = {
+    url: string;
+    mergedAt: string;
+    author: { login: string } | null;
+    reviews: { nodes: Review[]; pageInfo: { hasNextPage: boolean } };
+  };
+  type Associated = {
+    nodes: PR[];
+    pageInfo: { hasNextPage: boolean };
+  };
+  type Range = {
+    startingLine: number;
+    endingLine: number;
+    commit: { oid: string; committedDate: string };
+  };
+  const data = await github<{
+    repository: { object: { blame: { ranges: Range[] } } };
+  }>(
+    `query Blame($owner: String!, $repo: String!, $oid: GitObjectID!, $path: String!) { repository(owner: $owner, name: $repo) { object(oid: $oid) { ... on Commit { blame(path: $path) { ranges { startingLine endingLine commit { oid committedDate } } } } } } }`,
+    {
+      owner: context.owner,
+      repo: context.repo,
+      oid: context.oid,
+      path:
+        file.status === "renamed"
+          ? file.previous_filename || file.filename
+          : file.filename,
+    },
+  );
+  const ranges = data.repository?.object?.blame?.ranges || [];
+  const overlap = (range: Range) =>
+    lines.filter((n) => n >= range.startingLine && n <= range.endingLine).length;
+  const matched = ranges.filter(overlap);
+  // Fetch PR/review history only for removed lines, not every commit in the file.
+  const metadata = new Map(
+    await mapConcurrent(
+      [...new Set(matched.map((r) => r.commit.oid))],
+      4,
+      async (oid): Promise<[string, Associated | null]> => {
+        const result = await github<{
+          repository: { object: { associatedPullRequests: Associated } | null };
+        }>(
+          `query BlamePRs($owner: String!, $repo: String!, $oid: GitObjectID!) { repository(owner: $owner, name: $repo) { object(oid: $oid) { ... on Commit { associatedPullRequests(first: 10) { pageInfo { hasNextPage } nodes { url mergedAt author { login } reviews(first: 100, states: [APPROVED]) { pageInfo { hasNextPage } nodes { author { login } state } } } } } } } }`,
+          { owner: context.owner, repo: context.repo, oid },
+        );
+        return [oid, result.repository?.object?.associatedPullRequests || null];
       },
+    ),
+  );
+  const candidates: Candidate[] = [];
+  for (const range of matched) {
+    const prs = (metadata.get(range.commit.oid)?.nodes || []).filter(
+      (pr) => pr.mergedAt && Date.parse(pr.mergedAt) <= Date.parse(context.mergedAt),
     );
-    const ranges = data.repository?.object?.blame?.ranges || [];
-    const candidates: Candidate[] = [];
-    for (const range of ranges) {
-      const overlap = lines.filter(
-        (n) => n >= range.startingLine && n <= range.endingLine,
-      ).length;
-      if (!overlap) continue;
-      const prs = range.commit.associatedPullRequests.nodes.filter(
-        (pr) =>
-          pr.mergedAt &&
-          Date.parse(pr.mergedAt) <= Date.parse(context.mergedAt),
-      );
-      const afterCommit = prs.filter(
-        (pr) =>
-          Date.parse(pr.mergedAt) >= Date.parse(range.commit.committedDate),
-      );
-      const inducing = (afterCommit.length ? afterCommit : prs).sort((a, b) =>
-        a.mergedAt.localeCompare(b.mergedAt),
-      )[0];
-      if (!inducing || inducing.url === context.url) continue;
-      const author = inducing.author?.login || null;
-      const reviewers = [
-        ...new Set(
-          inducing.reviews.nodes
-            .map((r) => r.author?.login || "")
-            .filter(
-              (login) =>
-                login &&
-                !bot(login) &&
-                login.toLowerCase() !== author?.toLowerCase(),
-            ),
-        ),
-      ];
-      const age = Math.max(
-        0,
-        Math.trunc(
-          (Date.parse(context.mergedAt) - Date.parse(inducing.mergedAt)) / DAY,
-        ),
-      );
-      candidates.push({
-        url: inducing.url,
-        merged_at: inducing.mergedAt,
-        author,
-        reviewers,
-        line_count: overlap,
-        score: overlap / (1 + age / 30),
-      });
-    }
-    return {
-      candidates,
-      complete:
-        !!ranges.length &&
-        allLines.length <= 500 &&
-        ranges.every(
-          (r) =>
-            !r.commit.associatedPullRequests.pageInfo?.hasNextPage &&
-            r.commit.associatedPullRequests.nodes.every(
-              (pr) => !pr.reviews.pageInfo?.hasNextPage,
-            ),
-        ),
-    };
-  } catch {
-    return { candidates: [], complete: false };
+    const afterCommit = prs.filter(
+      (pr) => Date.parse(pr.mergedAt) >= Date.parse(range.commit.committedDate),
+    );
+    const inducing = (afterCommit.length ? afterCommit : prs).sort((a, b) =>
+      a.mergedAt.localeCompare(b.mergedAt),
+    )[0];
+    if (!inducing || inducing.url === context.url) continue;
+    const author = inducing.author?.login || null;
+    const reviewers = [
+      ...new Set(
+        inducing.reviews.nodes
+          .map((r) => r.author?.login || "")
+          .filter(
+            (login) =>
+              login && !bot(login) && login.toLowerCase() !== author?.toLowerCase(),
+          ),
+      ),
+    ];
+    const age = Math.max(
+      0,
+      Math.trunc(
+        (Date.parse(context.mergedAt) - Date.parse(inducing.mergedAt)) / DAY,
+      ),
+    );
+    candidates.push({
+      url: inducing.url,
+      merged_at: inducing.mergedAt,
+      author,
+      reviewers,
+      line_count: overlap(range),
+      score: overlap(range) / (1 + age / 30),
+    });
   }
+  return {
+    candidates,
+    complete:
+      allLines.length <= 500 &&
+      lines.every((n) => ranges.some((r) => n >= r.startingLine && n <= r.endingLine)) &&
+      [...metadata.values()].every(
+        (m) =>
+          m && !m.pageInfo.hasNextPage &&
+          m.nodes.every((pr) => !pr.reviews.pageInfo.hasNextPage),
+      ),
+  };
 }
 export function mergeAttribution(
   issue: Pick<Issue, "identifier" | "url">,
