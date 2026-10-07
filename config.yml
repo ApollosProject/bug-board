@@ -26,11 +26,6 @@ people:
     slack_id: U15CT1KEF
     linear_username: vincent
     github_username: vinnyjth
-  vitor:
-    team: engineering
-    slack_id: U07KCR739QR
-    linear_username: vitor.lelis
-    github_username: vitlelis
   jordan:
     team: unassigned
     slack_id: U03RUFCJRNF
@@ -75,14 +70,11 @@ people:
 platforms:
   crossroads:
     lead: dylan
-    developers:
-      - vitor
+    developers: []
   mobile:
-    developers:
-      - vitor
+    developers: []
   tv:
-    developers:
-      - vitor
+    developers: []
   roku:
     lead: andy
     developers: []
@@ -95,8 +87,7 @@ platforms:
       - austin
   cluster:
     lead: vincent
-    developers:
-      - vitor
+    developers: []
   rock-plugin:
     lead: vincent
     developers: []
