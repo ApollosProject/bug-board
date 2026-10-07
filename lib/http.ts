@@ -2,8 +2,11 @@ export class UpstreamError extends Error {
   constructor(
     public service: string,
     public status: number,
+    reason = "",
   ) {
-    super(`${service} unavailable (HTTP ${status})`);
+    super(
+      `${service} unavailable (HTTP ${status})${reason ? `: ${reason}` : ""}`,
+    );
   }
 }
 export async function requestJson<T>(
@@ -17,7 +20,21 @@ export async function requestJson<T>(
     redirect: "error",
     signal: AbortSignal.timeout(30_000),
   });
-  if (!response.ok) throw new UpstreamError(service, response.status);
+  if (!response.ok) {
+    let reason = "";
+    if (service === "GitHub") {
+      const body = await response.json().catch(() => ({}));
+      const message = typeof body?.message === "string" ? body.message : "";
+      reason = /rate.limit|abuse/i.test(message)
+        ? "rate limit"
+        : /user.agent/i.test(message)
+          ? "User-Agent required"
+          : /SSO|SAML/i.test(message)
+            ? "organization SSO required"
+            : "request rejected";
+    }
+    throw new UpstreamError(service, response.status, reason);
+  }
   return response.json() as Promise<T>;
 }
 export async function graphql<T>(

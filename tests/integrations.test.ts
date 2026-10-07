@@ -2,7 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fetchIssues, projects } from "../lib/linear";
 import { mergedPRs } from "../lib/github";
-import { mapConcurrent, graphql } from "../lib/http";
+import {
+  mapConcurrent,
+  graphql,
+  requestJson,
+  UpstreamError,
+} from "../lib/http";
 const pageInfo = (more = false, cursor: string | null = null) => ({
   hasNextPage: more,
   endCursor: cursor,
@@ -120,6 +125,41 @@ test("GraphQL rejects partial-error payloads instead of returning partial metric
       graphql("https://example.test/graphql", "fixture", "query {}"),
       /unavailable/,
     );
+  } finally {
+    globalThis.fetch = fetch;
+  }
+});
+test("GitHub rejection reasons are classified without exposing response secrets", async () => {
+  const fetch = globalThis.fetch;
+  try {
+    for (const [body, reason] of [
+      [
+        { message: "You have exceeded a secondary rate limit. private-token" },
+        "rate limit",
+      ],
+      [
+        { message: "Please specify a User-Agent header" },
+        "User-Agent required",
+      ],
+      [{ message: "SAML authorization required" }, "organization SSO required"],
+      [{ message: "private-token" }, "request rejected"],
+      [null, "request rejected"],
+    ] as const) {
+      globalThis.fetch = async () => Response.json(body, { status: 403 });
+      await assert.rejects(
+        requestJson("https://api.github.com/graphql", {}, "GitHub"),
+        (error: unknown) => {
+          assert.ok(error instanceof UpstreamError);
+          assert.equal(error.status, 403);
+          assert.equal(
+            error.message,
+            `GitHub unavailable (HTTP 403): ${reason}`,
+          );
+          assert.ok(!error.message.includes("private-token"));
+          return true;
+        },
+      );
+    }
   } finally {
     globalThis.fetch = fetch;
   }
