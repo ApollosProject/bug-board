@@ -2,7 +2,7 @@ import { people } from "@/lib/config";
 import { apiKeyError } from "@/lib/auth";
 import { personPayload } from "@/lib/reports";
 import { timeWindow } from "@/lib/window";
-export const maxDuration = 60;
+export const maxDuration = 300;
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ slug: string }> },
