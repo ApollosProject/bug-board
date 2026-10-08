@@ -221,6 +221,63 @@ test("weekly searches cover the full window with at most four concurrent request
     else process.env.GITHUB_TOKEN = token;
   }
 });
+test("historical PR chunks cache complete approvals, expire, and keep today's chunk fresh", async (t) => {
+  const names = ["GITHUB_TOKEN", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "KV_REST_API_URL", "KV_REST_API_TOKEN"];
+  const env = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  const fetch = globalThis.fetch, records = new Map<string, string>();
+  let clock = Date.parse("2026-10-07T12:00:00Z"), searches = 0, approvals = 0;
+  t.mock.method(Date, "now", () => clock);
+  try {
+    for (const name of names) delete process.env[name];
+    process.env.GITHUB_TOKEN = "fixture-key";
+    process.env.KV_REST_API_URL = "https://cache.example.test";
+    process.env.KV_REST_API_TOKEN = "fixture-cache";
+    globalThis.fetch = async (url, init) => {
+      const body = JSON.parse(String(init?.body));
+      if (String(url).startsWith("https://cache.example.test")) {
+        const single = typeof body[0] === "string";
+        const results = (single ? [body] : body).map(([command, key, value]: string[]) => {
+          if (command === "get") return { result: records.get(key) ?? null };
+          assert.equal(command, "set");
+          records.set(key, value);
+          return { result: "OK" };
+        });
+        return Response.json(single ? results[0] : results);
+      }
+      if (body.variables.id) {
+        approvals++;
+        return Response.json({ data: { node: { reviews: {
+          nodes: [{ author: { login: "second" }, state: "APPROVED" }], pageInfo: pageInfo(false, "final"),
+        } } } });
+      }
+      searches++;
+      const day = /merged:(\d{4}-\d{2}-\d{2})/.exec(body.variables.query)![1];
+      return Response.json({ data: { search: {
+        issueCount: 1, pageInfo: pageInfo(), nodes: [{ id: day, mergedAt: `${day}T12:00:00Z`,
+          reviews: { nodes: [{ author: { login: "first" }, state: "APPROVED" }], pageInfo: pageInfo(true, "more") },
+        }],
+      } } });
+    };
+    const first = await mergedPRs("2026-09-29T00:00:00Z", "2026-10-08T00:00:00Z");
+    const second = await mergedPRs("2026-09-29T00:00:00Z", "2026-10-08T00:00:00Z");
+    assert.deepEqual(second, first);
+    assert.equal(searches, 3);
+    assert.equal(approvals, 3);
+    assert.equal(records.size, 1);
+    assert.deepEqual(second[0].reviews.nodes.map((r) => r.author?.login), ["first", "second"]);
+    assert.equal(second[0].reviews.pageInfo?.hasNextPage, false);
+    assert.equal((await mergedPRs("2026-09-29T13:00:00Z", "2026-10-08T00:00:00Z")).length, 1);
+    clock += 3600001;
+    await mergedPRs("2026-09-29T00:00:00Z", "2026-10-08T00:00:00Z");
+    assert.equal(searches, 6);
+    delete process.env.GITHUB_TOKEN;
+    await assert.rejects(mergedPRs("2026-09-29T00:00:00Z", "2026-10-08T00:00:00Z"), /not configured/);
+  } finally {
+    globalThis.fetch = fetch;
+    for (const [name, value] of Object.entries(env))
+      if (value === undefined) delete process.env[name]; else process.env[name] = value;
+  }
+});
 test("small merged-search review pages still retrieve every approval", async () => {
   const fetch = globalThis.fetch,
     token = process.env.GITHUB_TOKEN;

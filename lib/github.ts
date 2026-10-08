@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { config } from "./config";
+import { readSnapshot, redis, writeSnapshot } from "./cache";
 import { graphql, mapConcurrent, requestJson } from "./http";
 import { DAY, date } from "./window";
 import type { Connection, PullRequest, Review, Window } from "./types";
@@ -75,14 +76,24 @@ async function completeReviews(pr: PullRequest, opinionated: boolean) {
     page = data.node.reviews;
     pr.reviews.nodes.push(...page.nodes);
   }
+  pr.reviews.pageInfo = page.pageInfo;
 }
 // Keep nested search pages small; completeReviews fetches any remaining approvals.
 const mergedFields = `id url mergedAt author { login } reviews(first: 10, states: [APPROVED]) { ${reviewFields} }
  commits(first: 1) { nodes { commit { author { user { login } } authors(first: 10) { nodes { user { login } } } } } }`;
 export const mergedPRs = cache(async (after: string, before: string) => {
+  if (!process.env.GITHUB_TOKEN) throw new Error("GitHub not configured");
+  const snapshots: [string, PullRequest[]][] = [];
   async function range(start: number, end: number): Promise<PullRequest[]> {
+    const historical = end < Date.parse(date(Date.now())),
+      name = `merged-prs:${config.github_orgs.join(",")}:${date(start)}:${date(end)}`;
+    const snapshot = historical
+      ? await readSnapshot<PullRequest[]>(name, 3600)
+      : null;
+    if (snapshot) return snapshot;
+    let prs: PullRequest[];
     try {
-      return await search(
+      prs = await search(
         `${config.github_orgs.map((org) => `org:${org}`).join(" ")} is:pr is:merged merged:${date(start)}..${date(end)}`,
         mergedFields,
         25,
@@ -91,11 +102,13 @@ export const mergedPRs = cache(async (after: string, before: string) => {
       if (!(error instanceof SearchLimit) || date(start) === date(end))
         throw error;
       const middle = Date.parse(date(start + (end - start) / 2));
-      return [
+      prs = [
         ...(await range(start, middle)),
         ...(await range(middle + DAY, end)),
       ];
     }
+    if (historical && redis()) snapshots.push([name, prs]);
+    return prs;
   }
   const start = Date.parse(date(Date.parse(after))),
     end = Date.parse(date(Date.parse(before) - 1));
@@ -103,14 +116,19 @@ export const mergedPRs = cache(async (after: string, before: string) => {
   for (let day = start; day <= end; day += 7 * DAY) weeks.push(day);
   const prs = (
     await mapConcurrent(weeks, 4, (day) => range(day, Math.min(day + 6 * DAY, end)))
-  ).flat().filter(
+  ).flat();
+  await mapConcurrent(prs, 4, (pr) => completeReviews(pr, false));
+  await Promise.all(snapshots.map(([name, data]) =>
+    writeSnapshot(name, data, 3600).catch(() =>
+      console.warn("Historical PR cache write unavailable"),
+    ),
+  ));
+  return prs.filter(
     (pr) =>
       !!pr.mergedAt &&
       Date.parse(pr.mergedAt) >= Date.parse(after) &&
       Date.parse(pr.mergedAt) < Date.parse(before),
   );
-  await mapConcurrent(prs, 4, (pr) => completeReviews(pr, false));
-  return prs;
 });
 export const merged = (w: Window) => mergedPRs(w.after, w.before);
 export function creditedAuthors(pr: PullRequest) {
