@@ -83,7 +83,7 @@ class GetProjectsTest(unittest.TestCase):
         self.assertEqual(projects[1]["members"], ["Nathan Lewis"])
         self.assertIn("lastUpdate", queries[0])
         self.assertIn("priorityLabel", queries[0])
-        self.assertIn("inverseRelations", queries[0])
+        self.assertIn("inverseRelations(first: 5)", queries[0])
         self.assertIn("projectMilestone", queries[0])
         self.assertEqual(projects[1]["priorityLabel"], "High")
 
@@ -122,6 +122,7 @@ class GetProjectsTest(unittest.TestCase):
                     else:
                         projects = project_module.get_projects()
                         self.assertEqual(projects[0]["inverseRelations"]["nodes"], [relation])
+                        self.assertIn("inverseRelations(first: 50", str(execute.call_args.args[0]))
                         self.assertEqual(
                             execute.call_args.kwargs["variable_values"],
                             {"id": "project-1", "after": cursor},

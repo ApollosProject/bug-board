@@ -100,7 +100,8 @@ def get_projects():
                   lead {
                     displayName
                   }
-                  inverseRelations(first: 50) {
+                  # Bound the nested page to stay below Linear's query complexity limit.
+                  inverseRelations(first: 5) {
                     nodes {
                       type
                       project { status { name type } completedAt }
