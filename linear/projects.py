@@ -100,6 +100,14 @@ def get_projects():
                   lead {
                     displayName
                   }
+                  inverseRelations(first: 50) {
+                    nodes {
+                      type
+                      project { status { name type } completedAt }
+                      projectMilestone { status }
+                    }
+                    pageInfo { hasNextPage endCursor }
+                  }
                   initiatives(first: 50) {
                     nodes {
                       id
@@ -133,5 +141,34 @@ def get_projects():
         after = page_info.get("endCursor")
         if not after:
             break
+    for project in projects:
+        relations = project.get("inverseRelations") or {}
+        page_info = relations.get("pageInfo") or {}
+        while page_info.get("hasNextPage"):
+            cursor = page_info.get("endCursor")
+            if not cursor:
+                raise ValueError("Incomplete Linear project dependency pagination")
+            data = _execute(
+                gql("""
+                query ProjectDependencies($id: String!, $after: String) {
+                  project(id: $id) {
+                    inverseRelations(first: 50, after: $after) {
+                      nodes {
+                        type
+                        project { status { name type } completedAt }
+                        projectMilestone { status }
+                      }
+                      pageInfo { hasNextPage endCursor }
+                    }
+                  }
+                }
+                """),
+                variable_values={"id": project["id"], "after": cursor},
+            )
+            page = data["project"]["inverseRelations"]
+            relations["nodes"].extend(page["nodes"])
+            page_info = page["pageInfo"]
+            if page_info.get("hasNextPage") and page_info.get("endCursor") == cursor:
+                raise ValueError("Incomplete Linear project dependency pagination")
     sorted_projects = sorted(projects, key=lambda project: project.get("name", ""))
     return _normalize_project_members(sorted_projects)

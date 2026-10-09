@@ -83,7 +83,49 @@ class GetProjectsTest(unittest.TestCase):
         self.assertEqual(projects[1]["members"], ["Nathan Lewis"])
         self.assertIn("lastUpdate", queries[0])
         self.assertIn("priorityLabel", queries[0])
+        self.assertIn("inverseRelations", queries[0])
+        self.assertIn("projectMilestone", queries[0])
         self.assertEqual(projects[1]["priorityLabel"], "High")
+
+    def test_get_projects_paginates_incoming_dependencies(self):
+        relation = {"type": "dependency", "projectMilestone": {"status": "next"}}
+        for cursor in [None, "relations-1", "relations-2"]:
+            with self.subTest(cursor=cursor):
+                project = {
+                    "id": "project-1",
+                    "name": "Exports",
+                    "inverseRelations": {
+                        "nodes": [],
+                        "pageInfo": {"hasNextPage": True, "endCursor": cursor},
+                    },
+                }
+                responses = [
+                    {"teams": {"nodes": [{"projects": {"nodes": [project]}}]}},
+                    {
+                        "project": {
+                            "inverseRelations": {
+                                "nodes": [relation],
+                                "pageInfo": {"hasNextPage": False, "endCursor": None},
+                            }
+                        }
+                    },
+                ]
+                if cursor == "relations-2":
+                    responses[1]["project"]["inverseRelations"]["pageInfo"] = {
+                        "hasNextPage": True,
+                        "endCursor": cursor,
+                    }
+                with patch.object(project_module, "_execute", side_effect=responses) as execute:
+                    if cursor != "relations-1":
+                        with self.assertRaisesRegex(ValueError, "dependency pagination"):
+                            project_module.get_projects()
+                    else:
+                        projects = project_module.get_projects()
+                        self.assertEqual(projects[0]["inverseRelations"]["nodes"], [relation])
+                        self.assertEqual(
+                            execute.call_args.kwargs["variable_values"],
+                            {"id": "project-1", "after": cursor},
+                        )
 
 
 class GetCompletedProjectIssueAssigneesTest(unittest.TestCase):
