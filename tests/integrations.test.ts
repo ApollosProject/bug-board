@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fetchIssues, projects } from "../lib/linear";
-import { mergedPRs } from "../lib/github";
+import { mergedPRs, openPRs } from "../lib/github";
 import { blameFile } from "../lib/regressions";
 import {
   mapConcurrent,
@@ -303,6 +303,76 @@ test("small merged-search review pages still retrieve every approval", async () 
     globalThis.fetch = fetch;
     if (token === undefined) delete process.env.GITHUB_TOKEN;
     else process.env.GITHUB_TOKEN = token;
+  }
+});
+test("review timelines reuse complete history across variants and invalidate on PR or event changes", async (t) => {
+  const names = ["GITHUB_TOKEN", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "KV_REST_API_URL", "KV_REST_API_TOKEN"];
+  const env = Object.fromEntries(names.map((name) => [name, process.env[name]])),
+    fetch = globalThis.fetch, records = new Map<string, string>();
+  let clock = Date.parse("2026-10-08T12:00:00Z"), updatedAt = "2026-10-07T12:00:00Z",
+    totalCount = 2, timelineCalls = 0, broken = false;
+  t.mock.method(Date, "now", () => clock);
+  try {
+    for (const name of names) delete process.env[name];
+    process.env.GITHUB_TOKEN = "fixture-key";
+    process.env.KV_REST_API_URL = "https://cache.example.test";
+    process.env.KV_REST_API_TOKEN = "fixture-cache";
+    globalThis.fetch = async (url, init) => {
+      const body = JSON.parse(String(init?.body));
+      if (String(url).startsWith("https://cache.example.test")) {
+        const single = typeof body[0] === "string";
+        const results = (single ? [body] : body).map(([command, key, value]: string[]) => {
+          if (command === "get") return { result: records.get(key) ?? null };
+          assert.equal(command, "set"); records.set(key, value); return { result: "OK" };
+        });
+        return Response.json(single ? results[0] : results);
+      }
+      if (body.query.includes("query Timeline(")) {
+        timelineCalls++;
+        const older = !!body.variables.before;
+        return Response.json({ data: { node: { timelineItems: {
+          nodes: [{ __typename: "ReadyForReviewEvent", createdAt: older ? "2026-09-01" : "2026-09-02" }],
+          pageInfo: { hasPreviousPage: !older || broken, startCursor: "newer" },
+        } } } });
+      }
+      assert.match(body.query, /timelineCount: timelineItems\(first: 1\) \{ totalCount \}/);
+      return Response.json({ data: { search: {
+        issueCount: 1, pageInfo: pageInfo(),
+        nodes: body.variables.query.startsWith("repo:apollosproject/apollos-platforms ") ? [{
+          id: "pr", updatedAt, timelineCount: { totalCount },
+          reviews: { nodes: [], pageInfo: pageInfo() },
+          reviewRequests: { nodes: [], pageInfo: pageInfo() },
+        }] : [],
+      } } });
+    };
+    const first = await openPRs(true), second = await openPRs(false);
+    assert.deepEqual(second, first);
+    assert.deepEqual(first[0].timelineItems?.nodes.map(n => n.createdAt), ["2026-09-01", "2026-09-02"]);
+    assert.equal(timelineCalls, 2);
+    totalCount++;
+    await openPRs(true);
+    assert.equal(timelineCalls, 4);
+    updatedAt = "2026-10-08T11:00:00Z";
+    await openPRs(false);
+    assert.equal(timelineCalls, 6);
+    clock += 1800000;
+    await openPRs(true);
+    assert.equal(timelineCalls, 6);
+    const saved = [...records];
+    broken = true; totalCount++;
+    await assert.rejects(openPRs(true), /Incomplete timeline/);
+    assert.deepEqual([...records], saved);
+    broken = false; clock += 1800001;
+    await openPRs(true);
+    assert.equal(timelineCalls, 10);
+    updatedAt = "";
+    await assert.rejects(openPRs(false), /Missing GitHub timeline version/);
+    delete process.env.GITHUB_TOKEN;
+    await assert.rejects(openPRs(true), /not configured/);
+  } finally {
+    globalThis.fetch = fetch;
+    for (const [name, value] of Object.entries(env))
+      if (value === undefined) delete process.env[name]; else process.env[name] = value;
   }
 });
 test("blame loads metadata only for removed-line commits and exposes failures for durable retry", async () => {

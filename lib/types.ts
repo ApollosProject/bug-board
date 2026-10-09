@@ -66,6 +66,8 @@ export type PullRequest = {
   url: string;
   createdAt: string;
   mergedAt?: string;
+  updatedAt?: string;
+  timelineCount?: { totalCount: number };
   author: Identity | null;
   reviews: Connection<Review>;
   baseRefName: string;

@@ -161,7 +161,8 @@ export function prCounts(prs: PullRequest[], username: string) {
 const timelineFields =
   "nodes { __typename ... on ReadyForReviewEvent { createdAt } ... on ReviewRequestedEvent { createdAt requestedReviewer { ... on User { login } } } } pageInfo { hasPreviousPage startCursor }";
 export const openPRs = cache(async (approved: boolean) => {
-  const fields = `id number title url createdAt baseRefName headRefName additions deletions mergeable reviewDecision author { login }
+  const fields = `id number title url createdAt updatedAt baseRefName headRefName additions deletions mergeable reviewDecision author { login }
+ timelineCount: timelineItems(first: 1) { totalCount }
  repository { nameWithOwner defaultBranchRef { name } } statusCheckRollup { state }
  reviews: latestOpinionatedReviews(first: 100) { ${reviewFields} }
  reviewRequests(first: 100) { nodes { requestedReviewer { ... on User { login } } } pageInfo { hasNextPage } }`;
@@ -170,11 +171,26 @@ export const openPRs = cache(async (approved: boolean) => {
       search(
         `repo:${repo} is:pr is:open draft:false${approved ? "" : " -review:approved"}`,
         fields,
-        50,
+        // Three nested connections round up to two GitHub points at 50 PRs.
+        49,
       ),
     )
   ).flat();
-  // GitHub silently truncates timelines when more than ten are queried together.
+  type Timeline = NonNullable<PullRequest["timelineItems"]> & {
+    pageInfo: { hasPreviousPage: boolean; startCursor: string };
+  };
+  type CachedTimeline = {
+    updatedAt: string;
+    totalCount: number;
+    at: number;
+    nodes: Timeline["nodes"];
+  };
+  const now = Date.now(),
+    timelines = Object.fromEntries(
+      Object.entries(
+        (await readSnapshot<Record<string, CachedTimeline>>("review-timelines", 3600)) || {},
+      ).filter(([, value]) => now - value.at < 3600000),
+    );
   await mapConcurrent(prs, 8, async (pr) => {
     await completeReviews(pr, true);
     if (
@@ -185,9 +201,15 @@ export const openPRs = cache(async (approved: boolean) => {
       ).pageInfo?.hasNextPage
     )
       throw new Error("Too many requested reviewers; queue incomplete");
-    type Timeline = NonNullable<PullRequest["timelineItems"]> & {
-      pageInfo: { hasPreviousPage: boolean; startCursor: string };
-    };
+    const totalCount = pr.timelineCount?.totalCount;
+    if (!pr.updatedAt || typeof totalCount !== "number" || !Number.isSafeInteger(totalCount) || totalCount < 0)
+      throw new Error("Missing GitHub timeline version");
+    const cached = timelines[pr.id];
+    if (cached?.updatedAt === pr.updatedAt && cached.totalCount === totalCount) {
+      pr.timelineItems = { nodes: cached.nodes };
+      return;
+    }
+    // Fetch timelines individually: batched queries can silently omit events.
     const nodes: Timeline["nodes"] = [];
     let before: string | null = null;
     while (true) {
@@ -206,7 +228,12 @@ export const openPRs = cache(async (approved: boolean) => {
       before = page.startCursor;
     }
     pr.timelineItems = { nodes };
+    timelines[pr.id] = { updatedAt: pr.updatedAt, totalCount, at: now, nodes };
   });
+  if (redis())
+    await writeSnapshot("review-timelines", timelines, 3600).catch(() =>
+      console.warn("Review timeline cache write unavailable"),
+    );
   return prs;
 });
 export const stableTagPattern = /^v\d{4}\.\d{2}\.\d{2}\.\d{2}$/;
