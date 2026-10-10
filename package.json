@@ -16,7 +16,7 @@
   "dependencies": {
     "@google-cloud/bigquery": "^9.1.0",
     "@upstash/redis": "^1.39.0",
-    "google-auth-library": "^11.1.0",
+    "google-auth-library": "^11.2.0",
     "jose": "^6.2.12",
     "next": "^16.4.0",
     "node-ical": "^0.27.3",
