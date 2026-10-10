@@ -193,6 +193,23 @@ def is_completed_project(project: dict[str, Any]) -> bool:
     return bool(project.get("completedAt")) or status_name in COMPLETED_PROJECT_STATUS_NAMES
 
 
+def is_blocked_project(project: dict[str, Any]) -> bool:
+    for relation in (project.get("inverseRelations") or {}).get("nodes", []):
+        if relation.get("type") != "dependency":
+            continue
+        milestone = relation.get("projectMilestone")
+        prerequisite = relation.get("project") or {}
+        if milestone:
+            if milestone.get("status") != "done":
+                return True
+        elif not (
+            is_completed_project(prerequisite)
+            or (prerequisite.get("status") or {}).get("type") == "completed"
+        ):
+            return True
+    return False
+
+
 def is_inactive_project(project: dict[str, Any]) -> bool:
     return bool(project.get("completedAt")) or (
         get_project_status_name(project) in INACTIVE_PROJECT_STATUS_NAMES
@@ -1474,6 +1491,7 @@ def _build_team_context(_cache_epoch: int) -> dict:
             for project in cycle_projects
             if get_project_status_name(project) == "ready"
             and not (project.get("lead") or {}).get("displayName")
+            and not is_blocked_project(project)
         ],
         key=lambda project: project.get("name") or "",
     )

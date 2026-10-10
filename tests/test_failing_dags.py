@@ -800,6 +800,23 @@ class ProjectStatusClassificationTest(unittest.TestCase):
         self.assertTrue(app_module.is_completed_project(project))
         self.assertFalse(app_module.is_incomplete_project(project))
 
+    def test_project_blockers_require_completed_prerequisites(self):
+        for relation, blocked in [
+            ({"type": "related", "project": {"status": {"type": "started"}}}, False),
+            ({"type": "dependency", "project": {"status": {"type": "started"}}}, True),
+            ({"type": "dependency", "project": {"status": {"type": "completed"}}}, False),
+            ({"type": "dependency", "project": {"status": {"name": "Released"}}}, False),
+            ({"type": "dependency", "project": {"status": {"name": "Incomplete"}}}, True),
+            ({"type": "dependency", "projectMilestone": {"status": "next"}}, True),
+            ({"type": "dependency", "projectMilestone": {"status": "done"}}, False),
+        ]:
+            with self.subTest(relation=relation):
+                self.assertEqual(
+                    app_module.is_blocked_project({"inverseRelations": {"nodes": [relation]}}),
+                    blocked,
+                )
+        self.assertFalse(app_module.is_blocked_project({"inverseRelations": {"nodes": []}}))
+
 
 class TeamContextProjectFilteringTest(unittest.TestCase):
     def setUp(self):
@@ -884,11 +901,19 @@ class TeamContextProjectFilteringTest(unittest.TestCase):
             "members": ["shahbano", "vincent"],
         }
 
+        blocked_project = {
+            **ready_project,
+            "id": "blocked",
+            "name": "Blocked exports",
+            "inverseRelations": {
+                "nodes": [{"type": "dependency", "projectMilestone": {"status": "next"}}]
+            },
+        }
         with patch.object(app_module, "load_config", return_value=config):
             with patch.object(
                 app_module,
                 "get_projects",
-                return_value=[ready_project, led_ready_project],
+                return_value=[ready_project, led_ready_project, blocked_project],
             ):
                 context = app_module._build_team_context(1)
 
