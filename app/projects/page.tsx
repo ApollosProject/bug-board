@@ -2,7 +2,7 @@ import { Suspense, type CSSProperties } from "react";
 import Link from "next/link";
 import { Heading, Loading, Unavailable } from "@/components/dashboard";
 import { engineers, personName, slugFor, normalize } from "@/lib/config";
-import { inactive, done } from "@/lib/metrics";
+import { inactive, done, blocked } from "@/lib/metrics";
 import { projectDashboard } from "@/lib/reports";
 import { ptoCalendar } from "@/lib/pto";
 import { readSnapshot } from "@/lib/cache";
@@ -28,7 +28,7 @@ export async function Timeline() {
     start = today - ((new Date(today).getUTCDay() + 6) % 7) * DAY,
     end = start + 42 * DAY;
   const ready = projects.filter(
-    (p) => p.status.name.toLowerCase() === "ready" && !p.lead?.displayName,
+    (p) => p.status.name.trim().toLowerCase() === "ready" && !p.lead?.displayName && !blocked(p),
   );
   const label = (value: number) =>
     new Date(value).toLocaleDateString("en-US", {

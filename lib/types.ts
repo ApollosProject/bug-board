@@ -50,6 +50,13 @@ export type Project = {
   startDate?: string;
   targetDate?: string;
   lastUpdate?: { createdAt: string };
+  inverseRelations?: {
+    nodes: {
+      type: string;
+      project: Pick<Project, "status" | "completedAt"> | null;
+      projectMilestone: { status: string } | null;
+    }[];
+  };
   lead: Identity | null;
   members: { nodes: Identity[] };
   initiatives: { nodes: { id: string; name: string }[] };

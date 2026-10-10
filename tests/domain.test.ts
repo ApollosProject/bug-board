@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { timeWindow } from "../lib/window";
 import {
   assignmentDays,
+  blocked,
   comparison,
   csv,
   done,
@@ -106,6 +107,26 @@ const app: AppRow = {
   native_version: "1.0",
   app_version: "1.0",
 };
+test("Ready projects honor prerequisite projects and milestone dependencies", () => {
+  const dependency = (prerequisite: NonNullable<Project["inverseRelations"]>["nodes"][number]["project"], milestone: string | null = null, type = "dependency") =>
+    project({ inverseRelations: { nodes: [{ type, project: prerequisite, projectMilestone: milestone === null ? null : { status: milestone } }] } });
+  const active = { status: { name: "In Progress", type: "started" } },
+    completed = { status: { name: "Completed", type: "completed" } };
+  assert.equal(blocked(project()), false);
+  assert.equal(blocked(dependency(active)), true);
+  assert.equal(blocked(dependency(null)), true);
+  assert.equal(blocked(dependency(active, null, "related")), false);
+  assert.equal(blocked(dependency(completed)), false);
+  assert.equal(blocked(dependency({ status: { name: "Released", type: "started" } })), false);
+  assert.equal(blocked(dependency({ status: { name: "Custom", type: "completed" } })), false);
+  assert.equal(blocked(dependency({ status: { name: "Canceled", type: "canceled" }, completedAt: "2026-09-01" })), false);
+  assert.equal(blocked(dependency({ status: { name: "Canceled", type: "canceled" } })), true);
+  assert.equal(blocked(dependency(active, "done")), false);
+  assert.equal(blocked(dependency(completed, "next")), true);
+  const mixed = dependency(completed);
+  mixed.inverseRelations!.nodes.push(...dependency(active).inverseRelations!.nodes);
+  assert.equal(blocked(mixed), true);
+});
 test("windows use inclusive calendar days and UTC exclusive upper bounds", () => {
   const w = timeWindow({ start: "2026-09-07", end: "2026-09-01" }, now);
   assert.equal(w.days, 7);

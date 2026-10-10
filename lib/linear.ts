@@ -110,21 +110,42 @@ export async function issuesByNumber(numbers: number[]) {
   return new Map(issues.map((issue) => [issue.number, issue]));
 }
 export const projects = cache(async (): Promise<Project[]> => {
+  type Relations = NonNullable<Project["inverseRelations"]> & {
+    pageInfo: Connection<never>["pageInfo"];
+  };
+  type ProjectPage = Connection<Project & { inverseRelations?: Relations }>;
+  const relationFields = "type project { status { name type } completedAt } projectMilestone { status }";
   const query = `query Projects($key: String!, $cursor: String) { teams(first: 1, filter: { key: { eq: $key } }) { nodes { projects(first: 50, after: $cursor) {
-    nodes { id name url health priorityLabel status { name type } completedAt startDate targetDate lastUpdate { createdAt } lead { displayName } members(first: 50) { nodes { displayName } } initiatives(first: 50) { nodes { id name } } }
+    nodes { id name url health priorityLabel status { name type } completedAt startDate targetDate lastUpdate { createdAt } lead { displayName } members(first: 50) { nodes { displayName } } initiatives(first: 50) { nodes { id name } }
+      inverseRelations(first: 5) { nodes { ${relationFields} } pageInfo { hasNextPage endCursor } } }
     pageInfo { hasNextPage endCursor }
   } } } }`;
   const result: Project[] = [];
   let cursor: string | null = null;
   do {
-    const data: { teams: { nodes: { projects: Connection<Project> }[] } } =
-      await linear<{ teams: { nodes: { projects: Connection<Project> }[] } }>(
+    const data: { teams: { nodes: { projects: ProjectPage }[] } } =
+      await linear<{ teams: { nodes: { projects: ProjectPage }[] } }>(
         query,
         { key: config.linear_team_key, cursor },
       );
     const page = data.teams.nodes[0]?.projects;
     if (!page) return result;
-    result.push(...page.nodes);
+    for (const project of page.nodes) {
+      let relations = project.inverseRelations;
+      while (relations?.pageInfo.hasNextPage) {
+        const after = relations.pageInfo.endCursor;
+        if (!after) throw new Error("Incomplete Linear project dependency pagination");
+        const { project: next } = await linear<{ project: { inverseRelations: Relations } }>(
+          `query ProjectDependencies($id: String!, $after: String!) { project(id: $id) { inverseRelations(first: 50, after: $after) { nodes { ${relationFields} } pageInfo { hasNextPage endCursor } } } }`,
+          { id: project.id, after },
+        );
+        relations = next.inverseRelations;
+        if (relations.pageInfo.hasNextPage && (!relations.pageInfo.endCursor || relations.pageInfo.endCursor === after))
+          throw new Error("Incomplete Linear project dependency pagination");
+        project.inverseRelations?.nodes.push(...relations.nodes);
+      }
+      result.push(project);
+    }
     if (!page.pageInfo.hasNextPage) break;
     if (!page.pageInfo.endCursor || cursor === page.pageInfo.endCursor)
       throw new Error("Incomplete Linear project pagination");

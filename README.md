@@ -49,12 +49,14 @@ Notifications preserve the existing schedule: priority bugs at 12:00 UTC, stale 
 
 Refresh locks prevent overlapping executions. Slack digests have a per-day delivery claim: since Slack webhooks have no idempotency key, an ambiguous network failure retains the claim to prevent duplicate posts. Check Slack delivery and Workflow logs before an operator retries it; do not blindly clear the claim.
 
+Ready lists include only unassigned projects without unfinished incoming dependencies. A milestone dependency uses milestone status, not the parent project's completion. Dependency pages are complete before a project can appear in Ready.
+
 ### Slack handoff (separate operator approval required)
 
 Preview deployments never send notifications. The production delivery claims prevent duplicates between Vercel deployments, but not between Vercel and Heroku.
 
 1. Deploy the production dashboard without `SLACK_WEBHOOK_URL` and `MANAGER_SLACK_WEBHOOK_URL`.
-2. Verify the production dashboard, snapshots, and scheduled refreshes before the worker handoff.
+2. Verify the production dashboard, snapshots, and scheduled refreshes before the worker handoff. Budget this short verification overlap from the live GitHub quota, including cold fills. The sampled native/legacy busy-hour forecast exceeds the shared 5,000-point limit. Do not leave both regular refresh schedulers active. If headroom is insufficient, postpone cutover.
 3. Choose a handoff time between notification schedules. Record the last Heroku deliveries in each channel.
 4. Confirm that no Heroku notification is in flight. Stop the Heroku worker only after approval for the coordinated handoff.
 5. Configure the current Slack webhooks on Vercel. Deploy these environment changes before the next notification schedule.

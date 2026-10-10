@@ -63,6 +63,42 @@ test("Linear issues and projects paginate without silently truncating results", 
     else process.env.LINEAR_API_KEY = token;
   }
 });
+test("Linear paginates incoming project dependencies and rejects missing or repeated cursors", async () => {
+  const fetch = globalThis.fetch, token = process.env.LINEAR_API_KEY;
+  process.env.LINEAR_API_KEY = "fixture-key";
+  try {
+    for (const cursor of [null, "next", "repeated"]) {
+      const calls: unknown[] = [];
+      globalThis.fetch = async (_url, init) => {
+        const body = JSON.parse(String(init?.body));
+        calls.push(body.variables);
+        if (body.query.includes("query ProjectDependencies")) {
+          assert.match(body.query, /inverseRelations\(first: 50/);
+          return Response.json({ data: { project: { inverseRelations: {
+            nodes: [{ type: "dependency", project: null, projectMilestone: { status: "next" } }],
+            pageInfo: pageInfo(cursor === "repeated", cursor === "repeated" ? cursor : null),
+          } } } });
+        }
+        assert.match(body.query, /inverseRelations\(first: 5\)/);
+        assert.match(body.query, /projectMilestone \{ status \}/);
+        return Response.json({ data: { teams: { nodes: [{ projects: {
+          nodes: [{ id: "project", name: "Exports", inverseRelations: {
+            nodes: [], pageInfo: pageInfo(true, cursor),
+          } }], pageInfo: pageInfo(),
+        } }] } } });
+      };
+      if (cursor !== "next") await assert.rejects(projects(), /dependency pagination/);
+      else {
+        const [item] = await projects();
+        assert.equal(item.inverseRelations?.nodes.length, 1);
+        assert.deepEqual(calls[1], { id: "project", after: "next" });
+      }
+    }
+  } finally {
+    globalThis.fetch = fetch;
+    if (token === undefined) delete process.env.LINEAR_API_KEY; else process.env.LINEAR_API_KEY = token;
+  }
+});
 test("Linear keeps every assignment page and only report-relevant attachment metadata", async () => {
   const fetch = globalThis.fetch,
     token = process.env.LINEAR_API_KEY;

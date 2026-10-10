@@ -61,15 +61,22 @@ export const isResolutionWork = (issue: Issue) =>
   issue.labels.nodes.some((label) =>
     ["Bug", "Feature Request"].includes(label.name),
   );
-export const statusName = (p: Project) => p.status.name.trim().toLowerCase();
+export const statusName = (p: Pick<Project, "status">) => p.status.name.trim().toLowerCase();
 export const inactive = (p: Project) =>
   !!p.completedAt ||
   ["completed", "incomplete", "canceled", "cancelled", "released"].includes(
     statusName(p),
   );
-export const done = (p: Project) =>
+export const done = (p: Pick<Project, "status" | "completedAt">) =>
   !["incomplete", "canceled", "cancelled"].includes(statusName(p)) &&
   (!!p.completedAt || ["completed", "released"].includes(statusName(p)));
+export const blocked = (p: Project) =>
+  (p.inverseRelations?.nodes || []).some(({ type, project, projectMilestone }) =>
+    type === "dependency" &&
+    (projectMilestone
+      ? projectMilestone.status !== "done"
+      : !(project && (project.completedAt || project.status.type === "completed" || done(project)))),
+  );
 export function plannedWeeks(p: Project) {
   const a = Date.parse(p.startDate || p.targetDate || ""),
     b = Date.parse(p.targetDate || p.startDate || "");
