@@ -205,7 +205,6 @@ async function notifyStep(name: string, day: string) {
   "use step";
   return notify(name, day);
 }
-notifyStep.maxRetries = 0;
 export async function refresh(job: Job, token: string) {
   "use workflow";
   try {
