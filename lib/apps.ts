@@ -414,6 +414,8 @@ export async function buildApps(
   const annotated = (await annotateApps(selected, source)).sort(
     (a, b) =>
       Number(b.is_outdated) - Number(a.is_outdated) ||
+      Number(b.version_status_label === "Unverified") -
+        Number(a.version_status_label === "Unverified") ||
       a.apollos_platform.localeCompare(b.apollos_platform) ||
       a.church.localeCompare(b.church),
   );

@@ -13,6 +13,7 @@ import {
   personMetrics,
   plannedWeeks,
   projectScoringWeeks,
+  slaText,
   supportSlugs,
   teamRows,
 } from "../lib/metrics";
@@ -21,6 +22,7 @@ import { creditedAuthors } from "../lib/github";
 import { fleetStats } from "../lib/fleet";
 import {
   appIdentity,
+  buildApps,
   deployTarget,
   revisionsMatch,
   selectMobile,
@@ -107,6 +109,52 @@ const app: AppRow = {
   native_version: "1.0",
   app_version: "1.0",
 };
+test("SLA countdowns retain hours below one day, including overdue and boundary cases", () => {
+  for (const [hours, expected] of [
+    [0, "0h"],
+    [0.01, "1h"],
+    [7.5, "8h"],
+    [23.99, "24h"],
+    [24, "1d"],
+    [49, "2d"],
+    [-0.01, "1h overdue"],
+    [-7.5, "8h overdue"],
+    [-23.99, "24h overdue"],
+    [-24, "1d overdue"],
+  ] as const)
+    assert.equal(
+      slaText(issue({ slaBreachesAt: new Date(now + hours * 3_600_000).toISOString() }), now),
+      expected,
+    );
+  assert.equal(slaText(issue(), now), null);
+  assert.equal(slaText(issue({ slaBreachesAt: "invalid" }), now), null);
+});
+test("app evidence sorts behind, unverified, then current before platform and church", async () => {
+  const rows = ["ios", "android"].flatMap((platform) =>
+    ["current", "gap", "behind"].map((status) => ({
+      ...app,
+      apollos_platform: platform,
+      church: status === "current" ? "A current" : `Z ${status}`,
+      bundle_id: `com.demo.${platform}.${status}`,
+      apollos_version: status === "behind" ? "101" : "102",
+    })),
+  );
+  const releases = new Map(
+    rows.filter((r) => !r.bundle_id.endsWith("gap")).map((r) => [
+      `${r.apollos_platform}:${r.bundle_id}`,
+      { builds: [{ native_build: "20", native_version: "1.0" }] },
+    ]),
+  );
+  const result = await buildApps(rows, { mobile: "102", tv: "102", roku: null, revisions: {} }, releases);
+  assert.deepEqual(result.rows.map((r) => [r.version_status_label, r.apollos_platform]), [
+    ["Behind release", "android"],
+    ["Behind release", "ios"],
+    ["Unverified", "android"],
+    ["Unverified", "ios"],
+    ["At release", "android"],
+    ["At release", "ios"],
+  ]);
+});
 test("Ready projects honor prerequisite projects and milestone dependencies", () => {
   const dependency = (prerequisite: NonNullable<Project["inverseRelations"]>["nodes"][number]["project"], milestone: string | null = null, type = "dependency") =>
     project({ inverseRelations: { nodes: [{ type, project: prerequisite, projectMilestone: milestone === null ? null : { status: milestone } }] } });

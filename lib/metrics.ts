@@ -295,8 +295,12 @@ export function supportSlugs(projects: Project[], now = Date.now()) {
 export function slaText(issue: Issue, now = Date.now()) {
   const breach = Date.parse(issue.slaBreachesAt || "");
   if (!Number.isFinite(breach)) return null;
-  const days = Math.floor(Math.abs(breach - now) / DAY);
-  return breach >= now ? `${days}d` : `${days}d overdue`;
+  const delta = Math.abs(breach - now);
+  const duration =
+    delta < DAY
+      ? `${Math.ceil(delta / (DAY / 24))}h`
+      : `${Math.floor(delta / DAY)}d`;
+  return breach >= now ? duration : `${duration} overdue`;
 }
 export function platformFor(issue: Issue) {
   return issue.labels.nodes.find(
