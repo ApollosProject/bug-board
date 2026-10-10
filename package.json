@@ -1,0 +1,45 @@
+{
+  "name": "bug-board",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=24.8.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "check": "tsc --noEmit && eslint .",
+    "test": "tsx --test tests/*.test.ts",
+    "e2e": "e2e run"
+  },
+  "dependencies": {
+    "@google-cloud/bigquery": "^9.1.0",
+    "@upstash/redis": "^1.39.0",
+    "google-auth-library": "^11.1.0",
+    "jose": "^6.2.12",
+    "next": "^16.3.8",
+    "node-ical": "^0.27.3",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "workflow": "^5.0.1",
+    "yaml": "^2.9.1"
+  },
+  "overrides": {
+    "devalue": "^5.9.4",
+    "nanoid": "^5.1.16"
+  },
+  "devDependencies": {
+    "@e2e-dev/github": "^0.4.0",
+    "@e2e-dev/web": "^0.13.0",
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "ai": "^7.0.128",
+    "e2e": "^0.18.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.8",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3"
+  }
+}
