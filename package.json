@@ -37,7 +37,7 @@
     "@types/react-dom": "^19.3.0",
     "ai": "^7.0.131",
     "e2e": "^0.18.0",
-    "eslint": "^9.39.5",
+    "eslint": "^10.12.0",
     "eslint-config-next": "^16.4.0",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3"
