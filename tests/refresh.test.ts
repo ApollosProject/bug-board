@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { GET, maxDuration } from "../app/api/cron/[job]/route";
-import { evaluateFleet, fleetHeartbeat } from "../lib/fleet";
+import { evaluateFleet, fleetHeartbeat, fleetInventory } from "../lib/fleet";
 
 const request = (job: string, authorization = "Bearer fixture-cron") =>
   GET(new Request(`http://localhost/api/cron/${job}`, { headers: { authorization } }), {
@@ -247,10 +247,14 @@ test("fleet retries failed lookups once and stops at the Cron deadline", async (
       await new Promise((resolve) => setTimeout(resolve, 600));
       throw new TypeError("fetch failed");
     };
-    const unchecked = await evaluateFleet(ids, 1, 31_000);
+    const unchecked = await evaluateFleet(ids, 1, Date.now() + 31_000);
     assert.equal(calls, 2);
     assert.equal(unchecked.status, "unknown");
     assert.equal(unchecked.failed_fetches, 10);
+    // Inventory shares the deadline: with no room left, it requests nothing.
+    calls = 0;
+    await assert.rejects(fleetInventory(Date.now() + 1_000), /Fleet deadline/);
+    assert.equal(calls, 0);
   } finally {
     globalThis.fetch = original;
     for (const [key, value] of [["AIRFLOW_API_BASE_URL", previous[0]], ["AIRFLOW_API_TOKEN", previous[1]]] as const)

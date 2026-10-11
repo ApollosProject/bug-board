@@ -22,14 +22,19 @@ async function airflow<T>(path: string) {
     "Airflow",
   );
 }
-// Each Airflow request may wait for its full 30-second timeout.
-const REQUEST_TIMEOUT = 30_000;
+// One absolute deadline keeps every Airflow request (inventory pages, run pages,
+// retries) inside the 300-second Cron limit, so an unknown snapshot and heartbeat
+// still get written. A request starts only if its 30-second timeout ends in time.
+export const fleetDeadline = () => Date.now() + 230_000;
+function beforeDeadline(deadline: number) {
+  if (Date.now() + 30_000 > deadline)
+    throw Object.assign(new Error("Fleet deadline"), { name: "Deadline" });
+}
 async function lastRun(id: string, deadline: number): Promise<Evaluation> {
   let latest = "",
     hasRuns = false;
   for (let offset = 0; ; offset += 10) {
-    if (Date.now() + REQUEST_TIMEOUT > deadline)
-      throw Object.assign(new Error("Fleet deadline"), { name: "Deadline" });
+    beforeDeadline(deadline);
     const payload = await airflow<{
       dag_runs?: Run[];
       dagRuns?: Run[];
@@ -101,10 +106,11 @@ export function fleetStats(
     top_failed_dags: failed.slice(0, 10),
   };
 }
-export async function fleetInventory() {
+export async function fleetInventory(deadline = fleetDeadline()) {
   const ids = new Set<string>();
   let offset = 0;
   while (true) {
+    beforeDeadline(deadline);
     const payload = await airflow<{
       dags: { dag_id: string; is_paused: boolean }[];
       total_entries?: number;
@@ -136,12 +142,9 @@ const reason = (error: unknown) =>
 export async function evaluateFleet(
   ids: string[],
   concurrency = 30,
-  budget = 230_000,
+  deadline = fleetDeadline(),
 ) {
-  // An absolute deadline keeps every request (including pages and retries) inside
-  // the 300-second Cron limit, so an unknown snapshot and heartbeat still get written.
-  const deadline = Date.now() + budget,
-    errors: Record<string, number> = {};
+  const errors: Record<string, number> = {};
   const attempt = (id: string) =>
     lastRun(id, deadline).catch((error) => {
       errors[reason(error)] = (errors[reason(error)] || 0) + 1;
