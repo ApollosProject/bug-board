@@ -83,15 +83,11 @@ td small,
 .numeric :is(th, td):not(:first-child) {
   font-family: var(--mono);
 }
-/* Listed explicitly (not :where) so this beats Pico's summary and button focus rules. */
-a:focus-visible,
-button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-[tabindex]:focus-visible,
-details summary:focus-visible:not([role]) {
+/* :root raises this above Pico's focus rules, so the outline replaces Pico's glow. */
+:root :is(a, button, input, select, [tabindex], details summary):focus-visible {
   outline: 2px solid var(--pico-primary);
   outline-offset: 2px;
+  box-shadow: none;
 }
 .container {
   max-width: 1240px;
@@ -196,7 +192,7 @@ form {
 :is(.window-controls, .filter-form) :is(input:not([type="checkbox"]), select) {
   padding-block: 0;
 }
-:is(.window-controls, .filter-form, .toolbar) button {
+:is(.window-controls, .filter-form) button {
   display: inline-flex;
   align-items: center;
   padding-block: 0;
@@ -363,7 +359,7 @@ td {
   padding: 0.7rem 0.9rem;
 }
 /* Compact in-table buttons, so their labels share the row's text line. */
-td :is(button, [type="button"]) {
+td > :is(button, [type="button"]) {
   padding: 0.1rem 0.65rem;
   font-size: 0.8rem;
 }
