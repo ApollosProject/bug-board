@@ -48,7 +48,8 @@ const pipelines = [
     branch: "master",
     stages: [
       ["Weekly pre-release", "pre-release.yml"],
-      ["Weekly release", "release.yml", "live"],
+      // A release job is not store evidence; the Apps page verifies what users run.
+      ["Weekly release", "release.yml"],
       ["Deploy apps", "deploy-apps.yml"],
     ],
   },
@@ -98,14 +99,23 @@ export type Pipeline = {
   error?: boolean;
 };
 const repoPath = (repo: string) => `/repos/ApollosProject/${repo}`;
-export function summarize(runs: Run[], now = Date.now()) {
+// Latest run, last success (possibly older), and GitHub's exact count of failed
+// runs in the last seven days: three single-row requests.
+export async function stage(repo: string, workflow: string, now = Date.now()) {
+  const runs = (query: string) =>
+    githubRest<{ total_count: number; workflow_runs: Run[] }>(
+      `${repoPath(repo)}/actions/workflows/${workflow}/runs?exclude_pull_requests=true&per_page=1${query}`,
+    );
+  const since = new Date(now - 7 * DAY).toISOString().slice(0, 10);
+  const [latest, success, failed] = await Promise.all([
+    runs(""),
+    runs("&status=success"),
+    runs(`&status=failure&created=>=${since}`),
+  ]);
   return {
-    latest: runs[0] || null,
-    success: runs.find((r) => r.conclusion === "success") || null,
-    failures: runs.filter(
-      (r) =>
-        r.conclusion === "failure" && now - Date.parse(r.created_at) < 7 * DAY,
-    ).length,
+    latest: latest.workflow_runs[0] || null,
+    success: success.workflow_runs[0] || null,
+    failures: failed.total_count,
   };
 }
 async function pipeline(p: (typeof pipelines)[number]): Promise<Pipeline> {
@@ -117,13 +127,7 @@ async function pipeline(p: (typeof pipelines)[number]): Promise<Pipeline> {
       async ([label, workflow, live]) => ({
         label,
         live: live === "live",
-        ...summarize(
-          (
-            await githubRest<{ workflow_runs: Run[] }>(
-              `${repoPath(p.repo)}/actions/workflows/${workflow}/runs?per_page=20&exclude_pull_requests=true`,
-            )
-          ).workflow_runs,
-        ),
+        ...(await stage(p.repo, workflow)),
       }),
     );
     const live = stages.find((s) => s.live)?.success;

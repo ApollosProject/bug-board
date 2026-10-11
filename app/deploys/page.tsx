@@ -44,6 +44,12 @@ export default async function Deploys() {
               />
             ) : (
               <>
+                {!p.stages.some((s) => s.live) && (
+                  <p className="muted">
+                    Job status only: published store builds are verified on{" "}
+                    <a href="/apps">Apps</a>.
+                  </p>
+                )}
                 {p.waiting && (
                   <p className="muted">
                     {p.waiting.count ? (

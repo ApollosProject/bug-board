@@ -20,7 +20,7 @@ import {
 import { classify, reviewRows, ticketNumber } from "../lib/reviews";
 import { creditedAuthors } from "../lib/github";
 import { fleetStats } from "../lib/fleet";
-import { summarize } from "../lib/deploys";
+import { stage } from "../lib/deploys";
 import {
   appIdentity,
   buildApps,
@@ -671,22 +671,32 @@ test("notification schedule preserves New York time through DST", () => {
   );
 });
 
-test("deploy stages report the latest run, last success, and failures this week", () => {
-  const run = (conclusion: string | null, daysAgo: number, sha: string) => ({
-    head_sha: sha,
-    head_branch: "main",
-    status: conclusion ? "completed" : "in_progress",
-    conclusion,
-    created_at: new Date(now - daysAgo * 86_400_000).toISOString(),
-    html_url: `https://github.com/run/${sha}`,
-    display_title: sha,
-  });
-  const s = summarize(
-    [run(null, 0, "e"), run("failure", 1, "d"), run("success", 2, "c"), run("failure", 3, "b"), run("failure", 9, "a")],
-    now,
-  );
-  assert.equal(s.latest?.head_sha, "e");
-  assert.equal(s.success?.head_sha, "c");
-  assert.equal(s.failures, 2);
-  assert.deepEqual(summarize([], now), { latest: null, success: null, failures: 0 });
+test("deploy stages ask GitHub for the latest run, last success, and exact failures this week", async () => {
+  const original = globalThis.fetch;
+  const token = process.env.GITHUB_TOKEN;
+  const urls: string[] = [];
+  const run = (sha: string) => ({ head_sha: sha, head_branch: "main", status: "completed", conclusion: sha === "ok" ? "success" : "failure", created_at: "2026-09-06T00:00:00Z", html_url: "", display_title: sha });
+  try {
+    process.env.GITHUB_TOKEN = "fixture";
+    globalThis.fetch = async (url) => {
+      const u = String(url);
+      urls.push(u.replace("https://api.github.com/repos/ApollosProject/repo/actions/workflows/deploy.yml/runs?exclude_pull_requests=true&per_page=1", ""));
+      return Response.json(
+        u.includes("status=success")
+          ? { total_count: 40, workflow_runs: [run("ok")] }
+          : u.includes("status=failure")
+            ? { total_count: 23, workflow_runs: [run("bad")] }
+            : { total_count: 300, workflow_runs: [run("newest")] },
+      );
+    };
+    const s = await stage("repo", "deploy.yml", now);
+    assert.deepEqual(urls.sort(), ["", "&status=failure&created=>=2026-08-31", "&status=success"]);
+    assert.equal(s.latest?.head_sha, "newest");
+    assert.equal(s.success?.head_sha, "ok");
+    assert.equal(s.failures, 23);
+  } finally {
+    globalThis.fetch = original;
+    if (token === undefined) delete process.env.GITHUB_TOKEN;
+    else process.env.GITHUB_TOKEN = token;
+  }
 });
