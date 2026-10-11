@@ -18,10 +18,13 @@ const pullRequest = (url: string) => {
   return number ? `${repo}#${number}` : url;
 };
 async function Report({ window }: { window: Window }) {
-  // Filter the refreshed 30-day snapshot: no extra Linear or GitHub requests.
-  const data = await reportFor(timeWindow({ days: "30" })).catch(() => null);
+  // Windows inside the last 30 days filter the refreshed snapshot (no extra
+  // requests); older windows load their own data, like the Team page.
+  const recent = timeWindow({ days: "30" });
+  const data = await reportFor(
+    window.after >= recent.after ? recent : window,
+  ).catch(() => null);
   if (!data) return <Unavailable name="Shipped work" />;
-  const outside = window.after < data.window.after;
   const rows = shipped(data, window);
   const markdown = rows
     .map(({ slug, prs, issues, updates }) =>
@@ -40,11 +43,6 @@ async function Report({ window }: { window: Window }) {
     .join("\n\n");
   return (
     <>
-      {outside && (
-        <p className="muted">
-          Only the last 30 days are available here; earlier dates are not shown.
-        </p>
-      )}
       <details>
         <summary>Copy as Markdown</summary>
         <textarea readOnly rows={12} value={markdown} aria-label="Markdown" />
@@ -115,7 +113,7 @@ export default async function Shipped({
         detail="What each engineer completed and merged, for standups and weekly updates."
       />
       <WindowControls window={window} presets={[7, 14, 30]} />
-      <Suspense fallback={<Loading />}>
+      <Suspense fallback={<Loading window={window} />}>
         <Report window={window} />
       </Suspense>
     </>
