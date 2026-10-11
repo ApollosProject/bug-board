@@ -62,7 +62,8 @@ export function linearHygiene(
       .filter(
         (p) =>
           p.teams?.nodes.length === 1 &&
-          ["backlog", "paused"].includes(p.status.type) &&
+          // By name: the backlog type also holds active shaping stages.
+          ["not now", "paused"].includes(p.status.name.trim().toLowerCase()) &&
           !p.completedAt &&
           (open.get(p.id) || 0) <= 1,
       )
