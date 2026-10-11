@@ -36,7 +36,7 @@ test("ordinary fleet Cron completes without a Workflow, preserves evidence, conc
   const previous = Object.fromEntries(Object.keys(env).map((k) => [k, process.env[k]]));
   const original = globalThis.fetch;
   const records = new Map<string, string>();
-  let peak = 0, active = 0, lease = 0, duplicateChecked = false;
+  let peak = 0, active = 0, lease = 0, duplicateChecked = false, resets = 0;
   try {
     Object.assign(process.env, env);
     globalThis.fetch = async (url, init) => {
@@ -82,6 +82,8 @@ test("ordinary fleet Cron completes without a Workflow, preserves evidence, conc
       await new Promise((resolve) => setImmediate(resolve));
       active--;
       const n = Number(target.pathname.split("/")[2].split("-")[1]);
+      // One transient connection reset: the retry pass must recover it.
+      if (n === 7 && !resets++) throw new TypeError("fetch failed");
       return Response.json({ dag_runs: [
         { state: "running", dag_run_id: `active-${n}` },
         { state: n < 25 ? "failed" : "success", dag_run_id: `terminal-${n}` },
@@ -91,9 +93,11 @@ test("ordinary fleet Cron completes without a Workflow, preserves evidence, conc
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { status: "refreshed", result: { status: "degraded", dags: 125 } });
     assert.equal(lease, maxDuration + 60);
-    assert.equal(peak, 120);
+    assert.equal(peak, 30);
+    assert.equal(resets, 2);
     const snapshot = JSON.parse([...records.entries()].find(([k]) => k.endsWith(":fleet"))![1]);
     assert.equal(snapshot.data.evaluated_dags, 125);
+    assert.equal(snapshot.data.failed_fetches, 0);
     assert.equal(snapshot.data.failed_runs, 25);
     assert.equal(snapshot.data.non_terminal_dags, 125);
     assert.equal(snapshot.data.failure_ratio, 0.2);

@@ -1,4 +1,4 @@
-import { mapConcurrent, requestJson } from "./http";
+import { mapConcurrent, requestJson, UpstreamError } from "./http";
 import type { Dag, Fleet } from "./types";
 import { readSnapshot, unknownCount } from "./cache";
 type Run = { state?: string; dag_run_id?: string };
@@ -66,18 +66,21 @@ export function fleetStats(
       ? [{ dag_id: id, state: "failed", dag_run_id: runs[i]!.id }]
       : [],
   );
-  const ratio = evaluated ? failed.length / evaluated : 0;
+  const ratio = evaluated ? failed.length / evaluated : 0,
+    unchecked = runs.filter((run) => !run).length;
   return {
+    // A known outage wins. Otherwise, health is only claimed when at least 90% of
+    // active DAGs could be checked; missing data is unknown, not healthy.
     status:
-      ids.length && runs.every((run) => !run)
-        ? "unknown"
-        : evaluated >= 20 && ratio >= 0.1
-          ? "degraded"
+      evaluated >= 20 && ratio >= 0.1
+        ? "degraded"
+        : ids.length && unchecked > ids.length * 0.1
+          ? "unknown"
           : "healthy",
     checked_at: new Date(now).toISOString(),
     active_dags_total: ids.length,
     evaluated_dags: evaluated,
-    failed_fetches: runs.filter((run) => !run).length,
+    failed_fetches: unchecked,
     dags_without_runs: runs.filter((run) => run && !run.hasRuns).length,
     non_terminal_dags: runs.filter(
       (run) => run?.hasRuns && !terminal(run.latest),
@@ -120,11 +123,33 @@ export async function fleetInventory() {
   }
   return [...ids].sort();
 }
+const reason = (error: unknown) =>
+  error instanceof UpstreamError
+    ? `HTTP ${error.status}`
+    : error instanceof Error
+      ? `${error.name}${(error.cause as { code?: string })?.code ? ` ${(error.cause as { code: string }).code}` : ""}`
+      : "unknown";
 export async function evaluateFleet(ids: string[], concurrency = 30) {
-  return fleetStats(
-    ids,
-    await mapConcurrent(ids, concurrency, (id) => lastRun(id).catch(() => null)),
-  );
+  const errors: Record<string, number> = {};
+  const attempt = (id: string) =>
+    lastRun(id).catch((error) => {
+      errors[reason(error)] = (errors[reason(error)] || 0) + 1;
+      return null;
+    });
+  const runs = await mapConcurrent(ids, concurrency, attempt);
+  // Lookups fail transiently (connection resets, slow responses); retry each once.
+  const retry = ids.flatMap((id, i) => (runs[i] ? [] : [i]));
+  if (retry.length) {
+    await mapConcurrent(retry, 10, async (i) => {
+      runs[i] = await attempt(ids[i]);
+    });
+    console.warn("Airflow DAG lookups failed", {
+      retried: retry.length,
+      unchecked: runs.filter((run) => !run).length,
+      reasons: errors,
+    });
+  }
+  return fleetStats(ids, runs);
 }
 export async function fleetHeartbeat(status: Fleet["status"]) {
   const count = await unknownCount(status !== "unknown");

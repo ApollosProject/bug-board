@@ -472,6 +472,18 @@ test("fleet failure thresholds use terminal runs while inventory shows latest st
     "healthy",
   );
   assert.equal(fleetStats(["a"], [null]).status, "unknown");
+  // More than 10% unchecked cannot be called healthy; a known outage still wins.
+  const many = Array.from({ length: 100 }, (_, i) => `dag-${i}`);
+  const ok = { latest: "success", terminal: "success", id: "r", hasRuns: true };
+  const partial = (missing: number) =>
+    many.map((_, i) => (i < missing ? null : ok));
+  assert.equal(fleetStats(many, partial(10)).status, "healthy");
+  assert.equal(fleetStats(many, partial(11)).status, "unknown");
+  assert.equal(fleetStats(many, partial(11)).failed_fetches, 11);
+  const outage = partial(30).map((run, i) =>
+    run && i < 45 ? { ...run, terminal: "failed" } : run,
+  );
+  assert.equal(fleetStats(many, outage).status, "degraded");
 });
 test("mobile runtime requires every published build to have one consistent native-ID match", () => {
   assert.equal(
