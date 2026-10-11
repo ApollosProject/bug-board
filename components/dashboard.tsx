@@ -51,6 +51,22 @@ export function TableScroll({
     </article>
   );
 }
+export function Checked({ at }: { at: string }) {
+  return (
+    <time dateTime={at}>
+      Checked{" "}
+      {new Date(at).toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+        timeZone: "UTC",
+      })}{" "}
+      UTC
+    </time>
+  );
+}
 export function Loading() {
   return <article aria-busy="true">Loading live data…</article>;
 }
