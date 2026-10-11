@@ -1,4 +1,4 @@
-import { unstable_cache } from "next/cache";
+import { readSnapshot } from "./cache";
 import { clusterChurches } from "./stores";
 import type { AppRow, Dag, Issue } from "./types";
 // Only operational fields; keys, account IDs, and fingerprints stay out.
@@ -20,15 +20,18 @@ export type Church = {
 };
 const fields =
   "slug name altSlugs universalLinkHost apollosWebUrl mobileAppStoreUrl mobilePlayStoreUrl appleBundleId androidPkgId givingEnabled givingInMaintenance givingWebProvider givingMobileProvider timezone";
-// One small request an hour; church config changes rarely.
-export const churches = unstable_cache(
-  async () =>
-    (await clusterChurches<Church>(fields)).sort((a, b) =>
-      (a.name || a.slug).localeCompare(b.name || b.slug),
-    ),
-  ["churches-v1"],
-  { revalidate: 3600 },
-);
+export const churchDirectory = async () =>
+  (await clusterChurches<Church>(fields)).sort((a, b) =>
+    (a.name || a.slug).localeCompare(b.name || b.slug),
+  );
+// Pages read the snapshot the apps Cron refresh writes; null means unavailable.
+export async function churches(): Promise<Church[] | null> {
+  const snapshot = await readSnapshot<Church[]>("churches", 3600);
+  if (snapshot) return snapshot;
+  if (process.env.VERCEL_ENV) return null;
+  const live = await churchDirectory();
+  return live.length ? live : null;
+}
 const words = (s: string) =>
   s
     .toLowerCase()

@@ -11,10 +11,13 @@ import { appsDashboard } from "@/lib/apps";
 import { fleetDashboard, astroURL } from "@/lib/fleet";
 import { openWork, reportFor } from "@/lib/reports";
 import { timeWindow } from "@/lib/window";
-const find = async (slug: string) =>
-  (await churches().catch(() => [])).find(
-    (c) => c.slug === slug || c.altSlugs.includes(slug),
-  );
+// undefined: the directory is unavailable; null: no such church.
+const find = async (slug: string) => {
+  const list = await churches().catch(() => null);
+  return list
+    ? list.find((c) => c.slug === slug || c.altSlugs.includes(slug)) || null
+    : undefined;
+};
 export async function generateMetadata({
   params,
 }: {
@@ -30,7 +33,17 @@ export default async function ChurchPage({
   params: Promise<{ slug: string }>;
 }) {
   const church = await find(decodeURIComponent((await params).slug));
-  if (!church) notFound();
+  if (church === null) notFound();
+  if (!church)
+    return (
+      <>
+        <Heading title="Church" detail="Church lookup." path="churches" />
+        <Unavailable
+          name="Church directory"
+          detail="The church directory requires APOLLOS_API_KEY and the scheduled apps refresh."
+        />
+      </>
+    );
   // Existing snapshots only: no new Linear, GitHub, Airflow, or store requests.
   const [apps, fleet, open, report] = await Promise.all([
     appsDashboard().catch(() => null),

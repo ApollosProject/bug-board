@@ -10,8 +10,8 @@ export default async function Churches({
   searchParams: Promise<Search>;
 }) {
   const query = param(await searchParams, "q");
-  const list = await churches().catch(() => []);
-  const rows = matchChurches(list, query);
+  const list = await churches().catch(() => null);
+  const rows = matchChurches(list || [], query);
   return (
     <>
       <Heading
@@ -30,10 +30,10 @@ export default async function Churches({
         </label>
         <button type="submit">Search</button>
       </form>
-      {!list.length ? (
+      {!list ? (
         <Unavailable
           name="Church directory"
-          detail="The church directory requires APOLLOS_API_KEY for the cluster API."
+          detail="The church directory requires APOLLOS_API_KEY and the scheduled apps refresh."
         />
       ) : (
         <TableScroll label="Churches">

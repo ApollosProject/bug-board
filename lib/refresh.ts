@@ -1,4 +1,5 @@
 import { computeApps } from "./apps";
+import { churchDirectory } from "./churches";
 import { writeSnapshot } from "./cache";
 import {
   evaluateFleet,
@@ -49,5 +50,9 @@ export async function refreshSnapshot(
   }
   const apps = await computeApps();
   await writeSnapshot("apps", apps, 300);
-  return { apps: apps.rows.length };
+  // The church directory rides along; a failure keeps the previous snapshot and
+  // never fails the apps refresh.
+  const directory = await churchDirectory().catch(() => []);
+  if (directory.length) await writeSnapshot("churches", directory, 3600);
+  return { apps: apps.rows.length, churches: directory.length };
 }
