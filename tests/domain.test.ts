@@ -697,4 +697,12 @@ test("Linear upkeep lists triage age, stale work, Merged waits, and near-empty p
   assert.deepEqual(h.unassigned.map(([label, list]) => [label, list.length]), [["Bug", 1]]);
   assert.ok(h.noProject.some(([label, list]) => label === "No label" && list.length === 1));
   assert.deepEqual(h.emptyProjects.map((e) => [e.project.id, e.open]), [["p-empty", 0], ["p-one", 1]]);
+  // Thresholds use elapsed time: 7 days and 23 hours is over 7 days.
+  const edge = linearHygiene(
+    [issue({ state: { name: "Triage", type: "triage" }, createdAt: new Date(now - 7 * day - 23 * 3_600_000).toISOString() })],
+    [],
+    now,
+  );
+  assert.equal(edge.triageOver(7).length, 1);
+  assert.equal(edge.age(edge.triage[0].createdAt), 7);
 });

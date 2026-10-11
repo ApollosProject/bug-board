@@ -8,7 +8,10 @@ export function linearHygiene(
   projects: Project[],
   now = Date.now(),
 ) {
+  // Whole days for display; thresholds compare raw elapsed time.
   const age = (value: string) => Math.floor((now - Date.parse(value)) / DAY);
+  const olderThan = (value: string, days: number) =>
+    now - Date.parse(value) > days * DAY;
   const owner = (issue: Issue) => {
     const slug = slugFor(issue.assignee?.name, issue.assignee?.displayName);
     return slug
@@ -39,12 +42,13 @@ export function linearHygiene(
       open.set(issue.project.id, (open.get(issue.project.id) || 0) + 1);
   return {
     triage,
-    triageOver: (days: number) => triage.filter((i) => age(i.createdAt) > days),
+    triageOver: (days: number) =>
+      triage.filter((i) => olderThan(i.createdAt, days)),
     started: [...people]
       .map(([who, list]) => ({
         who,
         issues: list,
-        stale: list.filter((i) => age(i.updatedAt) > 14),
+        stale: list.filter((i) => olderThan(i.updatedAt, 14)),
       }))
       .sort((a, b) => b.issues.length - a.issues.length),
     merged: started
