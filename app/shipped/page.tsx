@@ -43,6 +43,12 @@ async function Report({ window }: { window: Window }) {
     .join("\n\n");
   return (
     <>
+      {!rows[0]?.updatesKnown && (
+        <p className="muted">
+          Project updates are shown only for windows that end today; Linear
+          keeps only each project&apos;s latest update.
+        </p>
+      )}
       <details>
         <summary>Copy as Markdown</summary>
         <textarea readOnly rows={12} value={markdown} aria-label="Markdown" />

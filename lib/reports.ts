@@ -219,7 +219,10 @@ export async function projectDashboard() {
 }
 // Each engineer's merged PRs, completed issues, and project updates in a window,
 // credited the same way as the team metrics.
-export function shipped(data: Report, window: Window) {
+export function shipped(data: Report, window: Window, now = Date.now()) {
+  // Linear keeps only each project's latest update, so updates are only knowable
+  // for windows that reach the present.
+  const updatesKnown = Date.parse(window.before) >= now;
   return engineers
     .map((slug) => {
       const login = people[slug].github_username.toLowerCase();
@@ -241,11 +244,12 @@ export function shipped(data: Report, window: Window) {
         );
       const updates = data.projects.filter(
         (p) =>
+          updatesKnown &&
           inWindow(p.lastUpdate?.createdAt, window) &&
           normalize(p.lead?.displayName) ===
             normalize(people[slug].linear_display_name || personName(slug)),
       );
-      return { slug, prs, issues, updates };
+      return { slug, prs, issues, updates, updatesKnown };
     })
     .sort((a, b) => personName(a.slug).localeCompare(personName(b.slug)));
 }

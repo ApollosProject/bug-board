@@ -696,10 +696,15 @@ test("shipped report keeps window bounds and credits PRs like team metrics", () 
     completed: [issue(), issue({ id: "i0", completedAt: "2026-08-25T00:00:00Z" })],
     projects: [project({ lastUpdate: { createdAt: "2026-09-04T00:00:00Z" } })],
   } as unknown as Report;
-  const zach = shipped(data, window).find((row) => row.slug === "zach")!;
+  const zach = shipped(data, window, now).find((row) => row.slug === "zach")!;
   assert.deepEqual(zach.prs.map((p) => p.id), ["agent", "in"]);
   assert.deepEqual(zach.issues.map((i) => i.id), ["i1"]);
   assert.deepEqual(zach.updates.map((p) => p.id), ["p1"]);
+  // A window that ended in the past cannot know about project updates.
+  const past = timeWindow({ start: "2026-08-31", end: "2026-09-05" }, now);
+  const earlier = shipped(data, past, now).find((row) => row.slug === "zach")!;
+  assert.equal(earlier.updatesKnown, false);
+  assert.deepEqual(earlier.updates, []);
   // Same count the Team page computes for this window.
   const inWindowPRs = prs.filter((p) => p.id !== "old");
   assert.equal(zach.prs.length, prCounts(inWindowPRs, "solideo-gloria").prs_merged);
