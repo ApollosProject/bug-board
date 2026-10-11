@@ -694,4 +694,11 @@ test("alert noise flags monitors that fire often, clear alone, and get no respon
   assert.equal(d.flapping, false);
   assert.equal(d.ongoing, 1);
   assert.deepEqual(stats.map((s) => s.name), ["Queue", "Database"]);
+  // Even samples average the middle pair; incidents older than 30 days drop out.
+  const even = alertStats(
+    [1, 1, 31, 31].map((length, i) => incident("Even", 100 + i, length)).concat(incident("Even", 31 * 24 * 60, 5)),
+    now,
+  )[0];
+  assert.equal(even.incidents, 4);
+  assert.equal(even.medianMinutes, 16);
 });

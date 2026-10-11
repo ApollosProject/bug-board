@@ -8,7 +8,8 @@ const duration = (minutes: number | null) =>
       ? `${Math.round(minutes)}m`
       : `${(minutes / 60).toFixed(1)}h`;
 export default async function Alerts() {
-  const incidents = await recentIncidents().catch(() => null);
+  // null: no token configured; undefined: Better Stack failed or was incomplete.
+  const incidents = await recentIncidents().catch(() => undefined);
   const stats = incidents ? alertStats(incidents) : [];
   const total = stats.reduce((n, s) => n + s.incidents, 0),
     silent = stats.reduce((n, s) => n + s.unacknowledged, 0),
@@ -22,7 +23,11 @@ export default async function Alerts() {
       {!incidents ? (
         <Unavailable
           name="Alert history"
-          detail="Alert history requires a read-only Better Stack Uptime API token in BETTERSTACK_API_TOKEN."
+          detail={
+            incidents === null
+              ? "Alert history requires a read-only Better Stack Uptime API token in BETTERSTACK_API_TOKEN."
+              : undefined
+          }
         />
       ) : (
         <>

@@ -13,10 +13,13 @@ const HOUR = 3_600_000;
 export function alertStats(incidents: Incident[], now = Date.now()) {
   const groups = new Map<string, Incident[]>();
   for (const i of incidents)
-    groups.set(i.name, [...(groups.get(i.name) || []), i]);
+    if (now - Date.parse(i.started_at) < 30 * DAY)
+      groups.set(i.name, [...(groups.get(i.name) || []), i]);
   return [...groups]
     .map(([name, list]) => {
-      const starts = list.map((i) => Date.parse(i.started_at)).sort();
+      const starts = list
+        .map((i) => Date.parse(i.started_at))
+        .sort((a, b) => a - b);
       const minutes = list
         .filter((i) => i.resolved_at)
         .map(
@@ -25,9 +28,12 @@ export function alertStats(incidents: Incident[], now = Date.now()) {
         )
         .sort((a, b) => a - b);
       const unacknowledged = list.filter((i) => !i.acknowledged_at).length;
-      const median = minutes.length
-        ? minutes[Math.floor(minutes.length / 2)]
-        : null;
+      const mid = minutes.length / 2;
+      const median = !minutes.length
+        ? null
+        : minutes.length % 2
+          ? minutes[Math.floor(mid)]
+          : (minutes[mid - 1] + minutes[mid]) / 2;
       // Most incidents that started within any one hour.
       let peak = 0;
       for (let a = 0, b = 0; b < starts.length; b++) {
@@ -50,7 +56,6 @@ export function alertStats(incidents: Incident[], now = Date.now()) {
           median <= 30,
       };
     })
-    .filter((s) => now - Date.parse(s.last) < 30 * DAY)
     .sort((a, b) => b.incidents - a.incidents);
 }
 type Page = {
@@ -82,6 +87,8 @@ export const recentIncidents = unstable_cache(
       );
       url = body.pagination?.next || null;
     }
+    // Partial history would understate every count.
+    if (url) throw new Error("Better Stack has more than 2,000 incidents");
     return incidents;
   },
   ["alert-incidents-v1"],
