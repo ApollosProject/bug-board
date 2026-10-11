@@ -10,6 +10,7 @@
   --pico-border-radius: 0.375rem;
   --pico-form-element-spacing-vertical: 0.5rem;
   --pico-card-box-shadow: none;
+  --control-height: 2.5rem;
 }
 /* Pico sets its palette on these selectors, so overrides must match them. */
 :root:not([data-theme="dark"]) {
@@ -180,9 +181,29 @@ details summary:focus-visible:not([role]) {
 form {
   margin: 0;
 }
-button {
+/* Pico's [type=submit] bottom margin outranks a plain button selector and lifts
+   bottom-aligned buttons above their neighbours. */
+:is(button, [type="submit"], [type="button"], [type="reset"]) {
   white-space: nowrap;
   margin-bottom: 0;
+}
+/* Form controls in a row share one height so their edges line up. */
+:is(.window-controls, .filter-form)
+  :is(input:not([type="checkbox"]), select, button),
+.presets {
+  height: var(--control-height);
+}
+:is(.window-controls, .filter-form) :is(input:not([type="checkbox"]), select) {
+  padding-block: 0;
+}
+:is(.window-controls, .filter-form, .toolbar) button {
+  display: inline-flex;
+  align-items: center;
+  padding-block: 0;
+}
+.presets a {
+  display: flex;
+  align-items: center;
 }
 main {
   padding-block: 2rem;
@@ -240,6 +261,9 @@ article {
 }
 article p:last-child {
   margin-bottom: 0;
+}
+.cards + p {
+  margin-top: 0.6rem;
 }
 .cards {
   display: grid;
@@ -338,6 +362,16 @@ th,
 td {
   padding: 0.7rem 0.9rem;
 }
+/* Compact in-table buttons, so their labels share the row's text line. */
+td :is(button, [type="button"]) {
+  padding: 0.1rem 0.65rem;
+  font-size: 0.8rem;
+}
+/* Top-align body cells so single-line cells line up with the first line of
+   multi-line cells. */
+tbody :is(th, td) {
+  vertical-align: top;
+}
 caption {
   text-align: left;
   padding: 0.7rem 0.9rem;
@@ -421,8 +455,14 @@ caption {
 .filter-form button {
   width: auto;
 }
-.filter-form > a {
-  align-self: center;
+/* Checkboxes and trailing links sit on the control row, not the label row. */
+.filter-form > a,
+.filter-form .links,
+.filter-form .checkbox {
+  align-self: flex-end;
+  display: flex;
+  align-items: center;
+  height: var(--control-height);
 }
 .platforms {
   flex-wrap: wrap;
@@ -431,10 +471,14 @@ caption {
   margin-bottom: 1rem;
 }
 .filter-form .checkbox {
-  align-self: center;
-  display: flex;
-  align-items: center;
   gap: 0.5rem;
+}
+.filter-form .links {
+  gap: 1rem;
+}
+/* Monospace reads larger than the sans text around it. */
+p :is(time, code) {
+  font-size: 0.92em;
 }
 .filter-form .checkbox input {
   margin: 0;
@@ -449,6 +493,14 @@ caption {
   background: var(--pico-card-sectioning-background-color);
   color: var(--pico-muted-color);
   white-space: nowrap;
+}
+details > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+details > summary::after {
+  margin-left: auto;
 }
 /* Status badges lead with a dot in their status color. */
 .badge:is(.low, .high, .priority-1, .priority-2)::before {

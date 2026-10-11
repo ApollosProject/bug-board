@@ -165,14 +165,16 @@ export default async function Reviews({
           Include approved
         </label>
         <button type="submit">Filter reviews</button>
-        <Link href="/reviews">Reset</Link>
-        {viewer && (
-          <Link
-            href={`?${queryString({ ...query, reviewer: String(viewer.login) })}`}
-          >
-            For me
-          </Link>
-        )}
+        <span className="links">
+          <Link href="/reviews">Reset</Link>
+          {viewer && (
+            <Link
+              href={`?${queryString({ ...query, reviewer: String(viewer.login) })}`}
+            >
+              For me
+            </Link>
+          )}
+        </span>
       </form>
       <Suspense fallback={<Loading />}>
         <Queue search={search} />
