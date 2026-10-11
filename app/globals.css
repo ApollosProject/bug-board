@@ -465,6 +465,9 @@ caption {
   height: var(--control-height);
 }
 .platforms {
+  /* Platform tabs may wrap to several rows; only one-row presets are fixed height. */
+  height: auto;
+  min-height: var(--control-height);
   flex-wrap: wrap;
   justify-content: flex-start;
   width: fit-content;
