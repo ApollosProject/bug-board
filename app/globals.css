@@ -82,7 +82,13 @@ td small,
 .numeric :is(th, td):not(:first-child) {
   font-family: var(--mono);
 }
-:where(a, button, summary, input, select, [tabindex]):focus-visible {
+/* Listed explicitly (not :where) so this beats Pico's summary and button focus rules. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible,
+details summary:focus-visible:not([role]) {
   outline: 2px solid var(--pico-primary);
   outline-offset: 2px;
 }
