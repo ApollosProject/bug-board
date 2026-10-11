@@ -91,6 +91,7 @@ export function WindowControls({
           <Link
             key={days}
             className={window.preset_days === days ? "selected" : ""}
+            aria-current={window.preset_days === days ? "page" : undefined}
             href={`?${queryString({ ...extra, days: String(days) })}`}
           >
             {days}d
@@ -125,7 +126,9 @@ export function WindowControls({
           Apply dates
         </button>
       </form>
-      <small>{window.label}</small>
+      {!presets.includes(window.preset_days ?? 0) && (
+        <small>{window.label}</small>
+      )}
     </section>
   );
 }

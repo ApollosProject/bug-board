@@ -147,10 +147,10 @@ export default async function Person({
       <Suspense fallback={<Loading />}>
         <Work slug={slug} />
       </Suspense>
-      <WindowControls window={window} presets={[1, 7, 30]} />
       <Suspense fallback={<Loading />}>
         <Regressions slug={slug} />
       </Suspense>
+      <WindowControls window={window} presets={[1, 7, 30]} />
       <Suspense fallback={<Loading />}>
         <Metrics slug={slug} window={window} />
       </Suspense>
