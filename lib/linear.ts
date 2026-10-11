@@ -18,7 +18,7 @@ export async function fetchIssues(
   filter: object,
   history = false,
 ): Promise<Issue[]> {
-  const query = `query Issues($filter: IssueFilter, $cursor: String) { issues(first: 100, after: $cursor, filter: $filter) {
+  const query = `query Issues($filter: IssueFilter, $cursor: String) { issues(first: 250, after: $cursor, filter: $filter) {
     nodes { ${fields} ${history ? "history(first: 100) { edges { node { toAssignee { displayName } updatedAt } } pageInfo { hasNextPage endCursor } }" : ""} }
     pageInfo { hasNextPage endCursor }
   } }`;
