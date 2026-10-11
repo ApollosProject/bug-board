@@ -5,21 +5,25 @@ export function NavLinks() {
   const path = usePathname();
   return (
     <div className="nav-links">
-      {["Team", "Reviews", "Apps", "Projects", "DAGs"].map((name) => {
-        const href = `/${name.toLowerCase()}`;
-        return (
-          <Link
-            key={name}
-            href={href}
-            prefetch={false}
-            aria-current={
-              path === href || path.startsWith(`${href}/`) ? "page" : undefined
-            }
-          >
-            {name}
-          </Link>
-        );
-      })}
+      {["Team", "Reviews", "Shipped", "Apps", "Projects", "DAGs"].map(
+        (name) => {
+          const href = `/${name.toLowerCase()}`;
+          return (
+            <Link
+              key={name}
+              href={href}
+              prefetch={false}
+              aria-current={
+                path === href || path.startsWith(`${href}/`)
+                  ? "page"
+                  : undefined
+              }
+            >
+              {name}
+            </Link>
+          );
+        },
+      )}
     </div>
   );
 }

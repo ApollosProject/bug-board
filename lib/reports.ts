@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { completed, contributors, openIssues, projects } from "./linear";
-import { merged } from "./github";
+import { creditedAuthors, merged } from "./github";
 import { readSnapshot } from "./cache";
 import {
   comparisons,
@@ -216,4 +216,36 @@ export async function projectDashboard() {
       "Projects are refreshing. Configure Cron and Upstash Redis.",
     );
   return projects();
+}
+// Each engineer's merged PRs, completed issues, and project updates in a window,
+// credited the same way as the team metrics.
+export function shipped(data: Report, window: Window) {
+  return engineers
+    .map((slug) => {
+      const login = people[slug].github_username.toLowerCase();
+      const prs = data.prs
+        .filter(
+          (pr) =>
+            inWindow(pr.mergedAt, window) &&
+            creditedAuthors(pr).includes(login),
+        )
+        .sort((a, b) => (b.mergedAt || "").localeCompare(a.mergedAt || ""));
+      const issues = data.completed
+        .filter(
+          (issue) =>
+            inWindow(issue.completedAt, window) &&
+            slugFor(issue.assignee?.displayName, issue.assignee?.name) === slug,
+        )
+        .sort((a, b) =>
+          (b.completedAt || "").localeCompare(a.completedAt || ""),
+        );
+      const updates = data.projects.filter(
+        (p) =>
+          inWindow(p.lastUpdate?.createdAt, window) &&
+          normalize(p.lead?.displayName) ===
+            normalize(people[slug].linear_display_name || personName(slug)),
+      );
+      return { slug, prs, issues, updates };
+    })
+    .sort((a, b) => personName(a.slug).localeCompare(personName(b.slug)));
 }

@@ -18,7 +18,8 @@ import {
   teamRows,
 } from "../lib/metrics";
 import { classify, reviewRows, ticketNumber } from "../lib/reviews";
-import { creditedAuthors } from "../lib/github";
+import { creditedAuthors, prCounts } from "../lib/github";
+import { shipped, type Report } from "../lib/reports";
 import { fleetStats } from "../lib/fleet";
 import {
   appIdentity,
@@ -668,4 +669,38 @@ test("notification schedule preserves New York time through DST", () => {
       "performance",
     ),
   );
+});
+
+test("shipped report keeps window bounds and credits PRs like team metrics", () => {
+  const cursor = {
+    author: { login: "cursor" },
+    commits: {
+      nodes: [
+        {
+          commit: {
+            author: { user: { login: "cursoragent" } },
+            authors: { nodes: [{ user: { login: "solideo-gloria" } }] },
+          },
+        },
+      ],
+    },
+  };
+  const prs = [
+    pr({ id: "in", mergedAt: "2026-09-05T00:00:00Z" }),
+    pr({ id: "agent", mergedAt: "2026-09-06T00:00:00Z", ...cursor }),
+    pr({ id: "old", mergedAt: "2026-08-20T00:00:00Z" }),
+    pr({ id: "other", mergedAt: "2026-09-05T00:00:00Z", author: { login: "someone" } }),
+  ];
+  const data = {
+    prs,
+    completed: [issue(), issue({ id: "i0", completedAt: "2026-08-25T00:00:00Z" })],
+    projects: [project({ lastUpdate: { createdAt: "2026-09-04T00:00:00Z" } })],
+  } as unknown as Report;
+  const zach = shipped(data, window).find((row) => row.slug === "zach")!;
+  assert.deepEqual(zach.prs.map((p) => p.id), ["agent", "in"]);
+  assert.deepEqual(zach.issues.map((i) => i.id), ["i1"]);
+  assert.deepEqual(zach.updates.map((p) => p.id), ["p1"]);
+  // Same count the Team page computes for this window.
+  const inWindowPRs = prs.filter((p) => p.id !== "old");
+  assert.equal(zach.prs.length, prCounts(inWindowPRs, "solideo-gloria").prs_merged);
 });
