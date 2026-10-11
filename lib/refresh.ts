@@ -48,11 +48,15 @@ export async function refreshSnapshot(
       throw error;
     }
   }
-  const apps = await computeApps();
-  await writeSnapshot("apps", apps, 300);
-  // The church directory rides along; a failure keeps the previous snapshot and
-  // never fails the apps refresh.
-  const directory = await churchDirectory().catch(() => []);
-  if (directory.length) await writeSnapshot("churches", directory, 3600);
-  return { apps: apps.rows.length, churches: directory.length };
+  // The church directory rides along but settles on its own: either failure
+  // keeps that snapshot's previous value without blocking the other.
+  const [apps, directory] = await Promise.allSettled([
+    computeApps(),
+    churchDirectory(),
+  ]);
+  const listed = directory.status === "fulfilled" ? directory.value : [];
+  if (listed.length) await writeSnapshot("churches", listed, 3600);
+  if (apps.status === "rejected") throw apps.reason;
+  await writeSnapshot("apps", apps.value, 300);
+  return { apps: apps.value.rows.length, churches: listed.length };
 }

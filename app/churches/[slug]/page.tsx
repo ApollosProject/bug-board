@@ -135,9 +135,7 @@ export default async function ChurchPage({
         </article>
       </section>
       <section>
-        <h2>
-          Apps <small>{activity.apps.length}</small>
-        </h2>
+        <h2>Apps {apps && <small>{activity.apps.length}</small>}</h2>
         {!apps ? (
           <Unavailable name="App release data" />
         ) : activity.apps.length ? (
@@ -183,9 +181,7 @@ export default async function ChurchPage({
         )}
       </section>
       <section>
-        <h2>
-          DAGs <small>{activity.dags.length}</small>
-        </h2>
+        <h2>DAGs {fleet && <small>{activity.dags.length}</small>}</h2>
         {!fleet ? (
           <Unavailable name="Fleet health" />
         ) : activity.dags.length ? (
@@ -213,7 +209,7 @@ export default async function ChurchPage({
       <section>
         <h2>
           Open issues mentioning {church.name || church.slug}{" "}
-          <small>{activity.issues.length}</small>
+          {open && <small>{activity.issues.length}</small>}
         </h2>
         {open ? (
           <article>
@@ -228,7 +224,7 @@ export default async function ChurchPage({
       </section>
       <section>
         <h2>
-          Completed in the last 30 days <small>{done.length}</small>
+          Completed in the last 30 days {report && <small>{done.length}</small>}
         </h2>
         {report ? (
           <article>
