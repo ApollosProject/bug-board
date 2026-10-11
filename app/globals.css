@@ -379,6 +379,9 @@ meter {
 .timeline-bar.offTrack {
   background: #a63a48;
 }
+.timeline-bar.atRisk {
+  background: #b04a0c;
+}
 .timeline-bar.onTrack {
   background: #1f6f5c;
 }
@@ -402,6 +405,32 @@ meter {
   background: #df5966;
   z-index: 2;
   pointer-events: none;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
+  margin: 0 0 1rem;
+  padding: 0;
+  font-size: 0.8rem;
+  color: var(--pico-muted-color);
+}
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  list-style: none;
+}
+.legend i {
+  display: inline-block;
+  position: static;
+  width: 1.5rem;
+  height: 0.75rem;
+  padding: 0;
+}
+.legend .today {
+  width: 2px;
 }
 .timeline-empty {
   grid-column: 1 / -1;
