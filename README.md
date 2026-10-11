@@ -105,6 +105,7 @@ Partially configured auth fails closed with `503`. Vercel production and preview
 
 - `BUG_BOARD_API_KEY`: enables `/api/team/[slug]` independently of OAuth.
 - `AIRFLOW_API_BASE_URL`, `AIRFLOW_API_TOKEN`, `AIRFLOW_FLEET_HEARTBEAT_URL`.
+- `BETTERSTACK_API_TOKEN`: optional read-only Better Stack Uptime API token for the `/alerts` noise report. Without it, `/alerts` shows an unavailable state.
 - `BIGQUERY_SERVICE_ACCOUNT_JSON_BASE64`, `BIGQUERY_ANALYTICS_PROJECT_ID`, `BIGQUERY_ANALYTICS_DATASETS`, `BIGQUERY_ANALYTICS_TABLES`, `APP_VERSIONS_LOOKBACK_DAYS`, `APP_VERSIONS_PARTITION_BUFFER_DAYS`, `APP_VERSIONS_LIMIT`. Explicit service-account credentials are required. No ADC fallback.
 - `APOLLOS_API_KEY`: read-only Cluster/store verification. Store credentials remain within the refresh function. Snapshots and browser responses never contain these credentials.
 - `GITHUB_ACTIONS_TOKEN`, `GITHUB_DEPLOY_WORKFLOW_ID` (default `173574865`).

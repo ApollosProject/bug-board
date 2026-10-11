@@ -20,6 +20,7 @@ import {
 import { classify, reviewRows, ticketNumber } from "../lib/reviews";
 import { creditedAuthors } from "../lib/github";
 import { fleetStats } from "../lib/fleet";
+import { alertStats } from "../lib/alerts";
 import {
   appIdentity,
   buildApps,
@@ -668,4 +669,29 @@ test("notification schedule preserves New York time through DST", () => {
       "performance",
     ),
   );
+});
+
+test("alert noise flags monitors that fire often, clear alone, and get no response", () => {
+  const at = (minutes: number) => new Date(now - minutes * 60_000).toISOString();
+  const incident = (name: string, start: number, length: number | null, ack = false) => ({
+    name,
+    started_at: at(start),
+    acknowledged_at: ack ? at(start - 1) : null,
+    resolved_at: length === null ? null : at(start - length),
+  });
+  // Twelve short, silent incidents every 30 minutes; one acknowledged.
+  const queue = Array.from({ length: 12 }, (_, i) => incident("Queue", 1000 - i * 30, 12, i === 0));
+  // Five long incidents, all acknowledged.
+  const db = Array.from({ length: 5 }, (_, i) => incident("Database", 5000 - i * 600, 90, true));
+  const stats = alertStats([...queue, ...db, incident("Database", 10, null)], now);
+  const q = stats.find((s) => s.name === "Queue")!;
+  assert.equal(q.incidents, 12);
+  assert.equal(q.unacknowledged, 11);
+  assert.equal(q.medianMinutes, 12);
+  assert.equal(q.peakHour, 2);
+  assert.equal(q.flapping, true);
+  const d = stats.find((s) => s.name === "Database")!;
+  assert.equal(d.flapping, false);
+  assert.equal(d.ongoing, 1);
+  assert.deepEqual(stats.map((s) => s.name), ["Queue", "Database"]);
 });
