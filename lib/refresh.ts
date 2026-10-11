@@ -1,6 +1,11 @@
 import { computeApps } from "./apps";
 import { writeSnapshot } from "./cache";
-import { evaluateFleet, fleetInventory, fleetHeartbeat } from "./fleet";
+import {
+  evaluateFleet,
+  fleetDeadline,
+  fleetInventory,
+  fleetHeartbeat,
+} from "./fleet";
 import { openIssues } from "./linear";
 import { ptoCalendar } from "./pto";
 import { computeReport } from "./reports";
@@ -26,8 +31,14 @@ export async function refreshSnapshot(
   }
   if (job === "fleet") {
     try {
-      // Keep the previous four-batch limit of 120 simultaneous DAG lookups.
-      const fleet = await evaluateFleet(await fleetInventory(), 120);
+      // Keep the previous four-batch limit of 120 simultaneous DAG lookups: it
+      // bounds a full Airflow stall to about 150 seconds inside the Cron limit.
+      const deadline = fleetDeadline();
+      const fleet = await evaluateFleet(
+        await fleetInventory(deadline),
+        120,
+        deadline,
+      );
       await writeSnapshot("fleet", fleet, 900);
       await fleetHeartbeat(fleet.status);
       return { status: fleet.status, dags: fleet.active_dags_total };

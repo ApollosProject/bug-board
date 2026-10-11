@@ -1,4 +1,4 @@
-import { mapConcurrent, requestJson } from "./http";
+import { mapConcurrent, requestJson, UpstreamError } from "./http";
 import type { Dag, Fleet } from "./types";
 import { readSnapshot, unknownCount } from "./cache";
 type Run = { state?: string; dag_run_id?: string };
@@ -22,10 +22,20 @@ async function airflow<T>(path: string) {
     "Airflow",
   );
 }
-async function lastRun(id: string): Promise<Evaluation> {
+// One absolute deadline keeps every Airflow request (inventory pages, run pages,
+// retries) inside the 300-second Cron limit, so an unknown snapshot and heartbeat
+// still get written. A request starts only if its 30-second timeout ends in time.
+export const fleetDeadline = () => Date.now() + 230_000;
+const hasTime = (deadline: number) => Date.now() + 30_000 <= deadline;
+function beforeDeadline(deadline: number) {
+  if (!hasTime(deadline))
+    throw Object.assign(new Error("Fleet deadline"), { name: "Deadline" });
+}
+async function lastRun(id: string, deadline: number): Promise<Evaluation> {
   let latest = "",
     hasRuns = false;
   for (let offset = 0; ; offset += 10) {
+    beforeDeadline(deadline);
     const payload = await airflow<{
       dag_runs?: Run[];
       dagRuns?: Run[];
@@ -66,18 +76,21 @@ export function fleetStats(
       ? [{ dag_id: id, state: "failed", dag_run_id: runs[i]!.id }]
       : [],
   );
-  const ratio = evaluated ? failed.length / evaluated : 0;
+  const ratio = evaluated ? failed.length / evaluated : 0,
+    unchecked = runs.filter((run) => !run).length;
   return {
+    // A known outage wins. Otherwise, health is only claimed when at least 90% of
+    // active DAGs could be checked; missing data is unknown, not healthy.
     status:
-      ids.length && runs.every((run) => !run)
-        ? "unknown"
-        : evaluated >= 20 && ratio >= 0.1
-          ? "degraded"
+      evaluated >= 20 && ratio >= 0.1
+        ? "degraded"
+        : ids.length && unchecked > ids.length * 0.1
+          ? "unknown"
           : "healthy",
     checked_at: new Date(now).toISOString(),
     active_dags_total: ids.length,
     evaluated_dags: evaluated,
-    failed_fetches: runs.filter((run) => !run).length,
+    failed_fetches: unchecked,
     dags_without_runs: runs.filter((run) => run && !run.hasRuns).length,
     non_terminal_dags: runs.filter(
       (run) => run?.hasRuns && !terminal(run.latest),
@@ -94,10 +107,11 @@ export function fleetStats(
     top_failed_dags: failed.slice(0, 10),
   };
 }
-export async function fleetInventory() {
+export async function fleetInventory(deadline = fleetDeadline()) {
   const ids = new Set<string>();
   let offset = 0;
   while (true) {
+    beforeDeadline(deadline);
     const payload = await airflow<{
       dags: { dag_id: string; is_paused: boolean }[];
       total_entries?: number;
@@ -120,11 +134,40 @@ export async function fleetInventory() {
   }
   return [...ids].sort();
 }
-export async function evaluateFleet(ids: string[], concurrency = 30) {
-  return fleetStats(
-    ids,
-    await mapConcurrent(ids, concurrency, (id) => lastRun(id).catch(() => null)),
-  );
+const reason = (error: unknown) =>
+  error instanceof UpstreamError
+    ? `HTTP ${error.status}`
+    : error instanceof Error
+      ? `${error.name}${(error.cause as { code?: string })?.code ? ` ${(error.cause as { code: string }).code}` : ""}`
+      : "unknown";
+export async function evaluateFleet(
+  ids: string[],
+  concurrency = 30,
+  deadline = fleetDeadline(),
+) {
+  const errors: Record<string, number> = {};
+  const attempt = (id: string) =>
+    lastRun(id, deadline).catch((error) => {
+      errors[reason(error)] = (errors[reason(error)] || 0) + 1;
+      return null;
+    });
+  const runs = await mapConcurrent(ids, concurrency, attempt);
+  // Lookups fail transiently (connection resets); retry each once.
+  const retry = ids.flatMap((id, i) => (runs[i] ? [] : [i]));
+  if (retry.length) {
+    let retried = 0;
+    await mapConcurrent(retry, concurrency, async (i) => {
+      if (!hasTime(deadline)) return;
+      retried++;
+      runs[i] = await attempt(ids[i]);
+    });
+    console.warn("Airflow DAG lookups failed", {
+      retried,
+      unchecked: runs.filter((run) => !run).length,
+      reasons: errors,
+    });
+  }
+  return fleetStats(ids, runs);
 }
 export async function fleetHeartbeat(status: Fleet["status"]) {
   const count = await unknownCount(status !== "unknown");

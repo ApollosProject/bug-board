@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { GET, maxDuration } from "../app/api/cron/[job]/route";
-import { fleetHeartbeat } from "../lib/fleet";
+import { evaluateFleet, fleetHeartbeat, fleetInventory } from "../lib/fleet";
 
 const request = (job: string, authorization = "Bearer fixture-cron") =>
   GET(new Request(`http://localhost/api/cron/${job}`, { headers: { authorization } }), {
@@ -36,7 +36,7 @@ test("ordinary fleet Cron completes without a Workflow, preserves evidence, conc
   const previous = Object.fromEntries(Object.keys(env).map((k) => [k, process.env[k]]));
   const original = globalThis.fetch;
   const records = new Map<string, string>();
-  let peak = 0, active = 0, lease = 0, duplicateChecked = false;
+  let peak = 0, active = 0, lease = 0, duplicateChecked = false, resets = 0;
   try {
     Object.assign(process.env, env);
     globalThis.fetch = async (url, init) => {
@@ -82,6 +82,8 @@ test("ordinary fleet Cron completes without a Workflow, preserves evidence, conc
       await new Promise((resolve) => setImmediate(resolve));
       active--;
       const n = Number(target.pathname.split("/")[2].split("-")[1]);
+      // One transient connection reset: the retry pass must recover it.
+      if (n === 7 && !resets++) throw new TypeError("fetch failed");
       return Response.json({ dag_runs: [
         { state: "running", dag_run_id: `active-${n}` },
         { state: n < 25 ? "failed" : "success", dag_run_id: `terminal-${n}` },
@@ -92,8 +94,10 @@ test("ordinary fleet Cron completes without a Workflow, preserves evidence, conc
     assert.deepEqual(await response.json(), { status: "refreshed", result: { status: "degraded", dags: 125 } });
     assert.equal(lease, maxDuration + 60);
     assert.equal(peak, 120);
+    assert.equal(resets, 2);
     const snapshot = JSON.parse([...records.entries()].find(([k]) => k.endsWith(":fleet"))![1]);
     assert.equal(snapshot.data.evaluated_dags, 125);
+    assert.equal(snapshot.data.failed_fetches, 0);
     assert.equal(snapshot.data.failed_runs, 25);
     assert.equal(snapshot.data.non_terminal_dags, 125);
     assert.equal(snapshot.data.failure_ratio, 0.2);
@@ -212,6 +216,55 @@ test("fleet heartbeat retains unknown threshold, recovery, failure path and Prev
   } finally {
     globalThis.fetch = original;
     for (const [key, value] of Object.entries(previous))
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+  }
+});
+
+test("fleet retries failed lookups once and stops at the Cron deadline", async () => {
+  const previous = [process.env.AIRFLOW_API_BASE_URL, process.env.AIRFLOW_API_TOKEN];
+  const original = globalThis.fetch;
+  let calls = 0;
+  try {
+    process.env.AIRFLOW_API_BASE_URL = "http://airflow.local";
+    process.env.AIRFLOW_API_TOKEN = "fixture-airflow";
+    const ids = Array.from({ length: 10 }, (_, i) => `dag-${i}`);
+    // Every first lookup fails and every retry succeeds.
+    globalThis.fetch = async () => {
+      calls++;
+      if (calls <= 10) throw new TypeError("fetch failed");
+      return Response.json({ dag_runs: [{ state: "success", dag_run_id: "r" }], total_entries: 1 });
+    };
+    const recovered = await evaluateFleet(ids, 5);
+    assert.equal(calls, 20);
+    assert.equal(recovered.status, "healthy");
+    assert.equal(recovered.failed_fetches, 0);
+    // A request starts only if its 30-second timeout ends before the deadline.
+    // With 31 seconds of budget and 600 ms failures, only two requests can start.
+    calls = 0;
+    globalThis.fetch = async () => {
+      calls++;
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      throw new TypeError("fetch failed");
+    };
+    const warnings: unknown[] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => void warnings.push(args[1]);
+    const unchecked = await evaluateFleet(ids, 1, Date.now() + 31_000).finally(() => {
+      console.warn = warn;
+    });
+    assert.equal(calls, 2);
+    // No retry could start before the deadline, and none is reported.
+    assert.deepEqual(warnings, [{ retried: 0, unchecked: 10, reasons: { "TypeError": 2, "Deadline": 8 } }]);
+    assert.equal(unchecked.status, "unknown");
+    assert.equal(unchecked.failed_fetches, 10);
+    // Inventory shares the deadline: with no room left, it requests nothing.
+    calls = 0;
+    await assert.rejects(fleetInventory(Date.now() + 1_000), /Fleet deadline/);
+    assert.equal(calls, 0);
+  } finally {
+    globalThis.fetch = original;
+    for (const [key, value] of [["AIRFLOW_API_BASE_URL", previous[0]], ["AIRFLOW_API_TOKEN", previous[1]]] as const)
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
   }

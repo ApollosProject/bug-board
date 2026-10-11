@@ -43,6 +43,12 @@ export default async function DAGs({
               >
                 {fleet.status}
               </strong>
+              {!!fleet.failed_fetches && (
+                <small>
+                  {fleet.failed_fetches} of {fleet.active_dags_total} DAGs not
+                  checked
+                </small>
+              )}
             </article>
             <article>
               <small>Active DAGs</small>
