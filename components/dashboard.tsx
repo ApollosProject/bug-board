@@ -74,8 +74,8 @@ export function Loading({ window }: { window?: Window }) {
       Loading live data…
       {window && window.preset_days !== 30 && (
         <p className="muted">
-          Windows other than 30 days query Linear and GitHub directly and can
-          take a few minutes.
+          Only the 30-day preset uses the refreshed snapshot. Other windows
+          query Linear and GitHub directly and can take a few minutes.
         </p>
       )}
     </article>
