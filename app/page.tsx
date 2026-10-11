@@ -1,11 +1,12 @@
 import { Suspense } from "react";
-import type { Search, Window } from "@/lib/types";
+import type { Issue, Search, Window } from "@/lib/types";
 import { timeWindow } from "@/lib/window";
 import { openWork, reportFor } from "@/lib/reports";
 import { isPriorityBug, isWork, resolution } from "@/lib/metrics";
-import { priorityLabels } from "@/lib/config";
+import { personName, priorityLabels, slugFor } from "@/lib/config";
 import { Regressions } from "@/components/regressions";
 import {
+  GroupedIssues,
   Heading,
   IssueList,
   Loading,
@@ -13,6 +14,12 @@ import {
   WindowControls,
   TableScroll,
 } from "@/components/dashboard";
+const assigneeName = (issue: Issue) => {
+  const slug = slugFor(issue.assignee?.name, issue.assignee?.displayName);
+  return slug
+    ? personName(slug)
+    : issue.assignee?.displayName || issue.assignee?.name || "Unassigned";
+};
 async function OpenWork() {
   const data = await openWork().catch(() => null);
   if (!data) return <Unavailable name="Open work" />;
@@ -31,13 +38,17 @@ async function OpenWork() {
       </section>
       <section>
         <h2>Open Assigned Work</h2>
-        <article>
-          <IssueList
-            issues={issues
-              .filter((i) => i.assignee && i.priority > 2 && isWork(i))
-              .sort((a, b) => b.createdAt.localeCompare(a.createdAt))}
-          />
-        </article>
+        {/* Grouped and collapsed by person: the flat list ran to thousands of pixels. */}
+        <GroupedIssues
+          issues={issues
+            .filter((i) => i.assignee && i.priority > 2 && isWork(i))
+            .sort(
+              (a, b) =>
+                assigneeName(a).localeCompare(assigneeName(b)) ||
+                b.createdAt.localeCompare(a.createdAt),
+            )}
+          by={assigneeName}
+        />
       </section>
     </>
   );
