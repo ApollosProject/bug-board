@@ -1,0 +1,55 @@
+{
+  "kind": "synthetic",
+  "redacted": true,
+  "cases": [
+    {
+      "id": "synthetic-null-total",
+      "group": "example/checkout:fix-null-total",
+      "complete": true,
+      "issue": "Checkout worked with a zero total before release 2. The first failing release is 2. When total is zero, checkout now throws TypeError because amount is null. Release 2 included P0 and P1; no other checkout changes shipped.",
+      "fixes": [
+        "checkout.ts fix: return total ?? 0; replaces return total || null;. A regression test asserts checkout({ total: 0 }) succeeds. It passed before P0, fails after P0, and passes with this fix."
+      ],
+      "candidates": [
+        {
+          "url": "https://github.com/example/checkout/pull/1",
+          "merged_at": "2026-09-01T00:00:00Z",
+          "author": null,
+          "reviewers": [],
+          "line_count": 1,
+          "score": 0.5,
+          "evidence": ["P0 checkout.ts: changed return total ?? 0; to return total || null;. JavaScript treats 0 as falsy, so this returns null for zero."]
+        },
+        {
+          "url": "https://github.com/example/checkout/pull/2",
+          "merged_at": "2026-09-02T00:00:00Z",
+          "author": null,
+          "reviewers": [],
+          "line_count": 3,
+          "score": 3,
+          "evidence": ["P1 checkout.ts: renamed local variable invoiceTotal to total without changing the expression return total || null;. The failure exists both before and after P1."]
+        }
+      ],
+      "gold": {
+        "outcome": "regression",
+        "inducing_prs": ["https://github.com/example/checkout/pull/1"],
+        "reviewed_by": "synthetic fixture author, not historical adjudication",
+        "rationale": "The artificial example deliberately contrasts semantic introduction with a later last-touch rename."
+      }
+    },
+    {
+      "id": "synthetic-existing-bug",
+      "group": "example/calendar:fix-empty-range",
+      "complete": true,
+      "issue": "An empty date range has thrown since the first release. There is no previously working release. This ticket asks to support empty ranges for the first time.",
+      "fixes": ["calendar.ts fix: if (dates.length === 0) return []; adds support for empty date ranges."],
+      "candidates": [],
+      "gold": {
+        "outcome": "not_regression",
+        "inducing_prs": [],
+        "reviewed_by": "synthetic fixture author, not historical adjudication",
+        "rationale": "The artificial description establishes a longstanding limitation rather than broken working behavior."
+      }
+    }
+  ]
+}

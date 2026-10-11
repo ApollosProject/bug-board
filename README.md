@@ -83,6 +83,41 @@ Deployment POSTs require a verified GitHub session, same-origin request, a fresh
 
 The durable attribution refresh traces removed lines in fixing PRs to likely inducing PRs, ranks them by recency-weighted line counts, and records human author/approval attribution. Work is bounded at 50 files and 500 deleted lines per file. Exceeding either marks evidence incomplete. Manual overrides can ignore a Linear issue or select an inducing PR. Attribution is directional, not proof of causality. Regression cards always use their labeled 30-day window, independently of the page's selected delivery window.
 
+### Offline AI regression benchmark
+
+Production attribution does not call a model. `npm run regressions:eval` is an opt-in, local shadow benchmark. It compares the current SZZ ranking, JEV alone, Luna alone, and Luna plus JEV. It never writes production snapshots, starts a Workflow, or changes person metrics.
+
+```sh
+# Synthetic protocol check; this is not an accuracy benchmark:
+umask 077
+npm run regressions:eval -- tests/fixtures/regression-eval.json /tmp/regression-eval.json
+
+# Human-reviewed, redacted historical cases, kept outside Git:
+npm run regressions:eval -- /private/cases.json /private/results.json
+```
+
+The script loads the existing `AI_GATEWAY_API_KEY` from Next's env files. It uses `openai/gpt-6-luna` and `typesafe-ai/jev`, with no model/provider fallback or automatic retries. Routing requires no prompt training and zero data retention. Luna routes only to OpenAI. JEV routes only to TypeSafe AI. A missing eligible route is an error, not permission to loosen these controls.
+
+Key budget limits remain unchanged. Each run permits at most 50 cases and 150 requests. Evidence size and output tokens are bounded. Higher catalog prices fail closed.
+
+Use the fixture's JSON shape for a dataset. Set `kind` to `historical` and confirm `redacted: true` only after removing credentials, personal data, and known-answer hints from issue/code text. Each case supplies the issue/reproduction, fixing evidence, and candidate PR evidence with existing SZZ scores.
+
+Each `group` identifies one fix episode. Duplicate groups are rejected. Gold labels require independent human review and a rationale. They can identify a PR outside the retrieved candidates. Do not copy SZZ winners or model predictions into gold labels.
+
+All four methods use the same supplied SZZ candidates. This first runner does not fetch history or discover additional PRs. Freeze revision SHAs and reproduction evidence in each case before evaluation.
+
+Models receive candidate aliases, code evidence and merge dates, but not gold labels, authors, reviewers, PR URLs or SZZ scores. Alias order does not depend on SZZ rank. Luna must quote supplied fixing and candidate evidence exactly. JEV can abstain or select multiple candidates. Its exploratory 0.8 cutoff is not a calibrated causal probability.
+
+Incomplete evidence causes model abstention. The SZZ baseline preserves current behavior.
+
+Reports and cached results stay outside Git, with private file permissions. Cache keys include evidence, model IDs, hypothesis and prompt version. Repeat runs reuse successful answers.
+
+The report separates cache hits from new requests and records Gateway-reported costs for that invocation. Missing cost data is counted, not treated as free usage. These costs are not a full infrastructure bill.
+
+Errors are not cached. An operator rerun can spend again. Keep the same report path to reuse its cache. Preserve the raw JEV probabilities for calibration and review Luna's explanations. The model aliases do not guarantee a fixed provider checkpoint.
+
+Before adoption, freeze a separate holdout of at least 50 independently reviewed historical cases. Include non-regressions, unknown causes, missing candidates, addition-only fixes, refactoring, and multiple causes. Measure false attribution, precision at comparable coverage, candidate recall, abstention, latency and full costs. Synthetic fixture results establish only protocol behavior. Model agreement is not causal proof. This benchmark does not authorize automatic changes to author or reviewer scores.
+
 ## Environment
 
 See `.env.example` for names and defaults. Set server credentials in the appropriate Vercel environment. None are `NEXT_PUBLIC_*`.

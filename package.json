@@ -11,7 +11,8 @@
     "start": "next start",
     "check": "tsc --noEmit && eslint .",
     "test": "tsx --test tests/*.test.ts",
-    "e2e": "e2e run"
+    "e2e": "e2e run",
+    "regressions:eval": "tsx scripts/regression-eval.ts"
   },
   "dependencies": {
     "@google-cloud/bigquery": "^9.1.0",
