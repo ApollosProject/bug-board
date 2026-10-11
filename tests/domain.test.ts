@@ -689,6 +689,12 @@ test("church lookup matches names and slugs as whole words", () => {
     ],
   });
   assert.equal(activity.apps.length, 1);
+  // A shared app (no single build church) still shows for each church that ships it.
+  const shared = churchActivity(
+    { ...church, androidPkgId: "com.shared.app" },
+    { apps: [{ ...app, church: "other", build_church: null, bundle_id: "com.shared.app", deploy_target_count: 2 }], dags: [], issues: [] },
+  );
+  assert.equal(shared.apps.length, 1);
   assert.deepEqual(activity.dags.map((d) => d.dag_id), ["cedar_creek_backfill_rock_people_dag"]);
   assert.deepEqual(activity.issues.map((i) => i.id), ["a", "c"]);
 });
