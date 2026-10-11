@@ -247,8 +247,15 @@ test("fleet retries failed lookups once and stops at the Cron deadline", async (
       await new Promise((resolve) => setTimeout(resolve, 600));
       throw new TypeError("fetch failed");
     };
-    const unchecked = await evaluateFleet(ids, 1, Date.now() + 31_000);
+    const warnings: unknown[] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => void warnings.push(args[1]);
+    const unchecked = await evaluateFleet(ids, 1, Date.now() + 31_000).finally(() => {
+      console.warn = warn;
+    });
     assert.equal(calls, 2);
+    // No retry could start before the deadline, and none is reported.
+    assert.deepEqual(warnings, [{ retried: 0, unchecked: 10, reasons: { "TypeError": 2, "Deadline": 8 } }]);
     assert.equal(unchecked.status, "unknown");
     assert.equal(unchecked.failed_fetches, 10);
     // Inventory shares the deadline: with no room left, it requests nothing.

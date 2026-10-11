@@ -26,8 +26,9 @@ async function airflow<T>(path: string) {
 // retries) inside the 300-second Cron limit, so an unknown snapshot and heartbeat
 // still get written. A request starts only if its 30-second timeout ends in time.
 export const fleetDeadline = () => Date.now() + 230_000;
+const hasTime = (deadline: number) => Date.now() + 30_000 <= deadline;
 function beforeDeadline(deadline: number) {
-  if (Date.now() + 30_000 > deadline)
+  if (!hasTime(deadline))
     throw Object.assign(new Error("Fleet deadline"), { name: "Deadline" });
 }
 async function lastRun(id: string, deadline: number): Promise<Evaluation> {
@@ -154,11 +155,14 @@ export async function evaluateFleet(
   // Lookups fail transiently (connection resets); retry each once.
   const retry = ids.flatMap((id, i) => (runs[i] ? [] : [i]));
   if (retry.length) {
+    let retried = 0;
     await mapConcurrent(retry, concurrency, async (i) => {
+      if (!hasTime(deadline)) return;
+      retried++;
       runs[i] = await attempt(ids[i]);
     });
     console.warn("Airflow DAG lookups failed", {
-      retried: retry.length,
+      retried,
       unchecked: runs.filter((run) => !run).length,
       reasons: errors,
     });
