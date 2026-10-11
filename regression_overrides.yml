@@ -4,7 +4,10 @@
 #   inducing_pr: https://github.com/ApollosProject/example/pull/456
 #
 # APO-789:
-#   ignored: true
+#   ignored: true # not a regression
+#
+# APO-790:
+#   unattributed: true # a regression, but no PR can be blamed
 #
 # The entries below are agent labels (#646, 2026-10-11), made under delegated
 # authority from the issue, fixing PRs and candidate diffs. They are not blind
@@ -15,13 +18,13 @@ overrides:
   APO-12005:
     ignored: true # Not a regression
   APO-12063:
-    ignored: true # No supported attribution: pick merged after the issue was filed
+    unattributed: true # pick merged after the issue was filed
   APO-12200:
     inducing_pr: https://github.com/ApollosProject/apollos-platforms/pull/4315
   APO-12558:
     inducing_pr: https://github.com/ApollosProject/apollos-platforms/pull/4469
   APO-12791:
-    ignored: true # No supported attribution: pick merged after the failures began
+    unattributed: true # pick merged after the failures began
   APO-12899:
     ignored: true # Not a regression
   APO-12970:
@@ -57,9 +60,9 @@ overrides:
   APO-13825:
     ignored: true # Not a regression
   APO-13911:
-    ignored: true # No supported attribution: pick merged after the issue was filed
+    unattributed: true # pick merged after the issue was filed
   APO-13915:
-    ignored: true # No supported attribution: issue predates the pick
+    unattributed: true # issue predates the pick
   APO-13950:
     ignored: true # Not a regression
   APO-14435:

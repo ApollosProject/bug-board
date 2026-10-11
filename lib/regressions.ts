@@ -370,13 +370,17 @@ export async function summarizeRegressions(
       ) || {}
     ).overrides as Record<
       string,
-      { ignored?: boolean; inducing_pr?: string }
+      { ignored?: boolean; inducing_pr?: string; unattributed?: boolean }
     >) || {};
   const corrected: Attribution[] = [];
   for (const record of records) {
     const override = overrides[record.identifier];
     if (override?.ignored) continue;
-    if (override?.inducing_pr) {
+    // Still a regression, but no PR can be blamed.
+    if (override?.unattributed) {
+      record.attribution = null;
+      record.manual_override = true;
+    } else if (override?.inducing_pr) {
       const candidate =
         record.candidates.find((c) => c.url === override.inducing_pr) ||
         (await overrideMetadata(override.inducing_pr).catch(() => null));

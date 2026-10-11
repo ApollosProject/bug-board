@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { timeWindow } from "../lib/window";
@@ -668,4 +669,17 @@ test("notification schedule preserves New York time through DST", () => {
       "performance",
     ),
   );
+});
+
+test("regression overrides each make one valid correction", async () => {
+  const { parse } = await import("yaml");
+  const { parsePR } = await import("../lib/regressions");
+  const { overrides } = parse(fs.readFileSync("regression_overrides.yml", "utf8"));
+  for (const [id, o] of Object.entries(overrides as Record<string, Record<string, unknown>>)) {
+    assert.match(id, /^[A-Z]+-\d+$/);
+    assert.deepEqual(Object.keys(o).length, 1, id);
+    const [[key, value]] = Object.entries(o);
+    if (key === "inducing_pr") assert.ok(parsePR(String(value)), id);
+    else assert.ok(["ignored", "unattributed"].includes(key) && value === true, id);
+  }
 });
