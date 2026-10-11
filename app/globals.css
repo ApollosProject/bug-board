@@ -5,10 +5,39 @@
     sans-serif;
   --pico-font-size: 16px;
   --pico-border-radius: 0.75rem;
-  --pico-primary: #7064e8;
-  --pico-primary-hover: #8a7df7;
-  --pico-primary-background: #6459d6;
   --pico-form-element-spacing-vertical: 0.55rem;
+}
+/* Pico sets its palette on these selectors, so overrides must match them. */
+:root:not([data-theme="dark"]) {
+  --pico-primary: #00676d;
+  --pico-primary-background: #00676d;
+  --pico-primary-border: #00676d;
+  --pico-primary-underline: rgba(0, 103, 109, 0.5);
+  --pico-primary-hover: #004f54;
+  --pico-primary-hover-background: #00575c;
+  --pico-primary-hover-border: #00575c;
+  --pico-primary-hover-underline: rgba(0, 79, 84, 0.5);
+  --pico-primary-focus: rgba(23, 181, 130, 0.3);
+  --good: #1e7350;
+  --bad: #b42335;
+  --warn: #8a5a00;
+}
+@media only screen and (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --pico-primary: #17b582;
+    --pico-primary-background: #087d68;
+    --pico-primary-border: #087d68;
+    --pico-primary-underline: rgba(23, 181, 130, 0.5);
+    --pico-primary-hover: #85ddcf;
+    --pico-primary-hover-background: #0a7664;
+    --pico-primary-hover-border: #0a7664;
+    --pico-primary-hover-underline: rgba(133, 221, 207, 0.5);
+    --pico-primary-focus: rgba(110, 197, 184, 0.36);
+    --pico-muted-color: #9aa3b3;
+    --good: #5fd3a0;
+    --bad: #ff8a8f;
+    --warn: #f0b45a;
+  }
 }
 body {
   background: var(--pico-background-color);
@@ -220,14 +249,14 @@ caption {
   white-space: nowrap;
 }
 .high {
-  color: #298b68;
+  color: var(--good);
 }
 .low,
 .priority-1 {
-  color: #d15865;
+  color: var(--bad);
 }
 .priority-2 {
-  color: #b27726;
+  color: var(--warn);
 }
 .issue-list {
   margin: 0;
@@ -333,7 +362,7 @@ meter {
 }
 .timeline-bar {
   z-index: 1;
-  background: #7668d8;
+  background: #00676d;
   color: white;
   border-radius: 4px;
   padding: 5px;
@@ -344,25 +373,25 @@ meter {
   text-overflow: ellipsis;
 }
 .timeline-bar.completed {
-  opacity: 0.45;
+  background: #6b7280;
 }
 .timeline-bar.overdue,
 .timeline-bar.offTrack {
-  background: #b75360;
+  background: #a63a48;
 }
 .timeline-bar.onTrack {
-  background: #358f78;
+  background: #1f6f5c;
 }
 .timeline-bar.ooo {
-  background: #a4783e;
+  background: #8a5a1f;
 }
 .timeline-bar.partial {
   background: repeating-linear-gradient(
     45deg,
-    #a4783e,
-    #a4783e 4px,
-    #bd945e 4px,
-    #bd945e 8px
+    #8a5a1f,
+    #8a5a1f 4px,
+    #9e6c2c 4px,
+    #9e6c2c 8px
   );
 }
 .today {
