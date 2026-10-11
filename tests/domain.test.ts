@@ -690,7 +690,7 @@ test("deploy stages ask GitHub for the latest run, last success, and exact failu
       );
     };
     const s = await stage("repo", "deploy.yml", now);
-    assert.deepEqual(urls.sort(), ["", "&status=failure&created=>=2026-08-31", "&status=success"]);
+    assert.deepEqual(urls.sort(), ["", "&status=failure&created=>=2026-08-31T12:00:00Z", "&status=success"]);
     assert.equal(s.latest?.head_sha, "newest");
     assert.equal(s.success?.head_sha, "ok");
     assert.equal(s.failures, 23);

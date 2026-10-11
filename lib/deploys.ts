@@ -106,7 +106,7 @@ export async function stage(repo: string, workflow: string, now = Date.now()) {
     githubRest<{ total_count: number; workflow_runs: Run[] }>(
       `${repoPath(repo)}/actions/workflows/${workflow}/runs?exclude_pull_requests=true&per_page=1${query}`,
     );
-  const since = new Date(now - 7 * DAY).toISOString().slice(0, 10);
+  const since = new Date(now - 7 * DAY).toISOString().slice(0, 19) + "Z";
   const [latest, success, failed] = await Promise.all([
     runs(""),
     runs("&status=success"),
