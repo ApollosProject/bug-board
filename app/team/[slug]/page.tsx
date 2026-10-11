@@ -118,6 +118,16 @@ async function Metrics({ slug, window }: { slug: string; window: Window }) {
     </>
   );
 }
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  return {
+    title: Object.hasOwn(people, slug) ? personName(slug) : "Not found",
+  };
+}
 export default async function Person({
   params,
   searchParams,

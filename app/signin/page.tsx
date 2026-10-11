@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { org, safeNext, session } from "@/lib/auth";
 import type { Search } from "@/lib/types";
 import { param } from "@/lib/window";
+export const metadata = { title: "Sign in" };
 export default async function SignIn({
   searchParams,
 }: {

@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { Heading, Unavailable } from "@/components/dashboard";
+import { Heading, Unavailable, TableScroll } from "@/components/dashboard";
 import { session } from "@/lib/auth";
 import { appsDashboard, deployTarget } from "@/lib/apps";
 import { storePlatforms } from "@/lib/stores";
 import { param, queryString } from "@/lib/window";
 import type { Search } from "@/lib/types";
+export const metadata = { title: "Apps" };
 export default async function Apps({
   searchParams,
 }: {
@@ -78,7 +79,7 @@ export default async function Apps({
             days. Non-mobile store publication is unverified; those badges
             describe observations only.
           </p>
-          <article className="table-scroll">
+          <TableScroll label="Apps">
             <table>
               <caption>{rows.length} apps</caption>
               <thead>
@@ -143,7 +144,7 @@ export default async function Apps({
               </tbody>
             </table>
             {!rows.length && <p>No matching apps.</p>}
-          </article>
+          </TableScroll>
         </>
       )}
     </>

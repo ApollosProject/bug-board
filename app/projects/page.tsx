@@ -7,6 +7,7 @@ import { projectDashboard } from "@/lib/reports";
 import { ptoCalendar } from "@/lib/pto";
 import { readSnapshot } from "@/lib/cache";
 import { DAY, date, timeWindow } from "@/lib/window";
+export const metadata = { title: "Projects" };
 export async function Timeline() {
   const data = await Promise.all([
     projectDashboard(),

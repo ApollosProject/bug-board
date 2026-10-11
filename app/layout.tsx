@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { session } from "@/lib/auth";
+import { NavLinks } from "@/components/nav";
 import "./globals.css";
 export function generateMetadata(): Metadata {
   return {
@@ -31,6 +32,9 @@ export default async function Layout({
   return (
     <html lang="en">
       <body>
+        <a className="skip-link" href="#main">
+          Skip to content
+        </a>
         <header className="site-header">
           <nav className="container">
             <Link className="brand" href="/" prefetch={false}>
@@ -45,17 +49,7 @@ export default async function Layout({
                 Apollos <small>Engineering</small>
               </span>
             </Link>
-            <div className="nav-links">
-              {["Team", "Reviews", "Apps", "Projects", "DAGs"].map((name) => (
-                <Link
-                  key={name}
-                  href={`/${name.toLowerCase()}`}
-                  prefetch={false}
-                >
-                  {name}
-                </Link>
-              ))}
-            </div>
+            <NavLinks />
             {user && (
               <form action="/logout" method="post">
                 <button className="outline" type="submit">
@@ -65,7 +59,9 @@ export default async function Layout({
             )}
           </nav>
         </header>
-        <main className="container">{children}</main>
+        <main className="container" id="main">
+          {children}
+        </main>
         <footer className="container">
           <span>Apollos Engineering · Bug Board</span>
           <div>

@@ -1,7 +1,8 @@
-import { Heading, Unavailable } from "@/components/dashboard";
+import { Heading, Unavailable, TableScroll } from "@/components/dashboard";
 import { fleetDashboard, astroURL } from "@/lib/fleet";
 import { param } from "@/lib/window";
 import type { Search } from "@/lib/types";
+export const metadata = { title: "DAGs" };
 export default async function DAGs({
   searchParams,
 }: {
@@ -93,7 +94,7 @@ export default async function DAGs({
         <button type="submit">Filter DAGs</button>
       </form>
       {fleet && (
-        <article className="table-scroll">
+        <TableScroll label="DAGs">
           <table>
             <caption>{rows.length} DAGs</caption>
             <thead>
@@ -122,7 +123,7 @@ export default async function DAGs({
             </tbody>
           </table>
           {!rows.length && <p>No matching DAGs.</p>}
-        </article>
+        </TableScroll>
       )}
     </>
   );

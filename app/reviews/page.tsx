@@ -1,12 +1,18 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { unstable_cache } from "next/cache";
-import { Heading, Loading, Unavailable } from "@/components/dashboard";
+import {
+  Heading,
+  Loading,
+  Unavailable,
+  TableScroll,
+} from "@/components/dashboard";
 import { session } from "@/lib/auth";
 import { people, personName, priorityLabels } from "@/lib/config";
 import { reviewQueue } from "@/lib/reviews";
 import { param, queryString } from "@/lib/window";
 import type { Search } from "@/lib/types";
+export const metadata = { title: "Reviews" };
 export const maxDuration = 300;
 const loginFor = (value: string) => people[value]?.github_username || value;
 async function Queue({ search }: { search: Search }) {
@@ -51,7 +57,7 @@ async function Queue({ search }: { search: Search }) {
         <h2>
           {title} <span className="badge">{items.length}</span>
         </h2>
-        <article className="table-scroll">
+        <TableScroll label={`${title} pull requests`}>
           {items.length ? (
             <table>
               <thead>
@@ -98,7 +104,7 @@ async function Queue({ search }: { search: Search }) {
           ) : (
             <p>No PRs in this section.</p>
           )}
-        </article>
+        </TableScroll>
       </section>
     );
   });

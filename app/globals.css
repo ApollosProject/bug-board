@@ -84,6 +84,26 @@ body {
   text-decoration: none;
   color: var(--pico-color);
 }
+.nav-links a[aria-current="page"] {
+  color: var(--pico-primary);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.45em;
+}
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -4rem;
+  z-index: 10;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  background: var(--pico-card-background-color);
+}
+.skip-link:focus {
+  top: 0.75rem;
+  box-shadow: 0 0 0 2px var(--pico-primary);
+}
 form {
   margin: 0;
 }

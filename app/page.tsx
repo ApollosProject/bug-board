@@ -11,6 +11,7 @@ import {
   Loading,
   Unavailable,
   WindowControls,
+  TableScroll,
 } from "@/components/dashboard";
 async function OpenWork() {
   const data = await openWork().catch(() => null);
@@ -48,7 +49,7 @@ async function Resolution({ window }: { window: Window }) {
   return (
     <section>
       <h2>Resolution by Priority</h2>
-      <article className="table-scroll">
+      <TableScroll label="Resolution by priority">
         <table>
           <thead>
             <tr>
@@ -70,7 +71,7 @@ async function Resolution({ window }: { window: Window }) {
           </tbody>
         </table>
         {!stats.length && <p>No resolved work in this window.</p>}
-      </article>
+      </TableScroll>
     </section>
   );
 }
