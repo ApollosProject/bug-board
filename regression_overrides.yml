@@ -5,4 +5,66 @@
 #
 # APO-789:
 #   ignored: true
-overrides: {}
+#
+# The entries below are agent labels (#646, 2026-10-11), made under delegated
+# authority from the issue, fixing PRs and candidate diffs. They are not blind
+# or human-reviewed. A human correction replaces any of them.
+overrides:
+  APO-11690:
+    ignored: true # Not a regression
+  APO-12005:
+    ignored: true # Not a regression
+  APO-12063:
+    ignored: true # No supported attribution: pick merged after the issue was filed
+  APO-12200:
+    inducing_pr: https://github.com/ApollosProject/apollos-platforms/pull/4315
+  APO-12558:
+    inducing_pr: https://github.com/ApollosProject/apollos-platforms/pull/4469
+  APO-12791:
+    ignored: true # No supported attribution: pick merged after the failures began
+  APO-12899:
+    ignored: true # Not a regression
+  APO-12970:
+    ignored: true # Not a regression
+  APO-13174:
+    ignored: true # Not a regression
+  APO-13235:
+    inducing_pr: https://github.com/ApollosProject/apollos-platforms/pull/5150
+  APO-13510:
+    inducing_pr: https://github.com/ApollosProject/apollos-platforms/pull/7141
+  APO-13531:
+    inducing_pr: https://github.com/ApollosProject/apollos-shovel/pull/1134
+  APO-13538:
+    inducing_pr: https://github.com/ApollosProject/apollos-admin/pull/3581
+  APO-13596:
+    ignored: true # Not a regression
+  APO-13614:
+    ignored: true # Not a regression
+  APO-13624:
+    inducing_pr: https://github.com/Differential/crossroads-anywhere/pull/10052
+  APO-13628:
+    inducing_pr: https://github.com/ApollosProject/apollos-admin/pull/4374
+  APO-13634:
+    ignored: true # Not a regression
+  APO-13679:
+    inducing_pr: https://github.com/ApollosProject/apollos-platforms/pull/4182
+  APO-13754:
+    inducing_pr: https://github.com/Differential/crossroads-anywhere/pull/10052
+  APO-13761:
+    ignored: true # Not a regression
+  APO-13788:
+    inducing_pr: https://github.com/ApollosProject/apollos-cluster/pull/4309
+  APO-13825:
+    ignored: true # Not a regression
+  APO-13911:
+    ignored: true # No supported attribution: pick merged after the issue was filed
+  APO-13915:
+    ignored: true # No supported attribution: issue predates the pick
+  APO-13950:
+    ignored: true # Not a regression
+  APO-14435:
+    ignored: true # Not a regression
+  APO-14791:
+    ignored: true # Not a regression
+  APO-14935:
+    inducing_pr: https://github.com/ApollosProject/apollos-platforms/pull/5644
