@@ -130,25 +130,32 @@ const reason = (error: unknown) =>
       ? `${error.name}${(error.cause as { code?: string })?.code ? ` ${(error.cause as { code: string }).code}` : ""}`
       : "unknown";
 export async function evaluateFleet(ids: string[], concurrency = 30) {
-  const errors: Record<string, number> = {};
+  const started = Date.now(),
+    errors: Record<string, number> = {};
   const attempt = (id: string) =>
     lastRun(id).catch((error) => {
       errors[reason(error)] = (errors[reason(error)] || 0) + 1;
       return null;
     });
   const runs = await mapConcurrent(ids, concurrency, attempt);
-  // Lookups fail transiently (connection resets, slow responses); retry each once.
+  // Lookups fail transiently (connection resets); retry each once. A lookup can
+  // take up to its 30-second timeout, so retry only when the whole pass still
+  // fits well inside the 300-second Cron limit.
   const retry = ids.flatMap((id, i) => (runs[i] ? [] : [i]));
-  if (retry.length) {
-    await mapConcurrent(retry, 10, async (i) => {
+  const retried =
+    !!retry.length &&
+    Date.now() - started + Math.ceil(retry.length / concurrency) * 30_000 <=
+      200_000;
+  if (retried)
+    await mapConcurrent(retry, concurrency, async (i) => {
       runs[i] = await attempt(ids[i]);
     });
+  if (retry.length)
     console.warn("Airflow DAG lookups failed", {
-      retried: retry.length,
+      retried: retried ? retry.length : 0,
       unchecked: runs.filter((run) => !run).length,
       reasons: errors,
     });
-  }
   return fleetStats(ids, runs);
 }
 export async function fleetHeartbeat(status: Fleet["status"]) {

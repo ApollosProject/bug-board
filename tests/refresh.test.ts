@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { GET, maxDuration } from "../app/api/cron/[job]/route";
-import { fleetHeartbeat } from "../lib/fleet";
+import { evaluateFleet, fleetHeartbeat } from "../lib/fleet";
 
 const request = (job: string, authorization = "Bearer fixture-cron") =>
   GET(new Request(`http://localhost/api/cron/${job}`, { headers: { authorization } }), {
@@ -93,7 +93,7 @@ test("ordinary fleet Cron completes without a Workflow, preserves evidence, conc
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { status: "refreshed", result: { status: "degraded", dags: 125 } });
     assert.equal(lease, maxDuration + 60);
-    assert.equal(peak, 30);
+    assert.equal(peak, 120);
     assert.equal(resets, 2);
     const snapshot = JSON.parse([...records.entries()].find(([k]) => k.endsWith(":fleet"))![1]);
     assert.equal(snapshot.data.evaluated_dags, 125);
@@ -216,6 +216,42 @@ test("fleet heartbeat retains unknown threshold, recovery, failure path and Prev
   } finally {
     globalThis.fetch = original;
     for (const [key, value] of Object.entries(previous))
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+  }
+});
+
+test("fleet retries failed lookups once only when the retry fits the Cron limit", async () => {
+  const previous = [process.env.AIRFLOW_API_BASE_URL, process.env.AIRFLOW_API_TOKEN];
+  const original = globalThis.fetch;
+  let calls = 0;
+  try {
+    process.env.AIRFLOW_API_BASE_URL = "http://airflow.local";
+    process.env.AIRFLOW_API_TOKEN = "fixture-airflow";
+    const ids = Array.from({ length: 10 }, (_, i) => `dag-${i}`);
+    // Every first lookup fails and every retry succeeds.
+    globalThis.fetch = async () => {
+      calls++;
+      if (calls <= 10) throw new TypeError("fetch failed");
+      return Response.json({ dag_runs: [{ state: "success", dag_run_id: "r" }], total_entries: 1 });
+    };
+    const recovered = await evaluateFleet(ids, 5);
+    assert.equal(calls, 20);
+    assert.equal(recovered.status, "healthy");
+    assert.equal(recovered.failed_fetches, 0);
+    // Ten waves of 30-second retries would overrun the Cron limit: skip the retry.
+    calls = 0;
+    globalThis.fetch = async () => {
+      calls++;
+      throw new TypeError("fetch failed");
+    };
+    const unchecked = await evaluateFleet(ids, 1);
+    assert.equal(calls, 10);
+    assert.equal(unchecked.status, "unknown");
+    assert.equal(unchecked.failed_fetches, 10);
+  } finally {
+    globalThis.fetch = original;
+    for (const [key, value] of [["AIRFLOW_API_BASE_URL", previous[0]], ["AIRFLOW_API_TOKEN", previous[1]]] as const)
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
   }

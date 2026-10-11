@@ -26,9 +26,9 @@ export async function refreshSnapshot(
   }
   if (job === "fleet") {
     try {
-      // Airflow serves about 25 lookups per second whatever the concurrency;
-      // 120 at once only queued requests toward the 30-second timeout.
-      const fleet = await evaluateFleet(await fleetInventory(), 30);
+      // Keep the previous four-batch limit of 120 simultaneous DAG lookups: it
+      // bounds a full Airflow stall to about 150 seconds inside the Cron limit.
+      const fleet = await evaluateFleet(await fleetInventory(), 120);
       await writeSnapshot("fleet", fleet, 900);
       await fleetHeartbeat(fleet.status);
       return { status: fleet.status, dags: fleet.active_dags_total };
