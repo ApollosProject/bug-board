@@ -59,15 +59,15 @@ async function Queue({ search }: { search: Search }) {
         </h2>
         <TableScroll label={`${title} pull requests`}>
           {items.length ? (
-            <table>
+            <table className="wide">
               <thead>
                 <tr>
                   <th>PR</th>
-                  <th>Author</th>
                   <th>Priority</th>
-                  <th>Size</th>
                   <th>Waiting</th>
                   <th>CI / readiness</th>
+                  <th>Size</th>
+                  <th>Author</th>
                   <th>Reviewers</th>
                 </tr>
               </thead>
@@ -81,7 +81,6 @@ async function Queue({ search }: { search: Search }) {
                         {row.pr.number}
                       </small>
                     </td>
-                    <td>{row.pr.author?.login}</td>
                     <td>
                       {row.issue ? (
                         <a href={row.issue.url}>
@@ -91,11 +90,12 @@ async function Queue({ search }: { search: Search }) {
                         "No priority"
                       )}
                     </td>
+                    <td>{row.waiting}</td>
+                    <td>{row.reason || row.ci}</td>
                     <td title={`+${row.pr.additions} −${row.pr.deletions}`}>
                       {row.size}
                     </td>
-                    <td>{row.waiting}</td>
-                    <td>{row.reason || row.ci}</td>
+                    <td>{row.pr.author?.login}</td>
                     <td>{row.reviewers.join(", ") || "—"}</td>
                   </tr>
                 ))}

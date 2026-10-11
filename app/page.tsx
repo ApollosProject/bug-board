@@ -50,7 +50,7 @@ async function Resolution({ window }: { window: Window }) {
     <section>
       <h2>Resolution by Priority</h2>
       <TableScroll label="Resolution by priority">
-        <table>
+        <table className="numeric">
           <thead>
             <tr>
               <th>Priority</th>

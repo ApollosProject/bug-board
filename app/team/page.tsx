@@ -29,7 +29,7 @@ async function TeamTable({
   };
   return (
     <TableScroll label="Team metrics">
-      <table>
+      <table className="wide numeric">
         <caption>Team metrics · {data.window.label}</caption>
         <thead>
           <tr>
