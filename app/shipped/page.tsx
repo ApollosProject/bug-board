@@ -11,6 +11,8 @@ import { reportFor, shipped } from "@/lib/reports";
 import { timeWindow } from "@/lib/window";
 import type { Search, Window } from "@/lib/types";
 export const metadata = { title: "Shipped" };
+const updatesNote =
+  "Project updates are shown only for windows that end today; Linear keeps only each project's latest update.";
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 // https://github.com/owner/repo/pull/123 → repo#123
 const pullRequest = (url: string) => {
@@ -26,8 +28,9 @@ async function Report({ window }: { window: Window }) {
   ).catch(() => null);
   if (!data) return <Unavailable name="Shipped work" />;
   const rows = shipped(data, window);
-  const markdown = rows
-    .map(({ slug, prs, issues, updates }) =>
+  const markdown = [
+    ...(rows[0]?.updatesKnown ? [] : [`_${updatesNote}_`]),
+    ...rows.map(({ slug, prs, issues, updates }) =>
       [
         `### ${personName(slug)}`,
         ...issues.map((i) => `- ${i.identifier} ${i.title} (${i.url})`),
@@ -39,16 +42,11 @@ async function Report({ window }: { window: Window }) {
           ? ["- Nothing shipped in this window"]
           : []),
       ].join("\n"),
-    )
-    .join("\n\n");
+    ),
+  ].join("\n\n");
   return (
     <>
-      {!rows[0]?.updatesKnown && (
-        <p className="muted">
-          Project updates are shown only for windows that end today; Linear
-          keeps only each project&apos;s latest update.
-        </p>
-      )}
+      {!rows[0]?.updatesKnown && <p className="muted">{updatesNote}</p>}
       <details>
         <summary>Copy as Markdown</summary>
         <textarea readOnly rows={12} value={markdown} aria-label="Markdown" />

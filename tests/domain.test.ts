@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { timeWindow } from "../lib/window";
+import { DAY, date, timeWindow } from "../lib/window";
 import {
   assignmentDays,
   blocked,
@@ -702,6 +702,9 @@ test("shipped report keeps window bounds and credits PRs like team metrics", () 
   assert.deepEqual(zach.updates.map((p) => p.id), ["p1"]);
   // A preset window computed a moment earlier still reaches the present.
   assert.equal(shipped(data, window, now + 500)[0].updatesKnown, true);
+  // A custom range ending at midnight is past once midnight passes.
+  const yesterday = timeWindow({ start: "2026-09-01", end: date(now - DAY) }, now);
+  assert.equal(shipped(data, yesterday, Date.parse(yesterday.before) + 1)[0].updatesKnown, false);
   // A window that ended in the past cannot know about project updates.
   const past = timeWindow({ start: "2026-08-31", end: "2026-09-05" }, now);
   const earlier = shipped(data, past, now).find((row) => row.slug === "zach")!;

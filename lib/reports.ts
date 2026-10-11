@@ -221,9 +221,9 @@ export async function projectDashboard() {
 // credited the same way as the team metrics.
 export function shipped(data: Report, window: Window, now = Date.now()) {
   // Linear keeps only each project's latest update, so updates are only knowable
-  // for windows that reach the present.
-  // (A preset window ends at request time, a moment before `now`.)
-  const updatesKnown = Date.parse(window.before) >= now - 60_000;
+  // for windows that reach the present. Presets end at request time.
+  const updatesKnown =
+    window.preset_days !== null || Date.parse(window.before) > now;
   return engineers
     .map((slug) => {
       const login = people[slug].github_username.toLowerCase();
