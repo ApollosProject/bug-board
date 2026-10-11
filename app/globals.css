@@ -183,8 +183,19 @@ th small {
 }
 table {
   margin: 0;
-  min-width: 600px;
   font-size: 0.875rem;
+}
+table.wide {
+  min-width: 600px;
+}
+/* Every column after the first holds a number. */
+.numeric :is(th, td):not(:first-child) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+th a,
+td a {
+  overflow-wrap: anywhere;
 }
 th,
 td {

@@ -85,15 +85,15 @@ export default async function Apps({
             unverified; those badges describe observations only.
           </p>
           <TableScroll label="Apps">
-            <table>
+            <table className="wide">
               <caption>{rows.length} apps</caption>
               <thead>
                 <tr>
                   <th>App</th>
-                  <th>Platform</th>
+                  <th>Status</th>
                   <th>Runtime / source</th>
                   <th>Target</th>
-                  <th>Status</th>
+                  <th>Platform</th>
                   <th>Deploy</th>
                 </tr>
               </thead>
@@ -116,9 +116,6 @@ export default async function Apps({
                           {church} · {row.bundle_id}
                         </small>
                       </th>
-                      <td>{row.apollos_platform}</td>
-                      <td>{row.freshness_display || "Unknown"}</td>
-                      <td>{row.comparison_display}</td>
                       <td>
                         <span
                           className={`badge ${row.is_outdated ? "low" : storePlatforms.has(row.apollos_platform) && row.version_status_label === "At release" ? "high" : ""}`}
@@ -127,6 +124,9 @@ export default async function Apps({
                         </span>
                         <small>{row.live_status_detail}</small>
                       </td>
+                      <td>{row.freshness_display || "Unknown"}</td>
+                      <td>{row.comparison_display}</td>
+                      <td>{row.apollos_platform}</td>
                       <td>
                         {user && target && process.env.GITHUB_ACTIONS_TOKEN ? (
                           <details>
