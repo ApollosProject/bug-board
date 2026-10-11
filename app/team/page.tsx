@@ -5,11 +5,13 @@ import {
   Loading,
   Unavailable,
   WindowControls,
+  TableScroll,
 } from "@/components/dashboard";
 import { reportFor, sortedTeam } from "@/lib/reports";
 import { teamColumns, type TeamKey } from "@/lib/metrics";
 import { param, queryString, timeWindow } from "@/lib/window";
 import type { Search, Window } from "@/lib/types";
+export const metadata = { title: "Team" };
 async function TeamTable({
   window,
   search,
@@ -26,7 +28,7 @@ async function TeamTable({
     ...(param(search, "everyone") === "1" ? { everyone: "1" } : {}),
   };
   return (
-    <article className="table-scroll">
+    <TableScroll label="Team metrics">
       <table>
         <caption>Team metrics · {data.window.label}</caption>
         <thead>
@@ -73,7 +75,7 @@ async function TeamTable({
           ))}
         </tbody>
       </table>
-    </article>
+    </TableScroll>
   );
 }
 export default async function Team({

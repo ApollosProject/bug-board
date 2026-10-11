@@ -21,12 +21,33 @@ export function Unavailable({
   detail?: string;
 }) {
   return (
-    <article className="unavailable" role="status">
-      <strong>{name} unavailable</strong>
-      <p>
-        {detail ||
-          "Integration data is unavailable or refreshing. Configure the service credentials and Vercel Cron."}
-      </p>
+    <article className="unavailable">
+      <div role="status">
+        <strong>{name} unavailable</strong>
+        <p>
+          {detail ||
+            "Integration data is unavailable or refreshing. Configure the service credentials and Vercel Cron."}
+        </p>
+      </div>
+    </article>
+  );
+}
+// Keyboard users can only scroll a wide table if its region can take focus.
+export function TableScroll({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <article
+      className="table-scroll"
+      tabIndex={0}
+      role="region"
+      aria-label={label}
+    >
+      {children}
     </article>
   );
 }
