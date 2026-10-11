@@ -60,6 +60,7 @@ export type Project = {
   lead: Identity | null;
   members: { nodes: Identity[] };
   initiatives: { nodes: { id: string; name: string }[] };
+  teams?: { nodes: { id: string }[] };
 };
 export type Review = {
   author: Identity | null;

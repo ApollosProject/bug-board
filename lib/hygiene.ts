@@ -56,10 +56,12 @@ export function linearHygiene(
       .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt)),
     unassigned: byLabel(issues.filter((i) => !i.assignee)),
     noProject: byLabel(issues.filter((i) => !i.project)),
-    // "Not Now" and paused projects that hold almost nothing.
+    // "Not Now" and paused projects that hold almost nothing. Open work covers
+    // only our team, so shared (or unknown-team) projects are left out.
     emptyProjects: projects
       .filter(
         (p) =>
+          p.teams?.nodes.length === 1 &&
           ["backlog", "paused"].includes(p.status.type) &&
           !p.completedAt &&
           (open.get(p.id) || 0) <= 1,

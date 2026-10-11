@@ -116,7 +116,7 @@ export const projects = cache(async (): Promise<Project[]> => {
   type ProjectPage = Connection<Project & { inverseRelations?: Relations }>;
   const relationFields = "type project { status { name type } completedAt } projectMilestone { status }";
   const query = `query Projects($key: String!, $cursor: String) { teams(first: 1, filter: { key: { eq: $key } }) { nodes { projects(first: 50, after: $cursor) {
-    nodes { id name url health priorityLabel status { name type } completedAt startDate targetDate lastUpdate { createdAt } lead { displayName } members(first: 50) { nodes { displayName } } initiatives(first: 50) { nodes { id name } }
+    nodes { id name url health priorityLabel status { name type } completedAt startDate targetDate lastUpdate { createdAt } lead { displayName } members(first: 50) { nodes { displayName } } initiatives(first: 50) { nodes { id name } } teams(first: 2) { nodes { id } }
       inverseRelations(first: 5) { nodes { ${relationFields} } pageInfo { hasNextPage endCursor } } }
     pageInfo { hasNextPage endCursor }
   } } } }`;

@@ -681,11 +681,15 @@ test("Linear upkeep lists triage age, stale work, Merged waits, and near-empty p
     issue({ id: "s-fresh", state: { name: "In Progress", type: "started" }, updatedAt: ago(1), project: { id: "p-busy", name: "Busy" } }),
     issue({ id: "merged", state: { name: "Merged", type: "started" }, updatedAt: ago(9), project: { id: "p-one", name: "One" } }),
   ];
+  const ours = { teams: { nodes: [{ id: "team" }] } };
   const projects = [
-    project({ id: "p-empty", name: "Empty", status: { name: "Not Now", type: "backlog" }, completedAt: undefined }),
-    project({ id: "p-one", name: "One", status: { name: "Paused", type: "paused" }, completedAt: undefined }),
-    project({ id: "p-busy", name: "Busy", status: { name: "Not Now", type: "backlog" }, completedAt: undefined }),
-    project({ id: "p-live", name: "Live", status: { name: "In Progress", type: "started" }, completedAt: undefined }),
+    project({ id: "p-empty", name: "Empty", status: { name: "Not Now", type: "backlog" }, completedAt: undefined, ...ours }),
+    project({ id: "p-one", name: "One", status: { name: "Paused", type: "paused" }, completedAt: undefined, ...ours }),
+    project({ id: "p-busy", name: "Busy", status: { name: "Not Now", type: "backlog" }, completedAt: undefined, ...ours }),
+    project({ id: "p-live", name: "Live", status: { name: "In Progress", type: "started" }, completedAt: undefined, ...ours }),
+    // Shared with another team, or from a snapshot without teams: issues we can't see.
+    project({ id: "p-shared", name: "Shared", status: { name: "Not Now", type: "backlog" }, completedAt: undefined, teams: { nodes: [{ id: "team" }, { id: "other" }] } }),
+    project({ id: "p-unknown", name: "Unknown", status: { name: "Not Now", type: "backlog" }, completedAt: undefined }),
   ];
   const h = linearHygiene(issues, projects, now);
   assert.deepEqual(h.triage.map((i) => i.id), ["t-old", "t-new"]);
