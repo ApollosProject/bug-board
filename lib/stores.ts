@@ -159,26 +159,21 @@ async function android(church: string, bundle: string, platform: string) {
   if (!response.ok) throw new Error("Google store unavailable");
   return { builds: publishedAndroid(payload, track) };
 }
-export async function appDirectory() {
+// Church records from the cluster; `fields` is a GraphQL selection on Church.
+export async function clusterChurches<T extends { slug: string }>(
+  fields: string,
+): Promise<T[]> {
   if (!process.env.APOLLOS_API_KEY) return [];
   try {
     const payload = await requestJson<{
-      data: {
-        churches: {
-          slug: string;
-          appleBundleId?: string;
-          androidPkgId?: string;
-        }[];
-      };
+      data: { churches: T[] };
       errors?: unknown[];
     }>(
       "https://cluster.apollos.app/graphql",
       {
         method: "POST",
         headers: { ...clusterHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({
-          query: "query { churches { slug appleBundleId androidPkgId } }",
-        }),
+        body: JSON.stringify({ query: `query { churches { ${fields} } }` }),
       },
       "Cluster",
     );
@@ -189,6 +184,12 @@ export async function appDirectory() {
     return [];
   }
 }
+export const appDirectory = () =>
+  clusterChurches<{
+    slug: string;
+    appleBundleId?: string;
+    androidPkgId?: string;
+  }>("slug appleBundleId androidPkgId");
 export async function lookupRelease(
   platform: string,
   bundle: string,

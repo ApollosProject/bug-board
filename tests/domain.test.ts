@@ -20,6 +20,7 @@ import {
 import { classify, reviewRows, ticketNumber } from "../lib/reviews";
 import { creditedAuthors } from "../lib/github";
 import { fleetStats } from "../lib/fleet";
+import { churchActivity, matchChurches, type Church } from "../lib/churches";
 import {
   appIdentity,
   buildApps,
@@ -668,4 +669,26 @@ test("notification schedule preserves New York time through DST", () => {
       "performance",
     ),
   );
+});
+
+test("church lookup matches names and slugs as whole words", () => {
+  const church: Church = { slug: "cedar_creek", name: "Cedar Creek", altSlugs: ["cedarcreek"] };
+  const other: Church = { slug: "creek", name: "The Creek", altSlugs: [] };
+  assert.deepEqual(matchChurches([church, other], "cedar").map((c) => c.slug), ["cedar_creek"]);
+  assert.deepEqual(matchChurches([church, other], "cedarcreek").map((c) => c.slug), ["cedar_creek"]);
+  const activity = churchActivity(church, {
+    apps: [{ ...app, church: "preview", build_church: "cedar_creek" }, { ...app, church: "creek" }],
+    dags: [
+      { dag_id: "cedar_creek_backfill_rock_people_dag", state: "failed", dag_run_id: "r" },
+      { dag_id: "creek_backfill_dag", state: "success", dag_run_id: "r" },
+    ],
+    issues: [
+      issue({ id: "a", title: "(Cedar Creek) Giving form errors" }),
+      issue({ id: "b", title: "Creek Church login loop" }),
+      issue({ id: "c", title: "cedarcreek deep link opens the wrong app" }),
+    ],
+  });
+  assert.equal(activity.apps.length, 1);
+  assert.deepEqual(activity.dags.map((d) => d.dag_id), ["cedar_creek_backfill_rock_people_dag"]);
+  assert.deepEqual(activity.issues.map((i) => i.id), ["a", "c"]);
 });
