@@ -1,5 +1,10 @@
 import { regressionDashboard } from "@/lib/regressions";
 import { Unavailable } from "./dashboard";
+// https://github.com/owner/repo/pull/123 → repo#123
+const pullRequest = (url: string) => {
+  const [, , , , repo, , number] = url.split("/");
+  return number ? `${repo}#${number}` : url;
+};
 export async function Regressions({ slug }: { slug?: string }) {
   const summary = await regressionDashboard();
   if (!summary?.configured)
@@ -50,24 +55,32 @@ export async function Regressions({ slug }: { slug?: string }) {
             {!!card.row?.attributions.length && (
               <details>
                 <summary>Attribution evidence</summary>
-                {card.row.attributions.map((a) => (
-                  <p key={a.identifier}>
-                    <a href={a.issue_url}>{a.identifier}</a> ·{" "}
-                    <a href={a.attribution!.url}>Inducing PR</a> ·{" "}
-                    {a.attribution!.line_count} matching deleted lines ·{" "}
-                    {a.manual_override
-                      ? "Manual correction"
-                      : `Ranked first of ${a.candidates.length}`}
-                    {!a.complete && " · Incomplete blame data"}
-                    <br />
-                    Fixes:{" "}
-                    {a.fixing_urls.map((url) => (
-                      <a key={url} href={url}>
-                        {url.split("/").slice(-3).join("/")}{" "}
+                <ul className="evidence">
+                  {card.row.attributions.map((a) => (
+                    <li key={a.identifier}>
+                      <a href={a.issue_url}>{a.identifier}</a> ←{" "}
+                      <a href={a.attribution!.url}>
+                        {pullRequest(a.attribution!.url)}
                       </a>
-                    ))}
-                  </p>
-                ))}
+                      <small>
+                        {a.attribution!.line_count} matching deleted lines ·{" "}
+                        {a.manual_override
+                          ? "manual correction"
+                          : `ranked first of ${a.candidates.length}`}
+                        {!a.complete && " · incomplete blame data"}
+                      </small>
+                      <small>
+                        fixed by{" "}
+                        {a.fixing_urls.map((url, i) => (
+                          <span key={url}>
+                            {i > 0 && ", "}
+                            <a href={url}>{pullRequest(url)}</a>
+                          </span>
+                        ))}
+                      </small>
+                    </li>
+                  ))}
+                </ul>
               </details>
             )}
           </article>

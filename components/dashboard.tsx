@@ -4,10 +4,18 @@ import { param, queryString } from "@/lib/window";
 import { priorityLabels, slugFor, personName } from "@/lib/config";
 import { daysSince } from "@/lib/reports";
 import { platformFor, slaText } from "@/lib/metrics";
-export function Heading({ title, detail }: { title: string; detail: string }) {
+export function Heading({
+  title,
+  detail,
+  path = title.toLowerCase(),
+}: {
+  title: string;
+  detail: string;
+  path?: string;
+}) {
   return (
     <div className="page-heading">
-      <span className="eyebrow">Engineering pulse</span>
+      <span className="eyebrow">~/{path}</span>
       <h1>{title}</h1>
       <p>{detail}</p>
     </div>

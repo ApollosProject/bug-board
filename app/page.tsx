@@ -96,6 +96,7 @@ export default async function Home({
     <>
       <Heading
         title="Bug Board"
+        path=""
         detail="A clear view of engineering health, work, and delivery."
       />
       <WindowControls window={window} />

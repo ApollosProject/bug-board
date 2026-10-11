@@ -52,8 +52,8 @@ export default async function Layout({
             <NavLinks />
             {user && (
               <form action="/logout" method="post">
-                <button className="outline" type="submit">
-                  Log out @{String(user.login)}
+                <button className="account" type="submit">
+                  @{String(user.login)} · log out
                 </button>
               </form>
             )}

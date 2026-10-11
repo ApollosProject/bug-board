@@ -142,6 +142,7 @@ export default async function Person({
     <>
       <Heading
         title={personName(slug)}
+        path={`team/${slug}`}
         detail="Current work, delivery, and engineering-relative performance."
       />
       <Suspense fallback={<Loading />}>
