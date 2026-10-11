@@ -22,10 +22,14 @@ async function airflow<T>(path: string) {
     "Airflow",
   );
 }
-async function lastRun(id: string): Promise<Evaluation> {
+// Each Airflow request may wait for its full 30-second timeout.
+const REQUEST_TIMEOUT = 30_000;
+async function lastRun(id: string, deadline: number): Promise<Evaluation> {
   let latest = "",
     hasRuns = false;
   for (let offset = 0; ; offset += 10) {
+    if (Date.now() + REQUEST_TIMEOUT > deadline)
+      throw Object.assign(new Error("Fleet deadline"), { name: "Deadline" });
     const payload = await airflow<{
       dag_runs?: Run[];
       dagRuns?: Run[];
@@ -129,33 +133,33 @@ const reason = (error: unknown) =>
     : error instanceof Error
       ? `${error.name}${(error.cause as { code?: string })?.code ? ` ${(error.cause as { code: string }).code}` : ""}`
       : "unknown";
-export async function evaluateFleet(ids: string[], concurrency = 30) {
-  const started = Date.now(),
+export async function evaluateFleet(
+  ids: string[],
+  concurrency = 30,
+  budget = 230_000,
+) {
+  // An absolute deadline keeps every request (including pages and retries) inside
+  // the 300-second Cron limit, so an unknown snapshot and heartbeat still get written.
+  const deadline = Date.now() + budget,
     errors: Record<string, number> = {};
   const attempt = (id: string) =>
-    lastRun(id).catch((error) => {
+    lastRun(id, deadline).catch((error) => {
       errors[reason(error)] = (errors[reason(error)] || 0) + 1;
       return null;
     });
   const runs = await mapConcurrent(ids, concurrency, attempt);
-  // Lookups fail transiently (connection resets); retry each once. A lookup can
-  // take up to its 30-second timeout, so retry only when the whole pass still
-  // fits well inside the 300-second Cron limit.
+  // Lookups fail transiently (connection resets); retry each once.
   const retry = ids.flatMap((id, i) => (runs[i] ? [] : [i]));
-  const retried =
-    !!retry.length &&
-    Date.now() - started + Math.ceil(retry.length / concurrency) * 30_000 <=
-      200_000;
-  if (retried)
+  if (retry.length) {
     await mapConcurrent(retry, concurrency, async (i) => {
       runs[i] = await attempt(ids[i]);
     });
-  if (retry.length)
     console.warn("Airflow DAG lookups failed", {
-      retried: retried ? retry.length : 0,
+      retried: retry.length,
       unchecked: runs.filter((run) => !run).length,
       reasons: errors,
     });
+  }
   return fleetStats(ids, runs);
 }
 export async function fleetHeartbeat(status: Fleet["status"]) {

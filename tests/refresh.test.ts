@@ -221,7 +221,7 @@ test("fleet heartbeat retains unknown threshold, recovery, failure path and Prev
   }
 });
 
-test("fleet retries failed lookups once only when the retry fits the Cron limit", async () => {
+test("fleet retries failed lookups once and stops at the Cron deadline", async () => {
   const previous = [process.env.AIRFLOW_API_BASE_URL, process.env.AIRFLOW_API_TOKEN];
   const original = globalThis.fetch;
   let calls = 0;
@@ -239,14 +239,16 @@ test("fleet retries failed lookups once only when the retry fits the Cron limit"
     assert.equal(calls, 20);
     assert.equal(recovered.status, "healthy");
     assert.equal(recovered.failed_fetches, 0);
-    // Ten waves of 30-second retries would overrun the Cron limit: skip the retry.
+    // A request starts only if its 30-second timeout ends before the deadline.
+    // With 31 seconds of budget and 600 ms failures, only two requests can start.
     calls = 0;
     globalThis.fetch = async () => {
       calls++;
+      await new Promise((resolve) => setTimeout(resolve, 600));
       throw new TypeError("fetch failed");
     };
-    const unchecked = await evaluateFleet(ids, 1);
-    assert.equal(calls, 10);
+    const unchecked = await evaluateFleet(ids, 1, 31_000);
+    assert.equal(calls, 2);
     assert.equal(unchecked.status, "unknown");
     assert.equal(unchecked.failed_fetches, 10);
   } finally {
