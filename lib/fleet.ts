@@ -1,6 +1,6 @@
 import { mapConcurrent, requestJson } from "./http";
 import type { Dag, Fleet } from "./types";
-import { readSnapshot } from "./cache";
+import { readSnapshot, unknownCount } from "./cache";
 type Run = { state?: string; dag_run_id?: string };
 type Evaluation = {
   latest: string;
@@ -120,11 +120,28 @@ export async function fleetInventory() {
   }
   return [...ids].sort();
 }
-export async function evaluateFleet(ids: string[]) {
+export async function evaluateFleet(ids: string[], concurrency = 30) {
   return fleetStats(
     ids,
-    await mapConcurrent(ids, 30, (id) => lastRun(id).catch(() => null)),
+    await mapConcurrent(ids, concurrency, (id) => lastRun(id).catch(() => null)),
   );
+}
+export async function fleetHeartbeat(status: Fleet["status"]) {
+  const count = await unknownCount(status !== "unknown");
+  if (
+    (status === "unknown" && count < 3) ||
+    !process.env.AIRFLOW_FLEET_HEARTBEAT_URL ||
+    process.env.VERCEL_ENV !== "production"
+  )
+    return;
+  const url = new URL(process.env.AIRFLOW_FLEET_HEARTBEAT_URL);
+  if (status !== "healthy")
+    url.pathname = `${url.pathname.replace(/\/$/, "")}/fail`;
+  const response = await fetch(url, {
+    redirect: "error",
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) throw new Error("Fleet heartbeat unavailable");
 }
 export async function fleetDashboard() {
   const cached = await readSnapshot<Fleet>("fleet", 180);
