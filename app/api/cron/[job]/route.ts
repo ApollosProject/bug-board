@@ -1,9 +1,10 @@
 import { start } from "workflow/api";
 import { refresh } from "@/workflows/refresh";
+import { refreshSnapshot } from "@/lib/refresh";
 import { refreshJobs, type Job } from "@/lib/types";
 import { equal } from "@/lib/auth";
 import { claim, release } from "@/lib/cache";
-export const maxDuration = 60;
+export const maxDuration = 300;
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ job: string }> },
@@ -22,9 +23,17 @@ export async function GET(
     return Response.json({ error: "unauthorized" }, { status: 401 });
   let token: string | null = null;
   try {
-    token = await claim(`refresh:${job}`, 8 * 3600);
+    const name = job as Job;
+    const durable = name === "regressions" || name === "notifications";
+    token = await claim(`refresh:${job}`, durable ? 8 * 3600 : maxDuration + 60);
     if (!token) return Response.json({ status: "already_running" });
-    const run = await start(refresh, [job as Job, token]);
+    if (name !== "regressions" && name !== "notifications") {
+      const result = await refreshSnapshot(name);
+      await release(`refresh:${job}`, token);
+      token = null;
+      return Response.json({ status: "refreshed", result });
+    }
+    const run = await start(refresh, [name, token]);
     return Response.json(
       { status: "queued", runId: run.runId },
       { status: 202 },

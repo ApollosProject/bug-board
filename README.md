@@ -26,9 +26,10 @@ npx e2e run tests/dashboard.e2e.ts --no-cache
 
 - `app/`: streamed server-rendered pages and explicit route handlers. Native forms keep filters in the URL. No HTMX, client data-fetching layer, or chart CDN.
 - `lib/`: typed integrations, scoring, comparisons, attribution, and snapshot access. `config.yml` remains the single source for people, teams, platforms, and ownership. `regression_overrides.yml` retains manual attribution corrections.
-- `workflows/refresh.ts`: durable refresh orchestration. Fleet work is split into bounded DAG batches, store lookups into per-app steps, and SZZ blame into per-file steps. Fleet/store/blame work never runs in a deployed page request. Other delivery windows and review queues use Next.js Data Cache and streamed server rendering.
+- `lib/refresh.ts`: fleet, metrics, and app refreshes run inside authenticated Cron functions. Fleet lookups retain a limit of 120 simultaneous requests. Store lookups retain a limit of eight.
+- `workflows/refresh.ts`: durable regression attribution and notifications. Each blame step receives one file and PR metadata, not every file patch. Fleet/store/blame work never runs in a deployed page request. Other delivery windows and review queues use Next.js Data Cache and streamed server rendering.
 - Upstash Redis REST: expiring snapshots and compare-and-delete refresh locks. Production, local, and individual preview deployments have separate namespaces. Expired records cannot establish healthy/current status. Merged-PR date chunks that end before today retain complete approval data for one hour. The chunk that includes today always uses GitHub. Historical metadata corrections can take up to one hour to appear. Complete review timelines cache for one hour, keyed by the PR update timestamp and unfiltered timeline count. A changed marker requires a new individual timeline lookup. CI, approvals, and requested reviewers still use the queue's 60-second refresh policy.
-- Vercel Cron: authenticated triggers enqueue workflows and return `202` with a run ID, **not** a claim that the refresh finished. Inspect execution in Vercel Workflow observability (locally: `npx workflow inspect runs`).
+- Vercel Cron: fleet, metrics, and apps return `200` with `status: refreshed` only after completion. Failures return `503`. Regressions and notifications return `202` with a Workflow run ID, not a claim of completion. Inspect durable jobs in Vercel Workflow observability (locally: `npx workflow inspect runs`).
 
 The main views are `/`, `/team`, `/team/[slug]`, `/reviews`, `/projects`, `/apps`, and `/dags`. `/healthz` stays public and returns `{"status":"ok"}`. `/team.csv` exports the selected team/window with cohort z-scores. `/app-versions` and `/failing-dags` redirect to their current pages. Flask's internal `/partials/*` transport is retired. Streamed server components replace it.
 
@@ -47,7 +48,9 @@ Cron only runs on production deployments. Preview snapshots require manually inv
 
 Priority bug notifications run at 12:00 UTC. Stale work notifications run at 10:00 New York, and project updates at 14:00 New York. Manager performance outliers run on Friday at 13:00 UTC. New York schedules follow daylight saving time. Weekly leaderboard posting remains unscheduled, as it was previously.
 
-Refresh locks prevent overlapping executions. Slack digests have a per-day delivery claim: since Slack webhooks have no idempotency key, an ambiguous network failure retains the claim to prevent duplicate posts. Check Slack delivery and Workflow logs before an operator retries it. Do not blindly clear the claim.
+Refresh locks prevent overlapping executions. Ordinary Cron functions have a 300-second limit and a 360-second lease. A timeout cannot block refreshes for eight hours. Failed polls retry on the next Cron tick. Durable jobs retain their eight-hour lease and Workflow retries.
+
+Slack digests have a per-day delivery claim: since Slack webhooks have no idempotency key, an ambiguous network failure retains the claim to prevent duplicate posts. Check Slack delivery and Workflow logs before an operator retries it. Do not blindly clear the claim.
 
 Ready lists include only unassigned projects without unfinished incoming dependencies. A milestone dependency uses milestone status, not the parent project's completion. Dependency pages are complete before a project can appear in Ready.
 
@@ -103,7 +106,7 @@ Partially configured auth fails closed with `503`. Vercel production and preview
 - `BUG_BOARD_API_KEY`: enables `/api/team/[slug]` independently of OAuth.
 - `AIRFLOW_API_BASE_URL`, `AIRFLOW_API_TOKEN`, `AIRFLOW_FLEET_HEARTBEAT_URL`.
 - `BIGQUERY_SERVICE_ACCOUNT_JSON_BASE64`, `BIGQUERY_ANALYTICS_PROJECT_ID`, `BIGQUERY_ANALYTICS_DATASETS`, `BIGQUERY_ANALYTICS_TABLES`, `APP_VERSIONS_LOOKBACK_DAYS`, `APP_VERSIONS_PARTITION_BUFFER_DAYS`, `APP_VERSIONS_LIMIT`. Explicit service-account credentials are required. No ADC fallback.
-- `APOLLOS_API_KEY`: read-only Cluster/store verification. Store credentials remain within a lookup step and are never persisted in snapshots or returned to the browser.
+- `APOLLOS_API_KEY`: read-only Cluster/store verification. Store credentials remain within the refresh function. Snapshots and browser responses never contain these credentials.
 - `GITHUB_ACTIONS_TOKEN`, `GITHUB_DEPLOY_WORKFLOW_ID` (default `173574865`).
 - `SLACK_WEBHOOK_URL`, `MANAGER_SLACK_WEBHOOK_URL`.
 - `RIPPLING_PTO_CALENDAR_URL`, `RIPPLING_PTO_TIMEZONE` (default `America/New_York`). Only Rippling's HTTPS PTO feed is accepted. No redirects.
@@ -152,12 +155,12 @@ Manual runs write job summaries because they have no PR event context. Repositor
 
 ## Vercel cutover (operator approval required)
 
-1. Create/link the **Apollos** Vercel project with the Next.js preset, Node 24.x, and a plan supporting minute-level Cron and Workflow. Vercel assigns a new project’s first deployment to **production**, even with CLI `--target preview`. Do not assume the flag isolates that first deployment. Obtain separate approval for a harmless protected static bootstrap with no domain promotion, app credentials, or Cron. Then create the real preview and verify its actual API target. Keep Git auto-deployment disconnected until production deployment is authorized. The current main branch still contains Flask.
+1. Create/link the **Apollos** Vercel project with the Next.js preset, Node 24.x, and a plan supporting minute-level Cron and Workflow. Vercel assigns a new project’s first deployment to **production**, even with CLI `--target preview`. Do not assume the flag isolates that first deployment. Obtain separate approval for a harmless protected static bootstrap with no domain promotion, app credentials, or Cron. Then create the real preview and verify its actual API target. Keep Git auto-deployment disconnected until production deployment is authorized. The Heroku deployment still uses Flask.
 2. Configure server credentials and Upstash Redis REST access separately for preview and production. Do not copy a legacy Redis TCP URL into the REST variable.
 3. Configure a GitHub OAuth app/callback for the preview host. Confirm fail-closed behavior, active-member login, API-key access, and logout on the preview.
-4. Invoke authenticated preview refreshes for fleet, metrics, apps, and regressions. Wait for the Workflow runs to complete. Compare real data against the current dashboard, including store build evidence, regression overrides, PTO, CSV, and person comparisons. Run the populated E2E suite.
+4. Invoke authenticated preview refreshes for fleet, metrics, apps, and regressions. Confirm `200` responses for ordinary refreshes. Wait for the regression Workflow to complete. Compare real data against the current dashboard, including store build evidence, regression overrides, PTO, CSV, and person comparisons. Run the populated E2E suite.
 5. Add `AI_GATEWAY_API_KEY` and run the uncached Luna tests. Review all CI checks and attached runtime proof.
-6. Only after approval, set the production origin/OAuth callback and move `engineering.apollos.app` to Vercel. Verify the production dashboard and refresh workflows without Slack webhooks.
+6. Only after approval, set the production origin/OAuth callback and move `engineering.apollos.app` to Vercel. Verify the production dashboard and refresh jobs without Slack webhooks.
 7. Follow the separate Slack handoff procedure above. Coordinate fleet heartbeat ownership with the worker handoff. Do not stop the legacy worker before the new dashboard and refresh jobs are ready.
 
 This repository change does not itself provision infrastructure, modify DNS/OAuth apps, send Slack posts, or shut down production services.

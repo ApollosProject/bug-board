@@ -7,7 +7,8 @@ Next.js App Router / TypeScript application for Vercel. Read README.md before ch
 - `app/`: server-rendered dashboard pages; route handlers for OAuth, API-key metrics, Cron, CSV, and deployment controls.
 - `proxy.ts` / `lib/auth.ts`: fail-closed GitHub membership gate, PKCE/session cookies, API-key validation.
 - `lib/`: typed Linear/GitHub/Airflow/BigQuery/store clients, metrics, review queue, attribution, PTO, snapshots, notifications.
-- `workflows/refresh.ts`: durable refresh steps and notification scheduling.
+- `lib/refresh.ts`: ordinary Cron refreshes for fleet, metrics, and apps.
+- `workflows/refresh.ts`: durable regression attribution and notifications.
 - `config.yml` / `regression_overrides.yml`: existing configuration and manual attribution corrections.
 - `tests/*.test.ts`: Node's test runner via tsx. `tests/*.e2e.ts`: e2e browser tests, Luna via Vercel AI Gateway.
 
@@ -22,7 +23,7 @@ Proof artifacts, .e2e/, .next/, local Workflow state, service doubles, and crede
 ## Conventions
 
 - Prefer native Server Components, Suspense, URL filters, and forms over client state/data fetching.
-- Keep expensive fleet/store/blame work in Workflow steps; those views only read fresh snapshots. Historical delivery windows and reviews use Next.js Data Cache.
+- Keep fleet/store work in Cron functions and blame work in Workflow steps. Those views only read fresh snapshots. Historical delivery windows and reviews use Next.js Data Cache.
 - Extend existing YAML/types/helpers. Don't create additional team/config/route sources of truth.
 - Only explicitly named team API and Cron routes escape OAuth; their handlers must authenticate.
 - Keep health public; all hosted deployments and partially configured OAuth fail closed.
