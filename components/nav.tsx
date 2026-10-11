@@ -5,7 +5,7 @@ export function NavLinks() {
   const path = usePathname();
   return (
     <div className="nav-links">
-      {["Team", "Reviews", "Apps", "Projects", "DAGs"].map((name) => {
+      {["Team", "Reviews", "Apps", "Projects", "DAGs", "Linear"].map((name) => {
         const href = `/${name.toLowerCase()}`;
         return (
           <Link

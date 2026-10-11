@@ -20,6 +20,7 @@ import {
 import { classify, reviewRows, ticketNumber } from "../lib/reviews";
 import { creditedAuthors } from "../lib/github";
 import { fleetStats } from "../lib/fleet";
+import { linearHygiene } from "../lib/hygiene";
 import {
   appIdentity,
   buildApps,
@@ -668,4 +669,32 @@ test("notification schedule preserves New York time through DST", () => {
       "performance",
     ),
   );
+});
+
+test("Linear upkeep lists triage age, stale work, Merged waits, and near-empty projects", () => {
+  const day = 86_400_000;
+  const ago = (n: number) => new Date(now - n * day).toISOString();
+  const issues = [
+    issue({ id: "t-old", state: { name: "Triage", type: "triage" }, createdAt: ago(40), assignee: null }),
+    issue({ id: "t-new", state: { name: "Triage", type: "triage" }, createdAt: ago(2), labels: { nodes: [] } }),
+    issue({ id: "s-stale", state: { name: "In Progress", type: "started" }, updatedAt: ago(20), project: { id: "p-busy", name: "Busy" } }),
+    issue({ id: "s-fresh", state: { name: "In Progress", type: "started" }, updatedAt: ago(1), project: { id: "p-busy", name: "Busy" } }),
+    issue({ id: "merged", state: { name: "Merged", type: "started" }, updatedAt: ago(9), project: { id: "p-one", name: "One" } }),
+  ];
+  const projects = [
+    project({ id: "p-empty", name: "Empty", status: { name: "Not Now", type: "backlog" }, completedAt: undefined }),
+    project({ id: "p-one", name: "One", status: { name: "Paused", type: "paused" }, completedAt: undefined }),
+    project({ id: "p-busy", name: "Busy", status: { name: "Not Now", type: "backlog" }, completedAt: undefined }),
+    project({ id: "p-live", name: "Live", status: { name: "In Progress", type: "started" }, completedAt: undefined }),
+  ];
+  const h = linearHygiene(issues, projects, now);
+  assert.deepEqual(h.triage.map((i) => i.id), ["t-old", "t-new"]);
+  assert.deepEqual(h.triageOver(30).map((i) => i.id), ["t-old"]);
+  const zach = h.started.find((s) => s.who === "Zach")!;
+  assert.equal(zach.issues.length, 3);
+  assert.deepEqual(zach.stale.map((i) => i.id), ["s-stale"]);
+  assert.deepEqual(h.merged.map((i) => i.id), ["merged"]);
+  assert.deepEqual(h.unassigned.map(([label, list]) => [label, list.length]), [["Bug", 1]]);
+  assert.ok(h.noProject.some(([label, list]) => label === "No label" && list.length === 1));
+  assert.deepEqual(h.emptyProjects.map((e) => [e.project.id, e.open]), [["p-empty", 0], ["p-one", 1]]);
 });
