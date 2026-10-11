@@ -343,6 +343,10 @@ details[open] summary {
 .cards details {
   margin-top: 1rem;
 }
+/* Pico's busy state disables wrapping; let the explanation wrap on phones. */
+[aria-busy="true"] p {
+  white-space: normal;
+}
 .unavailable {
   border-style: dashed;
   color: var(--pico-muted-color);

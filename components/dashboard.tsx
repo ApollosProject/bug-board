@@ -67,8 +67,19 @@ export function Checked({ at }: { at: string }) {
     </time>
   );
 }
-export function Loading() {
-  return <article aria-busy="true">Loading live data…</article>;
+// Only the 30-day window has a refreshed snapshot; other windows query Linear and GitHub.
+export function Loading({ window }: { window?: Window }) {
+  return (
+    <article aria-busy="true">
+      Loading live data…
+      {window && window.preset_days !== 30 && (
+        <p className="muted">
+          Only the 30-day preset uses the refreshed snapshot. Other windows
+          query Linear and GitHub directly and can take a few minutes.
+        </p>
+      )}
+    </article>
+  );
 }
 export function WindowControls({
   window,

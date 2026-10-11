@@ -91,7 +91,7 @@ export default async function Home({
       <Suspense fallback={<Loading />}>
         <Regressions />
       </Suspense>
-      <Suspense fallback={<Loading />}>
+      <Suspense fallback={<Loading window={window} />}>
         <Resolution window={window} />
       </Suspense>
       <Suspense fallback={<Loading />}>

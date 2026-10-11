@@ -105,7 +105,7 @@ export default async function Team({
           Export CSV
         </a>
       </div>
-      <Suspense fallback={<Loading />}>
+      <Suspense fallback={<Loading window={window} />}>
         <TeamTable window={window} search={search} />
       </Suspense>
     </>
