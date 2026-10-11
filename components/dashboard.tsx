@@ -91,6 +91,7 @@ export function WindowControls({
           <Link
             key={days}
             className={window.preset_days === days ? "selected" : ""}
+            aria-current={window.preset_days === days ? "page" : undefined}
             href={`?${queryString({ ...extra, days: String(days) })}`}
           >
             {days}d
