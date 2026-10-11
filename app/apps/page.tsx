@@ -1,5 +1,10 @@
 import Link from "next/link";
-import { Heading, Unavailable, TableScroll } from "@/components/dashboard";
+import {
+  Checked,
+  Heading,
+  Unavailable,
+  TableScroll,
+} from "@/components/dashboard";
 import { session } from "@/lib/auth";
 import { appsDashboard, deployTarget } from "@/lib/apps";
 import { storePlatforms } from "@/lib/stores";
@@ -75,9 +80,9 @@ export default async function Apps({
       {data && (
         <>
           <p className="muted">
-            Checked {data.checked_at} · Analytics lookback {data.lookback_days}{" "}
-            days. Non-mobile store publication is unverified; those badges
-            describe observations only.
+            <Checked at={data.checked_at} /> · Analytics lookback{" "}
+            {data.lookback_days} days. Non-mobile store publication is
+            unverified; those badges describe observations only.
           </p>
           <TableScroll label="Apps">
             <table>
