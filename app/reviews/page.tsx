@@ -15,6 +15,14 @@ import type { Search } from "@/lib/types";
 export const metadata = { title: "Reviews" };
 export const maxDuration = 300;
 const loginFor = (value: string) => people[value]?.github_username || value;
+// Show configured people by name, as the filters do. Match GitHub usernames only:
+// PR authors include people outside config whose logins may equal other aliases.
+const nameFor = (login = "") => {
+  const slug = Object.keys(people).find(
+    (key) => people[key].github_username.toLowerCase() === login.toLowerCase(),
+  );
+  return slug ? personName(slug) : login;
+};
 async function Queue({ search }: { search: Search }) {
   const approved = param(search, "approved") === "1",
     author = loginFor(param(search, "author")).toLowerCase(),
@@ -95,8 +103,8 @@ async function Queue({ search }: { search: Search }) {
                     <td title={`+${row.pr.additions} −${row.pr.deletions}`}>
                       {row.size}
                     </td>
-                    <td>{row.pr.author?.login}</td>
-                    <td>{row.reviewers.join(", ") || "—"}</td>
+                    <td>{nameFor(row.pr.author?.login)}</td>
+                    <td>{row.reviewers.map(nameFor).join(", ") || "—"}</td>
                   </tr>
                 ))}
               </tbody>
