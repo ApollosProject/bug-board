@@ -181,10 +181,16 @@ export function IssueList({
     <p className="muted">{empty}</p>
   );
 }
-export function GroupedIssues({ issues }: { issues: Issue[] }) {
+export function GroupedIssues({
+  issues,
+  by = (issue) => issue.project?.name || "No Project",
+}: {
+  issues: Issue[];
+  by?: (issue: Issue) => string;
+}) {
   const groups = new Map<string, Issue[]>();
   for (const issue of issues) {
-    const key = issue.project?.name || "No Project";
+    const key = by(issue);
     groups.set(key, [...(groups.get(key) || []), issue]);
   }
   return groups.size ? (
