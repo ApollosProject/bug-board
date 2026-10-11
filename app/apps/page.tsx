@@ -108,7 +108,7 @@ export default async function Apps({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => {
+                {rows.map((row, i) => {
                   const church = row.build_church || row.church,
                     target = deployTarget(
                       data.rows,
@@ -139,16 +139,42 @@ export default async function Apps({
                       <td>{row.apollos_platform}</td>
                       <td>
                         {user && target && process.env.GITHUB_ACTIONS_TOKEN ? (
-                          <details>
-                            <summary>Deploy</summary>
+                          <>
+                            {/* A popover renders in the top layer, so the table cell cannot clip it. */}
+                            <button
+                              type="button"
+                              className="outline"
+                              popoverTarget={`deploy-${i}`}
+                            >
+                              Deploy
+                            </button>
                             <form
+                              id={`deploy-${i}`}
+                              popover="auto"
+                              className="confirm"
                               method="post"
                               action={`/apps/deploy/${encodeURIComponent(row.apollos_platform)}/${encodeURIComponent(row.bundle_id)}/${encodeURIComponent(church)}`}
                             >
-                              <p>Deploy latest stable source to production?</p>
-                              <button type="submit">Confirm deployment</button>
+                              <p>
+                                Deploy the latest stable source for{" "}
+                                <strong>{row.application_name}</strong> (
+                                {row.apollos_platform}) to production?
+                              </p>
+                              <div className="toolbar">
+                                <button type="submit">
+                                  Confirm deployment
+                                </button>
+                                <button
+                                  type="button"
+                                  className="secondary"
+                                  popoverTarget={`deploy-${i}`}
+                                  popoverTargetAction="hide"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
                             </form>
-                          </details>
+                          </>
                         ) : (
                           "—"
                         )}

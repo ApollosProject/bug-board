@@ -324,6 +324,30 @@ caption {
 .issue-list div {
   flex: 1;
 }
+/* A fixed badge column keeps titles aligned whatever the priority label. */
+.issue-list .badge {
+  flex: 0 0 4.5rem;
+  text-align: center;
+}
+.confirm {
+  /* Restore the native centering that the global form margin reset removes. */
+  margin: auto;
+  max-width: 24rem;
+  padding: 1.25rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  background: var(--pico-card-background-color);
+  color: var(--pico-color);
+}
+.confirm .toolbar {
+  margin-bottom: 0;
+}
+.confirm button {
+  width: auto;
+}
+.confirm::backdrop {
+  background: rgb(0 0 0 / 0.35);
+}
 .issue-list a {
   text-decoration: none;
 }
