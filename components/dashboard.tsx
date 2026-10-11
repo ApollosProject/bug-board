@@ -168,10 +168,14 @@ export function IssueList({
                   `${daysSince(issue.updatedAt)}d since update`}
               </small>
             </div>
-            {slug && (
+            {slug ? (
               <Link href={`/team/${slug}`}>
                 {personName(slug).split(" ")[0]}
               </Link>
+            ) : (
+              <span className="muted">
+                {issue.assignee?.displayName || "Unassigned"}
+              </span>
             )}
           </li>
         );

@@ -108,9 +108,8 @@ export default async function DAGs({
             <caption>{rows.length} DAGs</caption>
             <thead>
               <tr>
-                <th>DAG</th>
+                <th>DAG / latest run</th>
                 <th>Latest state</th>
-                <th>Run ID</th>
               </tr>
             </thead>
             <tbody>
@@ -118,6 +117,7 @@ export default async function DAGs({
                 <tr key={dag.dag_id}>
                   <th>
                     <a href={astroURL(dag.dag_id)}>{dag.dag_id}</a>
+                    <small>{dag.dag_run_id || "No run"}</small>
                   </th>
                   <td>
                     <span
@@ -126,7 +126,6 @@ export default async function DAGs({
                       {dag.state}
                     </span>
                   </td>
-                  <td>{dag.dag_run_id || "—"}</td>
                 </tr>
               ))}
             </tbody>
