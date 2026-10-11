@@ -125,7 +125,9 @@ export function WindowControls({
           Apply dates
         </button>
       </form>
-      <small>{window.label}</small>
+      {!presets.includes(window.preset_days ?? 0) && (
+        <small>{window.label}</small>
+      )}
     </section>
   );
 }

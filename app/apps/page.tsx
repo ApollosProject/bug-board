@@ -11,6 +11,16 @@ import { storePlatforms } from "@/lib/stores";
 import { param, queryString } from "@/lib/window";
 import type { Search } from "@/lib/types";
 export const metadata = { title: "Apps" };
+const platformNames: Record<string, string> = {
+  amazon: "Amazon",
+  android: "Android",
+  androidtv: "Android TV",
+  ios: "iOS",
+  roku: "Roku",
+  tvos: "tvOS",
+  web: "Web",
+  unknown: "Unknown",
+};
 export default async function Apps({
   searchParams,
 }: {
@@ -52,18 +62,18 @@ export default async function Apps({
           detail="Configure BigQuery credentials, APOLLOS_API_KEY, GitHub, and the scheduled refresh. Missing store evidence is never shown as a current release."
         />
       )}
-      <div className="toolbar">
-        <Link href={`?${queryString({ q: query })}`}>All platforms</Link>
-        {tabs.map((tab) => (
+      <nav aria-label="Platform" className="presets platforms">
+        {["", ...tabs].map((tab) => (
           <Link
             key={tab}
-            href={`?${queryString({ q: query, platform: tab })}`}
+            href={`?${queryString({ q: query, ...(tab && { platform: tab }) })}`}
+            className={platform === tab ? "selected" : ""}
             aria-current={platform === tab ? "page" : undefined}
           >
-            {tab}
+            {tab ? platformNames[tab] || tab : "All platforms"}
           </Link>
         ))}
-      </div>
+      </nav>
       <form method="get" className="filter-form">
         <input type="hidden" name="platform" value={platform} />
         <label>

@@ -261,6 +261,18 @@ caption {
 .filter-form {
   margin-bottom: 1.5rem;
 }
+.window-controls button,
+.filter-form button {
+  width: auto;
+}
+.filter-form > a {
+  align-self: center;
+}
+.platforms {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  margin-bottom: 1rem;
+}
 .filter-form .checkbox {
   align-self: center;
   display: flex;
