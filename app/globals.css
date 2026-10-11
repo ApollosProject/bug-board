@@ -676,10 +676,17 @@ meter::-moz-meter-bar {
 .timeline-row {
   display: grid;
   grid-template-columns: 110px 1fr;
-  align-items: center;
+  /* Names line up with the first lane, not the middle of a stack of lanes. */
+  align-items: start;
   border-bottom: 1px solid var(--pico-muted-border-color);
   padding: 0.7rem 0;
   gap: 1rem;
+}
+.timeline-row > :first-child {
+  line-height: 28px;
+}
+.timeline-row:first-child {
+  align-items: center;
 }
 .timeline-row:last-child {
   border-bottom: 0;
