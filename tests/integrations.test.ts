@@ -63,6 +63,30 @@ test("Linear issues and projects paginate without silently truncating results", 
     else process.env.LINEAR_API_KEY = token;
   }
 });
+test("Linear uses 250-issue pages to preserve complete results within the polling request budget", async () => {
+  const original = globalThis.fetch, token = process.env.LINEAR_API_KEY;
+  const nodes = Array.from({ length: 600 }, (_, i) => ({ id: `issue-${i}` }));
+  const cursors: (string | null)[] = [];
+  process.env.LINEAR_API_KEY = "fixture-key";
+  try {
+    globalThis.fetch = async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      assert.match(body.query, /issues\(first: 250,/);
+      const start = Number(body.variables.cursor || 0), end = start + 250;
+      cursors.push(body.variables.cursor);
+      return Response.json({ data: { issues: {
+        nodes: nodes.slice(start, end),
+        pageInfo: pageInfo(end < nodes.length, end < nodes.length ? String(end) : null),
+      } } });
+    };
+    assert.deepEqual(await fetchIssues({}), nodes);
+    assert.deepEqual(cursors, [null, "250", "500"]);
+  } finally {
+    globalThis.fetch = original;
+    if (token === undefined) delete process.env.LINEAR_API_KEY;
+    else process.env.LINEAR_API_KEY = token;
+  }
+});
 test("Linear paginates incoming project dependencies and rejects missing or repeated cursors", async () => {
   const fetch = globalThis.fetch, token = process.env.LINEAR_API_KEY;
   process.env.LINEAR_API_KEY = "fixture-key";
