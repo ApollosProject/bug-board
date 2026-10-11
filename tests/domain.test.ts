@@ -20,6 +20,7 @@ import {
 import { classify, reviewRows, ticketNumber } from "../lib/reviews";
 import { creditedAuthors } from "../lib/github";
 import { fleetStats } from "../lib/fleet";
+import { summarize } from "../lib/deploys";
 import {
   appIdentity,
   buildApps,
@@ -668,4 +669,24 @@ test("notification schedule preserves New York time through DST", () => {
       "performance",
     ),
   );
+});
+
+test("deploy stages report the latest run, last success, and failures this week", () => {
+  const run = (conclusion: string | null, daysAgo: number, sha: string) => ({
+    head_sha: sha,
+    head_branch: "main",
+    status: conclusion ? "completed" : "in_progress",
+    conclusion,
+    created_at: new Date(now - daysAgo * 86_400_000).toISOString(),
+    html_url: `https://github.com/run/${sha}`,
+    display_title: sha,
+  });
+  const s = summarize(
+    [run(null, 0, "e"), run("failure", 1, "d"), run("success", 2, "c"), run("failure", 3, "b"), run("failure", 9, "a")],
+    now,
+  );
+  assert.equal(s.latest?.head_sha, "e");
+  assert.equal(s.success?.head_sha, "c");
+  assert.equal(s.failures, 2);
+  assert.deepEqual(summarize([], now), { latest: null, success: null, failures: 0 });
 });
