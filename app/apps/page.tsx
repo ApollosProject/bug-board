@@ -136,7 +136,10 @@ export default async function Apps({
                       </td>
                       <td>{row.freshness_display || "Unknown"}</td>
                       <td>{row.comparison_display}</td>
-                      <td>{row.apollos_platform}</td>
+                      <td>
+                        {platformNames[row.apollos_platform] ||
+                          row.apollos_platform}
+                      </td>
                       <td>
                         {user && target && process.env.GITHUB_ACTIONS_TOKEN ? (
                           <>
