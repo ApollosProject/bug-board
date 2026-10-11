@@ -222,7 +222,8 @@ export async function projectDashboard() {
 export function shipped(data: Report, window: Window, now = Date.now()) {
   // Linear keeps only each project's latest update, so updates are only knowable
   // for windows that reach the present.
-  const updatesKnown = Date.parse(window.before) >= now;
+  // (A preset window ends at request time, a moment before `now`.)
+  const updatesKnown = Date.parse(window.before) >= now - 60_000;
   return engineers
     .map((slug) => {
       const login = people[slug].github_username.toLowerCase();

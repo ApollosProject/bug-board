@@ -700,6 +700,8 @@ test("shipped report keeps window bounds and credits PRs like team metrics", () 
   assert.deepEqual(zach.prs.map((p) => p.id), ["agent", "in"]);
   assert.deepEqual(zach.issues.map((i) => i.id), ["i1"]);
   assert.deepEqual(zach.updates.map((p) => p.id), ["p1"]);
+  // A preset window computed a moment earlier still reaches the present.
+  assert.equal(shipped(data, window, now + 500)[0].updatesKnown, true);
   // A window that ended in the past cannot know about project updates.
   const past = timeWindow({ start: "2026-08-31", end: "2026-09-05" }, now);
   const earlier = shipped(data, past, now).find((row) => row.slug === "zach")!;
