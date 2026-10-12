@@ -357,7 +357,9 @@ async function searchSuspects(
         : `Changed files: ${files
             .slice(0, 15)
             .map((f) => f.filename)
-            .join(", ")}`;
+            .join(
+              ", ",
+            )}${files.length > 15 ? `, and ${files.length - 15} more not listed` : ""}`;
       found.push({
         url,
         merged_at: it.pull_request.merged_at,
@@ -478,7 +480,8 @@ async function lunaPick(
     abortSignal: AbortSignal.timeout(120_000),
     providerOptions: routing("openai"),
   });
-  const i = Number(/C(\d+)/.exec(output.pick)?.[1]);
+  // Only an exact id counts; "NONE; C0 is unsupported" is not a vote for C0.
+  const i = Number(/^C(\d+)$/.exec(output.pick.trim())?.[1]);
   return Number.isInteger(i) && sorted[i] ? sorted[i].url : null;
 }
 
