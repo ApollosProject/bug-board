@@ -19,11 +19,16 @@ export type Church = {
   timezone?: string | null;
 };
 const fields =
-  "slug name altSlugs universalLinkHost apollosWebUrl mobileAppStoreUrl mobilePlayStoreUrl appleBundleId androidPkgId givingEnabled givingInMaintenance givingWebProvider givingMobileProvider timezone";
+  "slug name altSlugs { slug } universalLinkHost apollosWebUrl mobileAppStoreUrl mobilePlayStoreUrl appleBundleId androidPkgId givingEnabled givingInMaintenance givingWebProvider givingMobileProvider timezone";
+// Cluster returns alternate slugs as objects; pages use plain strings.
 export const churchDirectory = async () =>
-  (await clusterChurches<Church>(fields)).sort((a, b) =>
-    (a.name || a.slug).localeCompare(b.name || b.slug),
-  );
+  (
+    await clusterChurches<
+      Omit<Church, "altSlugs"> & { altSlugs: { slug: string }[] }
+    >(fields)
+  )
+    .map((c) => ({ ...c, altSlugs: c.altSlugs.map((a) => a.slug) }))
+    .sort((a, b) => (a.name || a.slug).localeCompare(b.name || b.slug));
 // Pages read the snapshot the apps Cron refresh writes; null means unavailable.
 export async function churches(): Promise<Church[] | null> {
   const snapshot = await readSnapshot<Church[]>("churches", 3600);
