@@ -235,6 +235,14 @@ async function szzSuspects(
             (h) => `${f.filename}\n${h}`,
           ),
         );
+        // GitHub omits very large diffs; missing is not negative evidence.
+        const partial = files.some(
+          (f) =>
+            (removed.has(f.filename) && !f.patch) || missing.has(f.filename),
+        );
+        const note = partial
+          ? "Part of its diff, or the fix's, for files the fix changed is unavailable."
+          : "";
         return {
           url: c.url,
           merged_at: c.merged_at,
@@ -242,15 +250,8 @@ async function szzSuspects(
           evidence: [
             `Title: ${scrub(title)}`,
             hunks.length
-              ? trim(scrub(hunks.join("\n")), 1400)
-              : // GitHub omits very large diffs; missing is not negative evidence.
-                files.some(
-                    (f) =>
-                      (removed.has(f.filename) && !f.patch) ||
-                      missing.has(f.filename),
-                  )
-                ? "Its diff for files the fix changed is unavailable."
-                : "None of its added lines were removed by the fix.",
+              ? `${note}\n${trim(scrub(hunks.join("\n")), 1400)}`.trim()
+              : note || "None of its added lines were removed by the fix.",
           ],
         };
       }),
