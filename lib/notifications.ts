@@ -17,7 +17,7 @@ import {
   type MetricKey,
 } from "./metrics";
 import { DAY, date, timeWindow } from "./window";
-import { claim, release } from "./cache";
+import { claim, readSnapshot, release, snapshotOnce } from "./cache";
 import type { Issue } from "./types";
 const escape = (s: string) =>
   s
@@ -234,30 +234,51 @@ export async function notify(name: string, day: string) {
       process.env[manager ? "MANAGER_SLACK_WEBHOOK_URL" : "SLACK_WEBHOOK_URL"];
   if (!url || !process.env.APP_URL)
     throw new Error("Slack webhook and APP_URL required");
-  const message = await (
-    {
-      priority: priorityMessage,
-      stale: staleMessage,
-      projects: projectMessage,
-      performance: performanceMessage,
-    } as Record<string, () => Promise<string | null>>
-  )[name]();
-  if (!message) return { status: "empty" };
-  const key = `notification:${name}:${day}`,
-    token = await claim(key, 3 * 86400);
-  if (!token) return { status: "already-claimed" };
-  // Slack webhooks lack idempotency keys. Keep the claim after ambiguous network errors;
-  // an operator must inspect delivery before retrying, rather than duplicate a digest.
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: message }),
-    redirect: "error",
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!response.ok) {
-    await release(key, token);
-    throw new Error(`Slack rejected notification (HTTP ${response.status})`);
+  const savedKey = `notification-message:${name}:${day}`,
+    ttl = 3 * 86400;
+  let message = await readSnapshot<string>(savedKey, ttl);
+  if (message === null) {
+    message = await (
+      {
+        priority: priorityMessage,
+        stale: staleMessage,
+        projects: projectMessage,
+        performance: performanceMessage,
+      } as Record<string, () => Promise<string | null>>
+    )[name]();
+    if (!message) return { status: "empty" };
+    // Freeze the winning digest so refreshes cannot shift part boundaries on retry.
+    message = await snapshotOnce(savedKey, message, ttl);
   }
-  return { status: "sent" };
+  // Slack truncates text at 40,000 characters. Split between lines to preserve links.
+  const messages: string[] = [];
+  let remaining = message;
+  while (remaining.length > 39_000) {
+    const end = remaining.lastIndexOf("\n", 39_000);
+    if (end < 0) throw new Error("Slack notification line exceeds message limit");
+    messages.push(remaining.slice(0, end));
+    remaining = remaining.slice(end + 1);
+  }
+  messages.push(remaining);
+  let status = "already-claimed";
+  for (const [index, text] of messages.entries()) {
+    const key = `notification:${name}:${day}${index ? `:part:${index + 1}` : ""}`,
+      token = await claim(key, ttl);
+    if (!token) continue;
+    // Slack webhooks lack idempotency keys. Keep each claim after ambiguous network
+    // errors; an operator must inspect delivery before retrying that part.
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+      redirect: "error",
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) {
+      await release(key, token);
+      throw new Error(`Slack rejected notification (HTTP ${response.status})`);
+    }
+    status = "sent";
+  }
+  return { status };
 }

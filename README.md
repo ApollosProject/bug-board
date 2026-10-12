@@ -57,7 +57,7 @@ Ready lists include only unassigned projects without unfinished incoming depende
 
 ### Slack notifications
 
-Only Production sends Slack posts. Preview deployments never do. Delivery claims in Redis prevent duplicate posts across Production deployments. If a delivery is uncertain, check Slack before any retry, and do not clear a delivery claim without that check.
+Only Production sends Slack posts. Preview deployments never do. Long digests split between lines into posts of at most 39,000 characters to stay below Slack's 40,000-character truncation limit. The day's digest is frozen in Redis so refreshes cannot change retry boundaries. Each part has its own delivery claim to prevent duplicate posts across Production deployments; an explicitly rejected part can retry without resending delivered parts. If a delivery is uncertain, check Slack before any retry, and do not clear a delivery claim without that check.
 
 ### App release evidence
 
