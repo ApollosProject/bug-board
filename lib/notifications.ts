@@ -1,3 +1,4 @@
+import { setTimeout } from "node:timers/promises";
 import { engineers, people, personName, slugFor } from "./config";
 import {
   openWork,
@@ -265,6 +266,8 @@ export async function notify(name: string, day: string) {
     const key = `notification:${name}:${day}${index ? `:part:${index + 1}` : ""}`,
       token = await claim(key, ttl);
     if (!token) continue;
+    // Incoming webhooks allow one message per second, without guaranteed bursts.
+    if (status === "sent") await setTimeout(1_000);
     // Slack webhooks lack idempotency keys. Keep each claim after ambiguous network
     // errors; an operator must inspect delivery before retrying that part.
     const response = await fetch(url, {
