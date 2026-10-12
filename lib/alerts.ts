@@ -25,7 +25,7 @@ export function alertStats(incidents: Incident[], now = Date.now()) {
       groups.set(key, [...(groups.get(key) || []), i]);
     }
   return [...groups]
-    .map(([, list]) => {
+    .map(([source, list]) => {
       const starts = list
         .map((i) => Date.parse(i.started_at))
         .sort((a, b) => a - b);
@@ -55,6 +55,9 @@ export function alertStats(incidents: Incident[], now = Date.now()) {
         a.started_at > b.started_at ? a : b,
       );
       return {
+        source,
+        // Shown when two rows share a name.
+        team: source.includes("|") ? source.split("|")[0] : null,
         name: newest.name,
         incidents: list.length,
         unanswered,

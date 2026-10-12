@@ -1,4 +1,10 @@
-import { Heading, TableScroll, Unavailable } from "@/components/dashboard";
+import { Suspense } from "react";
+import {
+  Heading,
+  Loading,
+  TableScroll,
+  Unavailable,
+} from "@/components/dashboard";
 import { alertStats, recentIncidents } from "@/lib/alerts";
 export const metadata = { title: "Alerts" };
 const duration = (minutes: number | null) =>
@@ -7,19 +13,17 @@ const duration = (minutes: number | null) =>
     : minutes < 60
       ? `${Math.round(minutes)}m`
       : `${(minutes / 60).toFixed(1)}h`;
-export default async function Alerts() {
+async function Report() {
   // null: no token configured; undefined: Better Stack failed or was incomplete.
   const incidents = await recentIncidents().catch(() => undefined);
   const stats = incidents ? alertStats(incidents) : [];
   const total = stats.reduce((n, s) => n + s.incidents, 0),
     silent = stats.reduce((n, s) => n + s.unanswered, 0),
-    flapping = stats.filter((s) => s.flapping);
+    flapping = stats.filter((s) => s.flapping),
+    names = stats.map((s) => s.name),
+    shared = new Set(names.filter((n, i) => names.indexOf(n) !== i));
   return (
     <>
-      <Heading
-        title="Alerts"
-        detail="Better Stack incidents over 30 days: which monitors fire most, clear by themselves, and get no response. Flapping monitors are candidates for tuning."
-      />
       {!incidents ? (
         <Unavailable
           name="Alert history"
@@ -67,9 +71,12 @@ export default async function Alerts() {
                 </thead>
                 <tbody>
                   {stats.map((s) => (
-                    <tr key={s.name}>
+                    <tr key={s.source}>
                       <th>
                         {s.name}
+                        {shared.has(s.name) && s.team && (
+                          <small>{s.team}</small>
+                        )}
                         {s.flapping && (
                           <small>
                             <span className="badge low">flapping</span>
@@ -101,6 +108,20 @@ export default async function Alerts() {
           </p>
         </>
       )}
+    </>
+  );
+}
+// The Better Stack lookup can take many requests on a cold cache; stream it.
+export default function Alerts() {
+  return (
+    <>
+      <Heading
+        title="Alerts"
+        detail="Better Stack incidents over 30 days: which monitors fire most, clear by themselves, and get no response. Flapping monitors are candidates for tuning."
+      />
+      <Suspense fallback={<Loading />}>
+        <Report />
+      </Suspense>
     </>
   );
 }
