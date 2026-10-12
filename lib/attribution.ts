@@ -235,7 +235,10 @@ async function szzSuspects(
             `Title: ${scrub(title)}`,
             hunks.length
               ? trim(scrub(hunks.join("\n")), 1400)
-              : "None of its added lines were removed by the fix.",
+              : // GitHub omits very large diffs; missing is not negative evidence.
+                files.some((f) => removed.has(f.filename) && !f.patch)
+                ? "Its diff for files the fix changed is unavailable."
+                : "None of its added lines were removed by the fix.",
           ],
         };
       }),
