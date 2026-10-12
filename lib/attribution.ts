@@ -309,9 +309,12 @@ async function searchSuspects(
     .slice(0, 10);
   const found: Suspect[] = [];
   for (const s of searches.slice(0, 3)) {
+    // Qualifier-only queries would return arbitrary PRs.
+    const words = keywords(s.query);
+    if (words.split(" ").length < 2) continue;
     // GitHub search allows 30 requests a minute.
     await new Promise((r) => setTimeout(r, 2000));
-    const q = `repo:${s.repo} is:pr is:merged merged:${from}..${reported.slice(0, 10)} ${keywords(s.query)}`;
+    const q = `repo:${s.repo} is:pr is:merged merged:${from}..${reported.slice(0, 10)} ${words}`;
     const { items } = await githubRest<{
       items: {
         html_url: string;
