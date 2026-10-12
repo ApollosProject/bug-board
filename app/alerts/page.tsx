@@ -12,7 +12,7 @@ export default async function Alerts() {
   const incidents = await recentIncidents().catch(() => undefined);
   const stats = incidents ? alertStats(incidents) : [];
   const total = stats.reduce((n, s) => n + s.incidents, 0),
-    silent = stats.reduce((n, s) => n + s.unacknowledged, 0),
+    silent = stats.reduce((n, s) => n + s.unanswered, 0),
     flapping = stats.filter((s) => s.flapping);
   return (
     <>
@@ -37,7 +37,7 @@ export default async function Alerts() {
               <strong className="metric-value">{total}</strong>
             </article>
             <article>
-              <small>Never acknowledged</small>
+              <small>No response</small>
               <strong className="metric-value">
                 {total ? `${Math.round((silent / total) * 100)}%` : "—"}
               </strong>
@@ -59,7 +59,7 @@ export default async function Alerts() {
                   <tr>
                     <th>Monitor</th>
                     <th>Incidents</th>
-                    <th>Unacknowledged</th>
+                    <th>No response</th>
                     <th>Median to resolve</th>
                     <th>Peak in one hour</th>
                     <th>Last</th>
@@ -78,7 +78,7 @@ export default async function Alerts() {
                         {!!s.ongoing && <small>{s.ongoing} ongoing</small>}
                       </th>
                       <td>{s.incidents}</td>
-                      <td>{s.unacknowledged}</td>
+                      <td>{s.unanswered}</td>
                       <td>{duration(s.medianMinutes)}</td>
                       <td>{s.peakHour}</td>
                       <td>
@@ -92,8 +92,9 @@ export default async function Alerts() {
             </TableScroll>
           </section>
           <p className="muted">
-            Flapping: at least 10 incidents, 80% or more never acknowledged, and
-            a median of 30 minutes or less to resolve on its own.{" "}
+            Flapping: at least 10 resolved incidents, 80% or more of them with
+            no one acknowledging or resolving them, and a median of 30 minutes
+            or less to clear.{" "}
             <a href="https://uptime.betterstack.com/incidents">
               Open Better Stack incidents
             </a>

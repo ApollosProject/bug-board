@@ -686,7 +686,7 @@ test("alert noise flags monitors that fire often, clear alone, and get no respon
   const stats = alertStats([...queue, ...db, incident("Database", 10, null)], now);
   const q = stats.find((s) => s.name === "Queue")!;
   assert.equal(q.incidents, 12);
-  assert.equal(q.unacknowledged, 11);
+  assert.equal(q.unanswered, 11);
   assert.equal(q.medianMinutes, 12);
   assert.equal(q.peakHour, 2);
   assert.equal(q.flapping, true);
@@ -701,4 +701,12 @@ test("alert noise flags monitors that fire often, clear alone, and get no respon
   )[0];
   assert.equal(even.incidents, 4);
   assert.equal(even.medianMinutes, 16);
+  // Ongoing incidents don't count toward self-clearing; a person resolving counts as a response.
+  const ongoing = alertStats([...Array.from({ length: 9 }, (_, i) => incident("Stuck", 50 + i, null)), incident("Stuck", 10, 5)], now)[0];
+  assert.equal(ongoing.flapping, false);
+  const resolvedByPerson = queue.map((i) => ({ ...i, resolved_by: "A Person" }));
+  assert.equal(alertStats(resolvedByPerson, now)[0].flapping, false);
+  // Same name, different monitors stay apart.
+  const split = alertStats(queue.map((i, n) => ({ ...i, source: n % 2 ? "t|monitor:1" : "t|monitor:2" })), now);
+  assert.equal(split.length, 2);
 });
