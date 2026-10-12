@@ -36,7 +36,7 @@ import {
   regressionMetrics,
 } from "../lib/regressions";
 import { calendarURL, parseCalendar } from "../lib/pto";
-import { scheduledNotifications } from "../lib/notifications";
+import { projectMessage, scheduledNotifications } from "../lib/notifications";
 import type { AppRow, Issue, Project, PullRequest } from "../lib/types";
 const now = Date.parse("2026-09-07T12:00:00Z"),
   window = timeWindow({ days: "7" }, now);
@@ -110,6 +110,50 @@ const app: AppRow = {
   native_version: "1.0",
   app_version: "1.0",
 };
+test("Slack project dates use UTC short weekdays nearby and retain older dates", async (t) => {
+  const env = {
+    UPSTASH_REDIS_REST_URL: "https://redis.example.test",
+    UPSTASH_REDIS_REST_TOKEN: "fixture-redis",
+    TZ: "America/Los_Angeles",
+  };
+  const previous = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
+  Object.assign(process.env, env);
+  t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-11T18:00:00Z") });
+  let projects: Project[] = [
+    project({ name: "Ending", status: { name: "Started", type: "started" }, targetDate: "2026-10-14", lastUpdate: { createdAt: "2026-10-05T23:00:00Z" } }),
+    project({ name: "Starting", status: { name: "Planned", type: "planned" }, startDate: "2026-10-12", targetDate: "2026-11-01" }),
+    project({ name: "Today", status: { name: "Planned", type: "planned" }, targetDate: "2026-10-11" }),
+    project({ name: "Older update", status: { name: "Started", type: "started" }, targetDate: "2026-11-01", lastUpdate: { createdAt: "2026-09-30T23:00:00Z" } }),
+    project({ name: "Week-old update", status: { name: "Started", type: "started" }, targetDate: "2026-11-01", lastUpdate: { createdAt: "2026-10-04T23:00:00Z" } }),
+    project({ name: "No updates", status: { name: "Started", type: "started" }, targetDate: "2026-11-01" }),
+  ].map((p) => ({ ...p, completedAt: undefined }));
+  t.mock.method(globalThis, "fetch", async (_url: unknown, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body));
+    const result = JSON.stringify({ at: Date.now(), data: projects });
+    return Response.json(Array.isArray(body[0]) ? body.map(() => ({ result })) : { result });
+  });
+  try {
+    const message = (await projectMessage())!;
+    assert.match(message, /Ending[^\n]*\(Wed\)/);
+    assert.match(message, /Starting[^\n]*\(Mon\)/);
+    assert.match(message, /Today[^\n]*\(Today\)/);
+    assert.match(message, /Ending[^\n]*\(Due Fri; last update Mon\)/);
+    assert.match(message, /Older update[^\n]*\(Due Fri; last update 2026-09-30\)/);
+    assert.match(message, /Week-old update[^\n]*\(Due Fri; last update 2026-10-04\)/);
+    assert.match(message, /No updates[^\n]*\(Due Fri; no updates yet\)/);
+    t.mock.timers.setTime(Date.parse("2026-10-16T18:00:00Z"));
+    assert.match((await projectMessage())!, /Due 2026-10-09;/);
+    t.mock.timers.setTime(Date.parse("2026-12-30T18:00:00Z"));
+    projects = [project({ completedAt: undefined, status: { name: "Planned", type: "planned" }, startDate: "2026-12-31", targetDate: "2027-01-01" })];
+    const yearBoundary = (await projectMessage())!;
+    assert.match(yearBoundary, /Projects Ending Soon[^]*\(Fri\)/);
+    assert.match(yearBoundary, /Projects Starting Soon[^]*\(Thu\)/);
+  } finally {
+    for (const [key, value] of Object.entries(previous))
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+  }
+});
 test("SLA countdowns retain hours below one day, including overdue and boundary cases", () => {
   for (const [hours, expected] of [
     [0, "0h"],
