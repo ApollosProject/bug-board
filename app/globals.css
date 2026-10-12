@@ -3,15 +3,91 @@
   --pico-font-family:
     ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
-  --pico-font-size: 16px;
-  --pico-border-radius: 0.75rem;
-  --pico-primary: #7064e8;
-  --pico-primary-hover: #8a7df7;
-  --pico-primary-background: #6459d6;
-  --pico-form-element-spacing-vertical: 0.55rem;
+  --mono:
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono",
+    monospace;
+  --pico-font-size: 15px;
+  --pico-border-radius: 0.375rem;
+  --pico-form-element-spacing-vertical: 0.5rem;
+  --pico-card-box-shadow: none;
+  --control-height: 2.5rem;
+}
+/* Pico sets its palette on these selectors, so overrides must match them. */
+:root:not([data-theme="dark"]) {
+  --pico-primary: #00676d;
+  --pico-primary-background: #00676d;
+  --pico-primary-border: #00676d;
+  --pico-primary-underline: rgba(0, 103, 109, 0.5);
+  --pico-primary-hover: #004f54;
+  --pico-primary-hover-background: #00575c;
+  --pico-primary-hover-border: #00575c;
+  --pico-primary-hover-underline: rgba(0, 79, 84, 0.5);
+  --pico-primary-focus: rgba(23, 181, 130, 0.3);
+  --pico-background-color: #f5f7f9;
+  --pico-card-background-color: #fff;
+  --pico-card-sectioning-background-color: #fafbfc;
+  --pico-muted-border-color: #e1e6eb;
+  --surface: #eef2f5;
+  --grid-line: rgba(15, 23, 42, 0.045);
+  --good: #1e7350;
+  --bad: #b42335;
+  --warn: #8a5a00;
+}
+@media only screen and (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --pico-primary: #17b582;
+    --pico-primary-background: #087d68;
+    --pico-primary-border: #087d68;
+    --pico-primary-underline: rgba(23, 181, 130, 0.5);
+    --pico-primary-hover: #85ddcf;
+    --pico-primary-hover-background: #0a7664;
+    --pico-primary-hover-border: #0a7664;
+    --pico-primary-hover-underline: rgba(133, 221, 207, 0.5);
+    --pico-primary-focus: rgba(110, 197, 184, 0.36);
+    --pico-muted-color: #9aa3b3;
+    --pico-background-color: #0b0f14;
+    --pico-card-background-color: #11161d;
+    --pico-card-sectioning-background-color: #151b23;
+    --pico-form-element-background-color: #151b23;
+    --pico-muted-border-color: #232b36;
+    --surface: #18202a;
+    --grid-line: rgba(255, 255, 255, 0.035);
+    --good: #5fd3a0;
+    --bad: #ff8a8f;
+    --warn: #f0b45a;
+  }
 }
 body {
-  background: var(--pico-background-color);
+  background-color: var(--pico-background-color);
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+/* Data reads as data: IDs, numbers, times, and labels use the system monospace. */
+code,
+time,
+caption,
+.eyebrow,
+.badge,
+.metric-value,
+.presets a,
+.nav-links a,
+.account,
+.legend,
+.weeks,
+footer.container,
+th small,
+td small,
+.issue-list small,
+.numeric :is(th, td):not(:first-child) {
+  font-family: var(--mono);
+}
+/* :root raises this above Pico's focus rules, so the outline replaces Pico's glow. */
+:root :is(a, button, input, select, [tabindex], details summary):focus-visible {
+  outline: 2px solid var(--pico-primary);
+  outline-offset: 2px;
+  box-shadow: none;
 }
 .container {
   max-width: 1240px;
@@ -25,99 +101,208 @@ body {
   display: flex;
   align-items: center;
   gap: 2rem;
-  min-height: 80px;
-  padding-block: 0.6rem;
+  min-height: 56px;
+  padding-block: 0.4rem;
 }
 .brand {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.55rem;
   color: var(--pico-color);
   font-weight: 700;
   text-decoration: none;
   white-space: nowrap;
 }
+.brand img {
+  width: 26px;
+  height: 26px;
+}
 .brand small {
   display: block;
+  font-family: var(--mono);
   font-weight: 400;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--pico-muted-color);
 }
 .nav-links {
   display: flex;
-  gap: 1.25rem;
+  gap: 0.25rem;
   flex: 1;
   justify-content: flex-end;
   flex-wrap: wrap;
 }
 .nav-links a {
-  font-size: 0.9rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: var(--pico-border-radius);
+  font-size: 0.8rem;
   text-decoration: none;
+  text-transform: lowercase;
+  color: var(--pico-muted-color);
+}
+.nav-links a:hover {
   color: var(--pico-color);
+  background: var(--surface);
+}
+.nav-links a[aria-current="page"] {
+  color: var(--pico-primary);
+  background: var(--surface);
+  font-weight: 600;
+}
+.account {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--pico-muted-border-color);
+  background: transparent;
+  color: var(--pico-muted-color);
+  font-size: 0.75rem;
+}
+.account:hover {
+  color: var(--pico-color);
+  background: var(--surface);
+  border-color: var(--pico-muted-border-color);
+}
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -4rem;
+  z-index: 10;
+  padding: 0.5rem 1rem;
+  border-radius: var(--pico-border-radius);
+  background: var(--pico-card-background-color);
+}
+.skip-link:focus {
+  top: 0.75rem;
 }
 form {
   margin: 0;
 }
-button {
+/* Pico's [type=submit] bottom margin outranks a plain button selector and lifts
+   bottom-aligned buttons above their neighbours. */
+:is(button, [type="submit"], [type="button"], [type="reset"]) {
   white-space: nowrap;
   margin-bottom: 0;
+}
+/* Form controls in a row share one height so their edges line up. */
+:is(.window-controls, .filter-form)
+  :is(input:not([type="checkbox"]), select, button),
+.presets {
+  height: var(--control-height);
+}
+:is(.window-controls, .filter-form) :is(input:not([type="checkbox"]), select) {
+  padding-block: 0;
+}
+:is(.window-controls, .filter-form) button {
+  display: inline-flex;
+  align-items: center;
+  padding-block: 0;
+}
+.presets a {
+  display: flex;
+  align-items: center;
 }
 main {
   padding-block: 2rem;
   min-height: 65vh;
 }
 .page-heading {
-  margin-bottom: 1.75rem;
+  margin-bottom: 1.5rem;
 }
 .page-heading h1 {
-  margin: 0.3rem 0 0.4rem;
-  font-size: 2.5rem;
-  letter-spacing: -0.055em;
+  margin: 0.35rem 0 0.35rem;
+  font-size: 2.1rem;
+  letter-spacing: -0.04em;
 }
 .page-heading p,
 .muted {
   color: var(--pico-muted-color);
 }
+p.muted {
+  font-size: 0.82rem;
+}
 .eyebrow {
   color: var(--pico-primary);
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  font-weight: 600;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
 }
 h2 {
-  font-size: 1.3rem;
-  margin-top: 1.7rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 1rem;
+  letter-spacing: 0.01em;
+  margin: 2rem 0 0.85rem;
+}
+/* A small accent block marks each section. */
+h2::before {
+  content: "";
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 1px;
+  background: var(--pico-primary);
 }
 h3 {
-  font-size: 1.1rem;
+  font-size: 0.95rem;
 }
 h2 small {
   color: var(--pico-muted-color);
-  font-size: 0.8rem;
-  margin-left: 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 400;
 }
 article {
   border: 1px solid var(--pico-muted-border-color);
   box-shadow: none;
+  padding: 1rem 1.15rem;
 }
 article p:last-child {
   margin-bottom: 0;
 }
+.cards + p {
+  margin-top: 0.6rem;
+}
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.75rem;
 }
 .cards article {
+  display: flex;
+  flex-direction: column;
   margin-bottom: 0;
+}
+/* Card labels: uppercase micro-labels with room for two lines, so values align. */
+.cards article > small:first-child {
+  min-height: 2.6em;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  line-height: 1.3;
+  text-transform: uppercase;
+  color: var(--pico-muted-color);
+}
+.cards article > small:first-child a {
+  color: inherit;
+  text-decoration: none;
+}
+.cards article > small:first-child a::after {
+  content: " ↗";
+  color: var(--pico-primary);
+}
+.cards article > small:first-child a:hover {
+  color: var(--pico-primary);
+}
+.cards article > .badge {
+  align-self: flex-start;
 }
 .metric-value {
   display: block;
-  font-size: 2rem;
-  line-height: 1.3;
-  margin: 0.7rem 0;
-  letter-spacing: -0.04em;
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  margin: 0.35rem 0 0.5rem;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
 }
 small {
   font-size: 0.8rem;
@@ -126,24 +311,67 @@ td small,
 th small {
   display: block;
   color: var(--pico-muted-color);
+  font-size: 0.72rem;
   font-weight: 400;
 }
 .table-scroll {
   overflow: auto;
   padding: 0;
 }
+.table-scroll > p {
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  color: var(--pico-muted-color);
+}
 table {
   margin: 0;
+  font-size: 0.85rem;
+}
+table.wide {
   min-width: 600px;
-  font-size: 0.875rem;
+}
+thead th {
+  background: var(--pico-card-sectioning-background-color);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pico-muted-color);
+}
+thead th a {
+  color: inherit;
+}
+tbody tr:hover > * {
+  background: var(--pico-card-sectioning-background-color);
+}
+/* Every column after the first holds a number. */
+.numeric :is(th, td):not(:first-child) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+th a,
+td a {
+  overflow-wrap: anywhere;
 }
 th,
 td {
-  padding: 1rem;
+  padding: 0.7rem 0.9rem;
+}
+/* Compact in-table buttons, so their labels share the row's text line. */
+td > :is(button, [type="button"]) {
+  padding: 0.1rem 0.65rem;
+  font-size: 0.8rem;
+}
+/* Top-align body cells so single-line cells line up with the first line of
+   multi-line cells. */
+tbody :is(th, td) {
+  vertical-align: top;
 }
 caption {
   text-align: left;
-  padding: 0.8rem 1rem;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.72rem;
   color: var(--pico-muted-color);
 }
 .toolbar {
@@ -155,12 +383,13 @@ caption {
 }
 .window-controls {
   display: flex;
-  align-items: center;
+  align-items: end;
   flex-wrap: wrap;
   gap: 1rem;
-  padding: 1rem;
+  padding: 0.75rem 1rem;
   border: 1px solid var(--pico-muted-border-color);
-  border-radius: 0.75rem;
+  border-radius: var(--pico-border-radius);
+  background: var(--pico-card-background-color);
   margin-bottom: 1.5rem;
 }
 .window-controls form,
@@ -172,62 +401,126 @@ caption {
 }
 .window-controls label,
 .filter-form label {
-  font-size: 0.8rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pico-muted-color);
   margin: 0;
 }
 .window-controls input,
 .filter-form input,
 .filter-form select {
   margin: 0.25rem 0 0;
+  font-family: var(--mono);
+  font-size: 0.85rem;
 }
 .window-controls small {
   margin-left: auto;
+  align-self: center;
+  font-family: var(--mono);
   color: var(--pico-muted-color);
 }
 .presets {
   display: flex;
-  gap: 0.3rem;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
 }
 .presets a {
-  padding: 0.4rem 0.65rem;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
   text-decoration: none;
-  border-radius: 0.4rem;
+  border-radius: calc(var(--pico-border-radius) - 2px);
   color: var(--pico-muted-color);
 }
-.presets .selected {
+.presets a:hover {
+  color: var(--pico-color);
+  background: var(--surface);
+}
+.presets .selected,
+.presets .selected:hover {
   background: var(--pico-primary-background);
   color: white;
 }
 .filter-form {
   margin-bottom: 1.5rem;
 }
+.window-controls button,
+.filter-form button {
+  width: auto;
+}
+/* Checkboxes and trailing links sit on the control row, not the label row. */
+.filter-form > a,
+.filter-form .links,
 .filter-form .checkbox {
-  align-self: center;
+  align-self: flex-end;
   display: flex;
   align-items: center;
+  height: var(--control-height);
+}
+.platforms {
+  /* Platform tabs may wrap to several rows; only one-row presets are fixed height. */
+  height: auto;
+  min-height: var(--control-height);
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  width: fit-content;
+  margin-bottom: 1rem;
+}
+.filter-form .checkbox {
   gap: 0.5rem;
+}
+.filter-form .links {
+  gap: 1rem;
+}
+/* Monospace reads larger than the sans text around it. */
+p :is(time, code) {
+  font-size: 0.92em;
 }
 .filter-form .checkbox input {
   margin: 0;
 }
 .badge {
   display: inline-block;
-  padding: 0.2rem 0.45rem;
-  border-radius: 0.35rem;
-  font-size: 0.7rem;
-  background: var(--pico-form-element-background-color);
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: 3px;
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  background: var(--pico-card-sectioning-background-color);
   color: var(--pico-muted-color);
   white-space: nowrap;
 }
+details > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+details > summary::after {
+  margin-left: auto;
+}
+/* Status badges lead with a dot in their status color. */
+.badge:is(.low, .high, .priority-1, .priority-2)::before {
+  content: "";
+  display: inline-block;
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-right: 0.35rem;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: 0.08em;
+}
 .high {
-  color: #298b68;
+  color: var(--good);
 }
 .low,
 .priority-1 {
-  color: #d15865;
+  color: var(--bad);
 }
 .priority-2 {
-  color: #b27726;
+  color: var(--warn);
 }
 .issue-list {
   margin: 0;
@@ -239,7 +532,7 @@ caption {
   display: flex;
   align-items: start;
   gap: 1rem;
-  padding: 1rem 0;
+  padding: 0.75rem 0;
   border-bottom: 1px solid var(--pico-muted-border-color);
 }
 .issue-list li:first-child {
@@ -251,50 +544,156 @@ caption {
 }
 .issue-list div {
   flex: 1;
+  /* Long IDs (DAGs, run IDs) wrap instead of widening the page. */
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* Inline code in tables and fact lists sits on the text line, without Pico's chip. */
+:is(td, th, dd) code {
+  padding: 0;
+  background: none;
+  font-size: 0.92em;
+}
+/* A fixed badge column keeps titles aligned whatever the priority label. */
+.issue-list .badge {
+  flex: 0 0 5rem;
+  text-align: center;
 }
 .issue-list a {
   text-decoration: none;
 }
+.issue-list div > a {
+  color: var(--pico-color);
+}
+.issue-list div > a:hover {
+  color: var(--pico-primary);
+}
 .issue-list small {
   display: block;
-  margin-top: 0.35rem;
+  margin-top: 0.3rem;
+  font-size: 0.72rem;
   color: var(--pico-muted-color);
+}
+.confirm {
+  /* Restore the native centering that the global form margin reset removes. */
+  margin: auto;
+  max-width: 24rem;
+  padding: 1.25rem;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  background: var(--pico-card-background-color);
+  color: var(--pico-color);
+}
+.confirm .toolbar {
+  margin-bottom: 0;
+}
+.confirm button {
+  width: auto;
+}
+.confirm::backdrop {
+  background: rgb(0 0 0 / 0.45);
 }
 details {
   border: 1px solid var(--pico-muted-border-color);
-  padding: 1rem;
-  border-radius: 0.6rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--pico-border-radius);
+  background: var(--pico-card-background-color);
 }
 details[open] summary {
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
 }
 .cards details {
-  margin-top: 1rem;
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.8rem;
+}
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.75rem 1.5rem;
+  margin: 0;
+}
+.facts dt {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pico-muted-color);
+}
+.facts dd {
+  margin: 0.15rem 0 0;
+  overflow-wrap: anywhere;
+}
+.evidence {
+  margin: 0;
+  padding: 0;
+}
+.evidence li {
+  list-style: none;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--pico-muted-border-color);
+}
+.evidence li small {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--pico-muted-color);
+}
+/* Pico's busy state disables wrapping; let the explanation wrap on phones. */
+[aria-busy="true"] p {
+  white-space: normal;
 }
 .unavailable {
   border-style: dashed;
   color: var(--pico-muted-color);
 }
 .unavailable p {
-  font-size: 0.875rem;
+  font-size: 0.85rem;
   margin-top: 0.5rem;
 }
 .platform-bars > div {
   display: flex;
   gap: 1rem;
   align-items: center;
-  margin: 0.5rem 0;
+  margin: 0.45rem 0;
+  font-size: 0.85rem;
 }
 .platform-bars span {
   min-width: 100px;
 }
+.platform-bars strong {
+  min-width: 2.5ch;
+  font-family: var(--mono);
+  font-weight: 600;
+  text-align: right;
+}
 meter {
   flex: 1;
+  height: 0.5rem;
+  border: 0;
+  border-radius: 2px;
+  background: var(--surface);
+  appearance: none;
+}
+meter::-webkit-meter-bar {
+  height: 0.5rem;
+  border: 0;
+  border-radius: 2px;
+  background: var(--surface);
+}
+meter::-webkit-meter-optimum-value {
+  border-radius: 2px;
+  background: var(--pico-primary);
+}
+meter::-moz-meter-bar {
+  border-radius: 2px;
+  background: var(--pico-primary);
 }
 .timeline-scroll {
   overflow: auto;
   border: 1px solid var(--pico-muted-border-color);
-  border-radius: 0.75rem;
+  border-radius: var(--pico-border-radius);
+  background: var(--pico-card-background-color);
 }
 .timeline {
   min-width: 900px;
@@ -303,10 +702,17 @@ meter {
 .timeline-row {
   display: grid;
   grid-template-columns: 110px 1fr;
-  align-items: center;
+  /* Names line up with the first lane, not the middle of a stack of lanes. */
+  align-items: start;
   border-bottom: 1px solid var(--pico-muted-border-color);
-  padding: 0.8rem 0;
+  padding: 0.7rem 0;
   gap: 1rem;
+}
+.timeline-row > :first-child {
+  line-height: 28px;
+}
+.timeline-row:first-child {
+  align-items: center;
 }
 .timeline-row:last-child {
   border-bottom: 0;
@@ -321,7 +727,7 @@ meter {
   position: relative;
   display: grid;
   grid-template-columns: repeat(42, minmax(0, 1fr));
-  grid-template-rows: repeat(var(--lanes), 30px);
+  grid-template-rows: repeat(var(--lanes), 28px);
   gap: 4px 0;
   background: repeating-linear-gradient(
     to right,
@@ -333,10 +739,10 @@ meter {
 }
 .timeline-bar {
   z-index: 1;
-  background: #7668d8;
+  background: #5b4fc4;
   color: white;
-  border-radius: 4px;
-  padding: 5px;
+  border-radius: 3px;
+  padding: 5px 6px;
   font-size: 0.7rem;
   text-decoration: none;
   overflow: hidden;
@@ -344,35 +750,65 @@ meter {
   text-overflow: ellipsis;
 }
 .timeline-bar.completed {
-  opacity: 0.45;
+  background: #6b7280;
 }
 .timeline-bar.overdue,
 .timeline-bar.offTrack {
-  background: #b75360;
+  background: #a63a48;
+}
+.timeline-bar.atRisk {
+  background: #b04a0c;
 }
 .timeline-bar.onTrack {
-  background: #358f78;
+  background: #1f6f5c;
 }
 .timeline-bar.ooo {
-  background: #a4783e;
+  background: #8a5a1f;
 }
 .timeline-bar.partial {
   background: repeating-linear-gradient(
     45deg,
-    #a4783e,
-    #a4783e 4px,
-    #bd945e 4px,
-    #bd945e 8px
+    #8a5a1f,
+    #8a5a1f 4px,
+    #9e6c2c 4px,
+    #9e6c2c 8px
   );
 }
+/* The today line sits behind bars so it never crosses their labels. */
 .today {
   position: absolute;
   left: var(--today);
   width: 2px;
   height: 100%;
   background: #df5966;
-  z-index: 2;
+  z-index: 0;
   pointer-events: none;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
+  margin: 0 0 1rem;
+  padding: 0;
+  font-size: 0.72rem;
+  color: var(--pico-muted-color);
+}
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  list-style: none;
+}
+.legend i {
+  display: inline-block;
+  position: static;
+  width: 1.5rem;
+  height: 0.75rem;
+  padding: 0;
+}
+.legend .today {
+  width: 2px;
 }
 .timeline-empty {
   grid-column: 1 / -1;
@@ -387,7 +823,7 @@ footer.container {
   padding-block: 1.5rem;
   border-top: 1px solid var(--pico-muted-border-color);
   color: var(--pico-muted-color);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
 }
 footer div {
   display: flex;
@@ -400,26 +836,40 @@ footer div {
 }
 .button {
   display: inline-block;
-  padding: 0.7rem 1rem;
+  padding: 0.6rem 1rem;
   background: var(--pico-primary-background);
   color: white;
-  border-radius: 0.5rem;
+  border-radius: var(--pico-border-radius);
 }
 @media (max-width: 760px) {
   .site-header nav {
-    gap: 0.75rem;
+    gap: 0.5rem;
     flex-wrap: wrap;
   }
   .nav-links {
     justify-content: flex-start;
     order: 3;
     flex-basis: 100%;
-    gap: 1rem;
+    margin-inline: -0.6rem;
   }
   .page-heading h1 {
-    font-size: 2rem;
+    font-size: 1.75rem;
   }
+  /* Start and End share a row; Apply follows. */
   .window-controls form {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+  }
+  .window-controls form button {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+  .window-controls form > label {
+    min-width: 0;
+  }
+  .window-controls input {
+    min-width: 0;
     width: 100%;
   }
   .window-controls small {
@@ -428,17 +878,24 @@ footer div {
   .cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  /* With an odd number of cards, the first spans the row so none sits alone. */
+  .cards > :first-child:nth-last-child(odd) {
+    grid-column: 1 / -1;
+  }
   .cards article {
-    padding: 1rem;
+    padding: 0.85rem;
   }
   .metric-value {
-    font-size: 1.5rem;
+    font-size: 1.4rem;
   }
   .filter-form label {
     flex: 1;
     min-width: 130px;
   }
   .issue-list li {
-    gap: 0.5rem;
+    gap: 0.6rem;
+  }
+  .issue-list .badge {
+    flex-basis: 4.25rem;
   }
 }

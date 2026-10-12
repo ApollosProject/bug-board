@@ -7,6 +7,7 @@ import { projectDashboard } from "@/lib/reports";
 import { ptoCalendar } from "@/lib/pto";
 import { readSnapshot } from "@/lib/cache";
 import { DAY, date, timeWindow } from "@/lib/window";
+export const metadata = { title: "Projects" };
 export async function Timeline() {
   const data = await Promise.all([
     projectDashboard(),
@@ -121,13 +122,33 @@ export async function Timeline() {
     <>
       <h2>Timeline</h2>
       <p className="muted">
-        Six-week view · {label(start)} – {label(end - DAY)} · Red line is today
+        Six-week view · {label(start)} – {label(end - DAY)}
         {calendar.available
           ? " · OOO from Rippling"
           : calendar.configured
             ? " · Rippling OOO unavailable"
             : ""}
       </p>
+      <ul className="legend" aria-label="Timeline key">
+        {[
+          ["neutral", "No health update"],
+          ["onTrack", "On track"],
+          ["atRisk", "At risk"],
+          ["offTrack", "Off track or overdue"],
+          ["completed", "Completed"],
+          ["ooo", "Out of office"],
+          ["ooo partial", "Partial day out"],
+        ].map(([className, name]) => (
+          <li key={name}>
+            <i className={`timeline-bar ${className}`} aria-hidden="true" />
+            {name}
+          </li>
+        ))}
+        <li>
+          <i className="today" aria-hidden="true" />
+          Today
+        </li>
+      </ul>
       {!!ready.length && (
         <article>
           <h3>Ready · Unassigned projects</h3>

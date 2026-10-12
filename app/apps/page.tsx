@@ -1,10 +1,26 @@
 import Link from "next/link";
-import { Heading, Unavailable } from "@/components/dashboard";
+import {
+  Checked,
+  Heading,
+  Unavailable,
+  TableScroll,
+} from "@/components/dashboard";
 import { session } from "@/lib/auth";
 import { appsDashboard, deployTarget } from "@/lib/apps";
 import { storePlatforms } from "@/lib/stores";
 import { param, queryString } from "@/lib/window";
 import type { Search } from "@/lib/types";
+export const metadata = { title: "Apps" };
+const platformNames: Record<string, string> = {
+  amazon: "Amazon",
+  android: "Android",
+  androidtv: "Android TV",
+  ios: "iOS",
+  roku: "Roku",
+  tvos: "tvOS",
+  web: "Web",
+  unknown: "Unknown",
+};
 export default async function Apps({
   searchParams,
 }: {
@@ -46,18 +62,18 @@ export default async function Apps({
           detail="Configure BigQuery credentials, APOLLOS_API_KEY, GitHub, and the scheduled refresh. Missing store evidence is never shown as a current release."
         />
       )}
-      <div className="toolbar">
-        <Link href={`?${queryString({ q: query })}`}>All platforms</Link>
-        {tabs.map((tab) => (
+      <nav aria-label="Platform" className="presets platforms">
+        {["", ...tabs].map((tab) => (
           <Link
             key={tab}
-            href={`?${queryString({ q: query, platform: tab })}`}
+            href={`?${queryString({ q: query, ...(tab && { platform: tab }) })}`}
+            className={platform === tab ? "selected" : ""}
             aria-current={platform === tab ? "page" : undefined}
           >
-            {tab}
+            {tab ? platformNames[tab] || tab : "All platforms"}
           </Link>
         ))}
-      </div>
+      </nav>
       <form method="get" className="filter-form">
         <input type="hidden" name="platform" value={platform} />
         <label>
@@ -74,25 +90,25 @@ export default async function Apps({
       {data && (
         <>
           <p className="muted">
-            Checked {data.checked_at} · Analytics lookback {data.lookback_days}{" "}
-            days. Non-mobile store publication is unverified; those badges
-            describe observations only.
+            <Checked at={data.checked_at} /> · Analytics lookback{" "}
+            {data.lookback_days} days. Non-mobile store publication is
+            unverified; those badges describe observations only.
           </p>
-          <article className="table-scroll">
-            <table>
+          <TableScroll label="Apps">
+            <table className="wide">
               <caption>{rows.length} apps</caption>
               <thead>
                 <tr>
                   <th>App</th>
-                  <th>Platform</th>
+                  <th>Status</th>
                   <th>Runtime / source</th>
                   <th>Target</th>
-                  <th>Status</th>
+                  <th>Platform</th>
                   <th>Deploy</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => {
+                {rows.map((row, i) => {
                   const church = row.build_church || row.church,
                     target = deployTarget(
                       data.rows,
@@ -110,9 +126,6 @@ export default async function Apps({
                           {church} · {row.bundle_id}
                         </small>
                       </th>
-                      <td>{row.apollos_platform}</td>
-                      <td>{row.freshness_display || "Unknown"}</td>
-                      <td>{row.comparison_display}</td>
                       <td>
                         <span
                           className={`badge ${row.is_outdated ? "low" : storePlatforms.has(row.apollos_platform) && row.version_status_label === "At release" ? "high" : ""}`}
@@ -121,18 +134,50 @@ export default async function Apps({
                         </span>
                         <small>{row.live_status_detail}</small>
                       </td>
+                      <td>{row.freshness_display || "Unknown"}</td>
+                      <td>{row.comparison_display}</td>
+                      <td>
+                        {platformNames[row.apollos_platform] ||
+                          row.apollos_platform}
+                      </td>
                       <td>
                         {user && target && process.env.GITHUB_ACTIONS_TOKEN ? (
-                          <details>
-                            <summary>Deploy</summary>
+                          <>
+                            {/* A popover renders in the top layer, so the table cell cannot clip it. */}
+                            <button
+                              type="button"
+                              className="outline"
+                              popoverTarget={`deploy-${i}`}
+                            >
+                              Deploy
+                            </button>
                             <form
+                              id={`deploy-${i}`}
+                              popover="auto"
+                              className="confirm"
                               method="post"
                               action={`/apps/deploy/${encodeURIComponent(row.apollos_platform)}/${encodeURIComponent(row.bundle_id)}/${encodeURIComponent(church)}`}
                             >
-                              <p>Deploy latest stable source to production?</p>
-                              <button type="submit">Confirm deployment</button>
+                              <p>
+                                Deploy the latest stable source for{" "}
+                                <strong>{row.application_name}</strong> (
+                                {row.apollos_platform}) to production?
+                              </p>
+                              <div className="toolbar">
+                                <button type="submit">
+                                  Confirm deployment
+                                </button>
+                                <button
+                                  type="button"
+                                  className="secondary"
+                                  popoverTarget={`deploy-${i}`}
+                                  popoverTargetAction="hide"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
                             </form>
-                          </details>
+                          </>
                         ) : (
                           "—"
                         )}
@@ -143,7 +188,7 @@ export default async function Apps({
               </tbody>
             </table>
             {!rows.length && <p>No matching apps.</p>}
-          </article>
+          </TableScroll>
         </>
       )}
     </>

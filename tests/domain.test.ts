@@ -20,6 +20,7 @@ import {
 import { classify, reviewRows, ticketNumber } from "../lib/reviews";
 import { creditedAuthors } from "../lib/github";
 import { fleetStats } from "../lib/fleet";
+import { churchActivity, matchChurches, type Church } from "../lib/churches";
 import {
   appIdentity,
   buildApps,
@@ -35,7 +36,7 @@ import {
   regressionMetrics,
 } from "../lib/regressions";
 import { calendarURL, parseCalendar } from "../lib/pto";
-import { scheduledNotifications } from "../lib/notifications";
+import { projectMessage, scheduledNotifications } from "../lib/notifications";
 import type { AppRow, Issue, Project, PullRequest } from "../lib/types";
 const now = Date.parse("2026-09-07T12:00:00Z"),
   window = timeWindow({ days: "7" }, now);
@@ -109,6 +110,50 @@ const app: AppRow = {
   native_version: "1.0",
   app_version: "1.0",
 };
+test("Slack project dates use UTC short weekdays nearby and retain older dates", async (t) => {
+  const env = {
+    UPSTASH_REDIS_REST_URL: "https://redis.example.test",
+    UPSTASH_REDIS_REST_TOKEN: "fixture-redis",
+    TZ: "America/Los_Angeles",
+  };
+  const previous = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
+  Object.assign(process.env, env);
+  t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-11T18:00:00Z") });
+  let projects: Project[] = [
+    project({ name: "Ending", status: { name: "Started", type: "started" }, targetDate: "2026-10-14", lastUpdate: { createdAt: "2026-10-05T23:00:00Z" } }),
+    project({ name: "Starting", status: { name: "Planned", type: "planned" }, startDate: "2026-10-12", targetDate: "2026-11-01" }),
+    project({ name: "Today", status: { name: "Planned", type: "planned" }, targetDate: "2026-10-11" }),
+    project({ name: "Older update", status: { name: "Started", type: "started" }, targetDate: "2026-11-01", lastUpdate: { createdAt: "2026-09-30T23:00:00Z" } }),
+    project({ name: "Week-old update", status: { name: "Started", type: "started" }, targetDate: "2026-11-01", lastUpdate: { createdAt: "2026-10-04T23:00:00Z" } }),
+    project({ name: "No updates", status: { name: "Started", type: "started" }, targetDate: "2026-11-01" }),
+  ].map((p) => ({ ...p, completedAt: undefined }));
+  t.mock.method(globalThis, "fetch", async (_url: unknown, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body));
+    const result = JSON.stringify({ at: Date.now(), data: projects });
+    return Response.json(Array.isArray(body[0]) ? body.map(() => ({ result })) : { result });
+  });
+  try {
+    const message = (await projectMessage())!;
+    assert.match(message, /Ending[^\n]*\(Wed\)/);
+    assert.match(message, /Starting[^\n]*\(Mon\)/);
+    assert.match(message, /Today[^\n]*\(Today\)/);
+    assert.match(message, /Ending[^\n]*\(Due Fri; last update Mon\)/);
+    assert.match(message, /Older update[^\n]*\(Due Fri; last update 2026-09-30\)/);
+    assert.match(message, /Week-old update[^\n]*\(Due Fri; last update 2026-10-04\)/);
+    assert.match(message, /No updates[^\n]*\(Due Fri; no updates yet\)/);
+    t.mock.timers.setTime(Date.parse("2026-10-16T18:00:00Z"));
+    assert.match((await projectMessage())!, /Due 2026-10-09;/);
+    t.mock.timers.setTime(Date.parse("2026-12-30T18:00:00Z"));
+    projects = [project({ completedAt: undefined, status: { name: "Planned", type: "planned" }, startDate: "2026-12-31", targetDate: "2027-01-01" })];
+    const yearBoundary = (await projectMessage())!;
+    assert.match(yearBoundary, /Projects Ending Soon[^]*\(Fri\)/);
+    assert.match(yearBoundary, /Projects Starting Soon[^]*\(Thu\)/);
+  } finally {
+    for (const [key, value] of Object.entries(previous))
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+  }
+});
 test("SLA countdowns retain hours below one day, including overdue and boundary cases", () => {
   for (const [hours, expected] of [
     [0, "0h"],
@@ -472,6 +517,18 @@ test("fleet failure thresholds use terminal runs while inventory shows latest st
     "healthy",
   );
   assert.equal(fleetStats(["a"], [null]).status, "unknown");
+  // More than 10% unchecked cannot be called healthy; a known outage still wins.
+  const many = Array.from({ length: 100 }, (_, i) => `dag-${i}`);
+  const ok = { latest: "success", terminal: "success", id: "r", hasRuns: true };
+  const partial = (missing: number) =>
+    many.map((_, i) => (i < missing ? null : ok));
+  assert.equal(fleetStats(many, partial(10)).status, "healthy");
+  assert.equal(fleetStats(many, partial(11)).status, "unknown");
+  assert.equal(fleetStats(many, partial(11)).failed_fetches, 11);
+  const outage = partial(30).map((run, i) =>
+    run && i < 45 ? { ...run, terminal: "failed" } : run,
+  );
+  assert.equal(fleetStats(many, outage).status, "degraded");
 });
 test("mobile runtime requires every published build to have one consistent native-ID match", () => {
   assert.equal(
@@ -656,4 +713,44 @@ test("notification schedule preserves New York time through DST", () => {
       "performance",
     ),
   );
+});
+
+test("church lookup matches names and slugs as whole words", () => {
+  const church: Church = { slug: "cedar_creek", name: "Cedar Creek", altSlugs: ["cedarcreek"] };
+  const other: Church = { slug: "creek", name: "The Creek", altSlugs: [] };
+  assert.deepEqual(matchChurches([church, other], "cedar").map((c) => c.slug), ["cedar_creek"]);
+  assert.deepEqual(matchChurches([church, other], "cedarcreek").map((c) => c.slug), ["cedar_creek"]);
+  const activity = churchActivity(church, {
+    apps: [{ ...app, church: "preview", build_church: "cedar_creek" }, { ...app, church: "creek" }],
+    dags: [
+      { dag_id: "cedar_creek_backfill_rock_people_dag", state: "failed", dag_run_id: "r" },
+      { dag_id: "creek_backfill_dag", state: "success", dag_run_id: "r" },
+    ],
+    issues: [
+      issue({ id: "a", title: "(Cedar Creek) Giving form errors" }),
+      issue({ id: "b", title: "Creek Church login loop" }),
+      issue({ id: "c", title: "cedarcreek deep link opens the wrong app" }),
+    ],
+  });
+  assert.equal(activity.apps.length, 1);
+  // A shared app (no single build church) still shows for each church that ships it.
+  const shared = churchActivity(
+    { ...church, androidPkgId: "com.shared.app" },
+    { apps: [{ ...app, church: "other", build_church: null, bundle_id: "com.shared.app", apollos_platform: "android", deploy_target_count: 2 }], dags: [], issues: [] },
+  );
+  assert.equal(shared.apps.length, 1);
+  // The same ID on the other platform belongs to someone else.
+  const crossed = churchActivity(
+    { ...church, appleBundleId: "com.shared.app", androidPkgId: null },
+    { apps: [{ ...app, church: "other", build_church: null, bundle_id: "com.shared.app", apollos_platform: "android", deploy_target_count: 2 }], dags: [], issues: [] },
+  );
+  assert.equal(crossed.apps.length, 0);
+  // Other platforms have no bundle fallback.
+  const roku = churchActivity(
+    { ...church, androidPkgId: "com.shared.app" },
+    { apps: [{ ...app, church: "other", build_church: null, bundle_id: "com.shared.app", apollos_platform: "roku" }], dags: [], issues: [] },
+  );
+  assert.equal(roku.apps.length, 0);
+  assert.deepEqual(activity.dags.map((d) => d.dag_id), ["cedar_creek_backfill_rock_people_dag"]);
+  assert.deepEqual(activity.issues.map((i) => i.id), ["a", "c"]);
 });

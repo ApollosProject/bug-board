@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { session } from "@/lib/auth";
+import { NavLinks } from "@/components/nav";
+import { PageAnalytics } from "@/components/analytics";
 import "./globals.css";
 export function generateMetadata(): Metadata {
   return {
@@ -31,6 +33,9 @@ export default async function Layout({
   return (
     <html lang="en">
       <body>
+        <a className="skip-link" href="#main">
+          Skip to content
+        </a>
         <header className="site-header">
           <nav className="container">
             <Link className="brand" href="/" prefetch={false}>
@@ -45,27 +50,19 @@ export default async function Layout({
                 Apollos <small>Engineering</small>
               </span>
             </Link>
-            <div className="nav-links">
-              {["Team", "Reviews", "Apps", "Projects", "DAGs"].map((name) => (
-                <Link
-                  key={name}
-                  href={`/${name.toLowerCase()}`}
-                  prefetch={false}
-                >
-                  {name}
-                </Link>
-              ))}
-            </div>
+            <NavLinks />
             {user && (
               <form action="/logout" method="post">
-                <button className="outline" type="submit">
-                  Log out @{String(user.login)}
+                <button className="account" type="submit">
+                  @{String(user.login)} · log out
                 </button>
               </form>
             )}
           </nav>
         </header>
-        <main className="container">{children}</main>
+        <main className="container" id="main">
+          {children}
+        </main>
         <footer className="container">
           <span>Apollos Engineering · Bug Board</span>
           <div>
@@ -81,6 +78,8 @@ export default async function Layout({
             </a>
           </div>
         </footer>
+        {/* Page views from signed-in people only. */}
+        {user && <PageAnalytics />}
       </body>
     </html>
   );

@@ -118,6 +118,16 @@ async function Metrics({ slug, window }: { slug: string; window: Window }) {
     </>
   );
 }
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  return {
+    title: Object.hasOwn(people, slug) ? personName(slug) : "Not found",
+  };
+}
 export default async function Person({
   params,
   searchParams,
@@ -132,16 +142,17 @@ export default async function Person({
     <>
       <Heading
         title={personName(slug)}
+        path={`team/${slug}`}
         detail="Current work, delivery, and engineering-relative performance."
       />
       <Suspense fallback={<Loading />}>
         <Work slug={slug} />
       </Suspense>
-      <WindowControls window={window} presets={[1, 7, 30]} />
       <Suspense fallback={<Loading />}>
         <Regressions slug={slug} />
       </Suspense>
-      <Suspense fallback={<Loading />}>
+      <WindowControls window={window} presets={[1, 7, 30]} />
+      <Suspense fallback={<Loading window={window} />}>
         <Metrics slug={slug} window={window} />
       </Suspense>
     </>

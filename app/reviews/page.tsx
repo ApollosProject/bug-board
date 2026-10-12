@@ -1,14 +1,28 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { unstable_cache } from "next/cache";
-import { Heading, Loading, Unavailable } from "@/components/dashboard";
+import {
+  Heading,
+  Loading,
+  Unavailable,
+  TableScroll,
+} from "@/components/dashboard";
 import { session } from "@/lib/auth";
 import { people, personName, priorityLabels } from "@/lib/config";
 import { reviewQueue } from "@/lib/reviews";
 import { param, queryString } from "@/lib/window";
 import type { Search } from "@/lib/types";
+export const metadata = { title: "Reviews" };
 export const maxDuration = 300;
 const loginFor = (value: string) => people[value]?.github_username || value;
+// Show configured people by name, as the filters do. Match GitHub usernames only:
+// PR authors include people outside config whose logins may equal other aliases.
+const nameFor = (login = "") => {
+  const slug = Object.keys(people).find(
+    (key) => people[key].github_username.toLowerCase() === login.toLowerCase(),
+  );
+  return slug ? personName(slug) : login;
+};
 async function Queue({ search }: { search: Search }) {
   const approved = param(search, "approved") === "1",
     author = loginFor(param(search, "author")).toLowerCase(),
@@ -51,17 +65,17 @@ async function Queue({ search }: { search: Search }) {
         <h2>
           {title} <span className="badge">{items.length}</span>
         </h2>
-        <article className="table-scroll">
+        <TableScroll label={`${title} pull requests`}>
           {items.length ? (
-            <table>
+            <table className="wide">
               <thead>
                 <tr>
                   <th>PR</th>
-                  <th>Author</th>
                   <th>Priority</th>
-                  <th>Size</th>
                   <th>Waiting</th>
                   <th>CI / readiness</th>
+                  <th>Size</th>
+                  <th>Author</th>
                   <th>Reviewers</th>
                 </tr>
               </thead>
@@ -75,7 +89,6 @@ async function Queue({ search }: { search: Search }) {
                         {row.pr.number}
                       </small>
                     </td>
-                    <td>{row.pr.author?.login}</td>
                     <td>
                       {row.issue ? (
                         <a href={row.issue.url}>
@@ -85,12 +98,13 @@ async function Queue({ search }: { search: Search }) {
                         "No priority"
                       )}
                     </td>
+                    <td>{row.waiting}</td>
+                    <td>{row.reason || row.ci}</td>
                     <td title={`+${row.pr.additions} −${row.pr.deletions}`}>
                       {row.size}
                     </td>
-                    <td>{row.waiting}</td>
-                    <td>{row.reason || row.ci}</td>
-                    <td>{row.reviewers.join(", ") || "—"}</td>
+                    <td>{nameFor(row.pr.author?.login)}</td>
+                    <td>{row.reviewers.map(nameFor).join(", ") || "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -98,7 +112,7 @@ async function Queue({ search }: { search: Search }) {
           ) : (
             <p>No PRs in this section.</p>
           )}
-        </article>
+        </TableScroll>
       </section>
     );
   });
@@ -159,14 +173,16 @@ export default async function Reviews({
           Include approved
         </label>
         <button type="submit">Filter reviews</button>
-        <Link href="/reviews">Reset</Link>
-        {viewer && (
-          <Link
-            href={`?${queryString({ ...query, reviewer: String(viewer.login) })}`}
-          >
-            For me
-          </Link>
-        )}
+        <span className="links">
+          <Link href="/reviews">Reset</Link>
+          {viewer && (
+            <Link
+              href={`?${queryString({ ...query, reviewer: String(viewer.login) })}`}
+            >
+              For me
+            </Link>
+          )}
+        </span>
       </form>
       <Suspense fallback={<Loading />}>
         <Queue search={search} />

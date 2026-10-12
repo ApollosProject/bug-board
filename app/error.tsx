@@ -5,8 +5,10 @@ export default function ErrorPage({ reset }: { reset: () => void }) {
     <article role="alert">
       <h1>Unable to load this view</h1>
       <p>Check the selected dates (maximum 366 days), then try again.</p>
-      <button onClick={reset}>Try again</button>
-      <Link href="/">Back to Bug Board</Link>
+      <div className="toolbar">
+        <button onClick={reset}>Try again</button>
+        <Link href="/">Back to Bug Board</Link>
+      </div>
     </article>
   );
 }

@@ -1,7 +1,13 @@
-import { Heading, Unavailable } from "@/components/dashboard";
+import {
+  Checked,
+  Heading,
+  Unavailable,
+  TableScroll,
+} from "@/components/dashboard";
 import { fleetDashboard, astroURL } from "@/lib/fleet";
 import { param } from "@/lib/window";
 import type { Search } from "@/lib/types";
+export const metadata = { title: "DAGs" };
 export default async function DAGs({
   searchParams,
 }: {
@@ -11,12 +17,16 @@ export default async function DAGs({
     query = param(search, "q"),
     state = param(search, "state");
   const fleet = await fleetDashboard().catch(() => null);
+  // Failures first, successes last; the stable sort keeps each group alphabetical.
+  const rank = (s: string) => ({ failed: 0, unknown: 1, success: 3 })[s] ?? 2;
   const rows =
-    fleet?.dags.filter(
-      (dag) =>
-        dag.dag_id.toLowerCase().includes(query.toLowerCase()) &&
-        (!state || dag.state === state),
-    ) || [];
+    fleet?.dags
+      .filter(
+        (dag) =>
+          dag.dag_id.toLowerCase().includes(query.toLowerCase()) &&
+          (!state || dag.state === state),
+      )
+      .sort((a, b) => rank(a.state) - rank(b.state)) || [];
   return (
     <>
       <Heading
@@ -33,6 +43,12 @@ export default async function DAGs({
               >
                 {fleet.status}
               </strong>
+              {!!fleet.failed_fetches && (
+                <small>
+                  {fleet.failed_fetches} of {fleet.active_dags_total} DAGs not
+                  checked
+                </small>
+              )}
             </article>
             <article>
               <small>Active DAGs</small>
@@ -50,10 +66,10 @@ export default async function DAGs({
             </article>
           </div>
           <p className="muted">
-            Checked {fleet.checked_at} · {fleet.failed_fetches} fetch errors ·{" "}
-            {fleet.non_terminal_dags} non-terminal · {fleet.dags_without_runs}{" "}
-            without runs. Degraded at ≥10% failed with at least 20 evaluated
-            DAGs.
+            <Checked at={fleet.checked_at} /> · {fleet.failed_fetches} fetch
+            errors · {fleet.non_terminal_dags} non-terminal ·{" "}
+            {fleet.dags_without_runs} without runs. Degraded at ≥10% failed with
+            at least 20 evaluated DAGs.
           </p>
         </>
       ) : (
@@ -93,14 +109,13 @@ export default async function DAGs({
         <button type="submit">Filter DAGs</button>
       </form>
       {fleet && (
-        <article className="table-scroll">
+        <TableScroll label="DAGs">
           <table>
             <caption>{rows.length} DAGs</caption>
             <thead>
               <tr>
-                <th>DAG</th>
+                <th>DAG / latest run</th>
                 <th>Latest state</th>
-                <th>Run ID</th>
               </tr>
             </thead>
             <tbody>
@@ -108,6 +123,7 @@ export default async function DAGs({
                 <tr key={dag.dag_id}>
                   <th>
                     <a href={astroURL(dag.dag_id)}>{dag.dag_id}</a>
+                    <small>{dag.dag_run_id || "No run"}</small>
                   </th>
                   <td>
                     <span
@@ -116,13 +132,12 @@ export default async function DAGs({
                       {dag.state}
                     </span>
                   </td>
-                  <td>{dag.dag_run_id || "—"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           {!rows.length && <p>No matching DAGs.</p>}
-        </article>
+        </TableScroll>
       )}
     </>
   );

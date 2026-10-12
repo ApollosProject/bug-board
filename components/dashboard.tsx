@@ -4,10 +4,18 @@ import { param, queryString } from "@/lib/window";
 import { priorityLabels, slugFor, personName } from "@/lib/config";
 import { daysSince } from "@/lib/reports";
 import { platformFor, slaText } from "@/lib/metrics";
-export function Heading({ title, detail }: { title: string; detail: string }) {
+export function Heading({
+  title,
+  detail,
+  path = title.toLowerCase(),
+}: {
+  title: string;
+  detail: string;
+  path?: string;
+}) {
   return (
     <div className="page-heading">
-      <span className="eyebrow">Engineering pulse</span>
+      <span className="eyebrow">~/{path}</span>
       <h1>{title}</h1>
       <p>{detail}</p>
     </div>
@@ -21,17 +29,65 @@ export function Unavailable({
   detail?: string;
 }) {
   return (
-    <article className="unavailable" role="status">
-      <strong>{name} unavailable</strong>
-      <p>
-        {detail ||
-          "Integration data is unavailable or refreshing. Configure the service credentials and Vercel Cron."}
-      </p>
+    <article className="unavailable">
+      <div role="status">
+        <strong>{name} unavailable</strong>
+        <p>
+          {detail ||
+            "Integration data is unavailable or refreshing. Configure the service credentials and Vercel Cron."}
+        </p>
+      </div>
     </article>
   );
 }
-export function Loading() {
-  return <article aria-busy="true">Loading live data…</article>;
+// Keyboard users can only scroll a wide table if its region can take focus.
+export function TableScroll({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <article
+      className="table-scroll"
+      tabIndex={0}
+      role="region"
+      aria-label={label}
+    >
+      {children}
+    </article>
+  );
+}
+export function Checked({ at }: { at: string }) {
+  return (
+    <time dateTime={at}>
+      Checked{" "}
+      {new Date(at).toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+        timeZone: "UTC",
+      })}{" "}
+      UTC
+    </time>
+  );
+}
+// Only the 30-day window has a refreshed snapshot; other windows query Linear and GitHub.
+export function Loading({ window }: { window?: Window }) {
+  return (
+    <article aria-busy="true">
+      Loading live data…
+      {window && window.preset_days !== 30 && (
+        <p className="muted">
+          Only the 30-day preset uses the refreshed snapshot. Other windows
+          query Linear and GitHub directly and can take a few minutes.
+        </p>
+      )}
+    </article>
+  );
 }
 export function WindowControls({
   window,
@@ -54,6 +110,7 @@ export function WindowControls({
           <Link
             key={days}
             className={window.preset_days === days ? "selected" : ""}
+            aria-current={window.preset_days === days ? "page" : undefined}
             href={`?${queryString({ ...extra, days: String(days) })}`}
           >
             {days}d
@@ -88,7 +145,9 @@ export function WindowControls({
           Apply dates
         </button>
       </form>
-      <small>{window.label}</small>
+      {!presets.includes(window.preset_days ?? 0) && (
+        <small>{window.label}</small>
+      )}
     </section>
   );
 }
@@ -117,10 +176,14 @@ export function IssueList({
                   `${daysSince(issue.updatedAt)}d since update`}
               </small>
             </div>
-            {slug && (
+            {slug ? (
               <Link href={`/team/${slug}`}>
                 {personName(slug).split(" ")[0]}
               </Link>
+            ) : (
+              <span className="muted">
+                {issue.assignee?.displayName || "Unassigned"}
+              </span>
             )}
           </li>
         );
@@ -130,10 +193,16 @@ export function IssueList({
     <p className="muted">{empty}</p>
   );
 }
-export function GroupedIssues({ issues }: { issues: Issue[] }) {
+export function GroupedIssues({
+  issues,
+  by = (issue) => issue.project?.name || "No Project",
+}: {
+  issues: Issue[];
+  by?: (issue: Issue) => string;
+}) {
   const groups = new Map<string, Issue[]>();
   for (const issue of issues) {
-    const key = issue.project?.name || "No Project";
+    const key = by(issue);
     groups.set(key, [...(groups.get(key) || []), issue]);
   }
   return groups.size ? (
