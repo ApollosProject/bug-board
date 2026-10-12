@@ -1,4 +1,5 @@
 import { computeApps } from "./apps";
+import { churchDirectory } from "./churches";
 import { writeSnapshot } from "./cache";
 import {
   evaluateFleet,
@@ -47,7 +48,18 @@ export async function refreshSnapshot(
       throw error;
     }
   }
-  const apps = await computeApps();
-  await writeSnapshot("apps", apps, 300);
-  return { apps: apps.rows.length };
+  // The church directory rides along but settles on its own: either failure
+  // keeps that snapshot's previous value without blocking the other.
+  const [apps, directory] = await Promise.allSettled([
+    computeApps(),
+    churchDirectory(),
+  ]);
+  const listed = directory.status === "fulfilled" ? directory.value : [];
+  if (listed.length)
+    await writeSnapshot("churches", listed, 3600).catch(() =>
+      console.warn("Church directory snapshot write unavailable"),
+    );
+  if (apps.status === "rejected") throw apps.reason;
+  await writeSnapshot("apps", apps.value, 300);
+  return { apps: apps.value.rows.length, churches: listed.length };
 }
