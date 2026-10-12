@@ -709,4 +709,8 @@ test("alert noise flags monitors that fire often, clear alone, and get no respon
   // Same name, different monitors stay apart.
   const split = alertStats(queue.map((i, n) => ({ ...i, source: n % 2 ? "t|monitor:1" : "t|monitor:2" })), now);
   assert.equal(split.length, 2);
+  // A reopened incident keeps its old resolved_at but is ongoing again.
+  const reopened = alertStats([{ ...incident("Reopened", 20, 5), status: "Started" }], now)[0];
+  assert.equal(reopened.ongoing, 1);
+  assert.equal(reopened.medianMinutes, null);
 });

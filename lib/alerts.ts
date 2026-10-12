@@ -7,11 +7,15 @@ export type Incident = {
   acknowledged_at: string | null;
   resolved_at: string | null;
   resolved_by?: string | null;
+  // Current state; a reopened incident keeps its old resolved_at.
+  status?: string;
   // Team plus monitor or heartbeat ID; names can repeat or change.
   source?: string;
 };
 // A person acknowledged or resolved it. Better Stack documents a person's name
 // in resolved_by; an "Automatically"-style value is treated as no response.
+const isResolved = (i: Incident) =>
+  i.status ? i.status.toLowerCase() === "resolved" : !!i.resolved_at;
 const answered = (i: Incident) =>
   !!i.acknowledged_at || !!(i.resolved_by && !/^auto/i.test(i.resolved_by));
 const HOUR = 3_600_000;
@@ -29,7 +33,7 @@ export function alertStats(incidents: Incident[], now = Date.now()) {
       const starts = list
         .map((i) => Date.parse(i.started_at))
         .sort((a, b) => a - b);
-      const resolved = list.filter((i) => i.resolved_at);
+      const resolved = list.filter(isResolved);
       const minutes = resolved
         .map(
           (i) =>
@@ -61,7 +65,7 @@ export function alertStats(incidents: Incident[], now = Date.now()) {
         name: newest.name,
         incidents: list.length,
         unanswered,
-        ongoing: list.filter((i) => !i.resolved_at).length,
+        ongoing: list.filter((i) => !isResolved(i)).length,
         medianMinutes: median,
         peakHour: peak,
         last: new Date(Math.max(...starts)).toISOString(),
@@ -108,6 +112,7 @@ export const recentIncidents = unstable_cache(
             acknowledged_at: a.acknowledged_at,
             resolved_at: a.resolved_at,
             resolved_by: a.resolved_by,
+            status: a.status,
             source: ref && `${a.team_name}|${ref.type}:${ref.id}`,
           };
         }),
@@ -118,6 +123,6 @@ export const recentIncidents = unstable_cache(
     if (url) throw new Error("Better Stack has more than 2,000 incidents");
     return incidents;
   },
-  ["alert-incidents-v2"],
+  ["alert-incidents-v3"],
   { revalidate: 900 },
 );
