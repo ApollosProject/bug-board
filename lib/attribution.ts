@@ -484,7 +484,7 @@ async function lunaPick(
 
 // One issue end to end. Throws on any upstream failure; callers keep SZZ then.
 export async function judgeIssue(record: Attribution): Promise<Judgement> {
-  const [{ reported, text: issue }, fix] = await Promise.all([
+  const [{ reported, text: reportText }, fix] = await Promise.all([
     issueText(record.identifier),
     fixEvidence(record.fixing_urls),
   ]);
@@ -495,6 +495,12 @@ export async function judgeIssue(record: Attribution): Promise<Judgement> {
     fix.missing,
     reported,
   );
+  // The judges see at most 10 SZZ suspects; say when more exist.
+  const eligible = record.candidates.filter((c) => c.merged_at < reported);
+  const issue =
+    eligible.length > szz.length
+      ? `${reportText}\n\n[Blame found ${eligible.length} suspects; only the ${szz.length} highest-ranked are listed. The culprit may be unlisted.]`
+      : reportText;
   const luna = await hypothesis(issue, fix.texts, szz);
   const skip = new Set(
     [...szz, ...record.fixing_urls.map((url) => ({ url }))].map((s) =>
