@@ -387,7 +387,11 @@ export async function summarizeRegressions(
       if (candidate) {
         record.attribution = candidate;
         record.manual_override = true;
-      } else record.complete = false;
+      } else {
+        // Never publish the attribution the override rejects.
+        record.attribution = null;
+        record.complete = false;
+      }
     }
     corrected.push(record);
   }
