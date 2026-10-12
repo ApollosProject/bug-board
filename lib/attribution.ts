@@ -77,7 +77,9 @@ export function introducingHunks(
     .map((h) => h.join("\n"));
 }
 // Lines each fix removed, by file; very short lines match too much.
-export function removedLines(files: { filename: string; patch?: string }[]) {
+export function removedLines(
+  files: { filename: string; previous_filename?: string; patch?: string }[],
+) {
   const removed = new Map<string, Set<string>>();
   for (const f of files)
     for (const l of (f.patch || "").split("\n"))
@@ -86,10 +88,13 @@ export function removedLines(files: { filename: string; patch?: string }[]) {
         !l.startsWith("---") &&
         l.slice(1).trim().length > 3
       )
-        removed.set(
-          f.filename,
-          (removed.get(f.filename) || new Set()).add(l.slice(1).trim()),
-        );
+        // A renamed file's suspects wrote the line under its old path.
+        for (const name of [f.filename, f.previous_filename])
+          if (name)
+            removed.set(
+              name,
+              (removed.get(name) || new Set()).add(l.slice(1).trim()),
+            );
   return removed;
 }
 // The guarded rule chosen on the tuning cases and checked on held-out ones.
@@ -154,17 +159,34 @@ async function issueText(identifier: string) {
     text: `Reported ${reported}: ${issue.title}\n\n${scrub(issue.description || "")}`,
   };
 }
-type File = { filename: string; patch?: string; deletions?: number };
+type File = {
+  filename: string;
+  previous_filename?: string;
+  patch?: string;
+  deletions?: number;
+};
 const prPath = (url: string) => {
   const p = parsePR(url)!;
   return `/repos/${p.owner}/${p.repo}/pulls/${p.number}`;
 };
+// Every changed file; GitHub lists at most 3,000, 100 per page.
+async function prFiles(url: string) {
+  const files: File[] = [];
+  for (let page = 1; page <= 30; page++) {
+    const batch = await githubRest<File[]>(
+      `${prPath(url)}/files?per_page=100&page=${page}`,
+    );
+    files.push(...batch);
+    if (batch.length < 100) break;
+  }
+  return files;
+}
 async function pr(
   url: string,
 ): Promise<{ title: string; body: string; files: File[] }> {
   const [meta, files] = await Promise.all([
     githubRest<{ title: string; body: string | null }>(prPath(url)),
-    githubRest<File[]>(`${prPath(url)}/files?per_page=100`),
+    prFiles(url),
   ]);
   return { title: meta.title, body: meta.body || "", files };
 }
@@ -184,7 +206,9 @@ async function fixEvidence(urls: string[]) {
   return {
     texts,
     removed: removedLines(files),
-    touched: new Set(files.map((f) => f.filename)),
+    touched: new Set(
+      files.flatMap((f) => [f.filename, f.previous_filename || f.filename]),
+    ),
   };
 }
 async function szzSuspects(
@@ -294,9 +318,7 @@ async function searchSuspects(
         found.length >= 6
       )
         continue;
-      const files = await githubRest<File[]>(
-        `${prPath(url)}/files?per_page=100`,
-      );
+      const files = await prFiles(url);
       const near = files.filter((f) => touched.has(f.filename));
       const detail = near.length
         ? near

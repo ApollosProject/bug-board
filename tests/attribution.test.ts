@@ -25,6 +25,9 @@ test("evidence keeps the hunks that added lines a fix later removed", () => {
   assert.deepEqual([...removed.get("f.ts")!], ["return total || null;"]);
   const patch = "@@ -1,2 +1,2 @@\n+  return total || null;\n unchanged\n@@ -9,1 +9,1 @@\n+  other();";
   assert.deepEqual(introducingHunks(patch, removed.get("f.ts")!), ["@@ -1,2 +1,2 @@\n+  return total || null;\n unchanged"]);
+  // A fix that also renamed the file still matches suspects by the old path.
+  const renamed = removedLines([{ filename: "new.ts", previous_filename: "old.ts", patch: "@@ -1 +1 @@\n-  return total || null;" }]);
+  assert.ok(renamed.get("old.ts")?.has("return total || null;"));
 });
 
 test("a judged non-bug keeps its record but loses its blame", async () => {
