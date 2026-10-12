@@ -56,7 +56,9 @@ export function churchActivity(
   const bundleFor = (platform: string) =>
     (platform === "ios"
       ? church.appleBundleId
-      : church.androidPkgId
+      : ["android", "androidtv"].includes(platform)
+        ? church.androidPkgId
+        : null
     )?.toLowerCase();
   // Match the church name or slug as whole words, so short names don't match inside other words.
   const names = [church.name, ...slugs]

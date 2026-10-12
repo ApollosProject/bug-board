@@ -701,6 +701,12 @@ test("church lookup matches names and slugs as whole words", () => {
     { apps: [{ ...app, church: "other", build_church: null, bundle_id: "com.shared.app", apollos_platform: "android", deploy_target_count: 2 }], dags: [], issues: [] },
   );
   assert.equal(crossed.apps.length, 0);
+  // Other platforms have no bundle fallback.
+  const roku = churchActivity(
+    { ...church, androidPkgId: "com.shared.app" },
+    { apps: [{ ...app, church: "other", build_church: null, bundle_id: "com.shared.app", apollos_platform: "roku" }], dags: [], issues: [] },
+  );
+  assert.equal(roku.apps.length, 0);
   assert.deepEqual(activity.dags.map((d) => d.dag_id), ["cedar_creek_backfill_rock_people_dag"]);
   assert.deepEqual(activity.issues.map((i) => i.id), ["a", "c"]);
 });
