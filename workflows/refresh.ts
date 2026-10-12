@@ -1,5 +1,11 @@
 import { release, writeSnapshot } from "@/lib/cache";
 import {
+  applyJudgement,
+  cachedJudgement,
+  judgeIssue,
+  saveJudgement,
+} from "@/lib/attribution";
+import {
   blameFile,
   fixingContext,
   mergeAttribution,
@@ -40,6 +46,27 @@ async function mergeStep(
 ) {
   "use step";
   return mergeAttribution(issue, urls, results);
+}
+// At most this many new judgements per run (about $0.002 each).
+const judgementsPerRun = 40;
+async function judgeStep(record: Attribution, allowNew: boolean) {
+  "use step";
+  // Partial blame may miss the culprit; keep the SZZ result as before.
+  if (!record.complete) return { record, fresh: false };
+  let fresh = false;
+  try {
+    const cached = await cachedJudgement(record);
+    if (cached) return { record: await applyJudgement(record, cached), fresh };
+    if (!allowNew) return { record, fresh };
+    fresh = true;
+    const judgement = await judgeIssue(record);
+    await saveJudgement(record, judgement);
+    return { record: await applyJudgement(record, judgement), fresh };
+  } catch (error) {
+    // Keep the SZZ result; the next run tries again.
+    console.warn("Bug judgement unavailable", record.identifier, error instanceof Error ? error.name : "");
+    return { record, fresh };
+  }
 }
 async function regressionSummaryStep(records: Attribution[], window: Window) {
   "use step";
@@ -93,14 +120,20 @@ export async function refresh(
         });
       }
       const records: Attribution[] = [];
-      for (const issue of issues)
-        records.push(
-          await mergeStep(
-            issue,
-            issue.fixing_urls,
-            issue.fixing_urls.map((url) => results.get(url)!),
-          ),
+      let fresh = 0;
+      for (const issue of issues) {
+        const merged = await mergeStep(
+          issue,
+          issue.fixing_urls,
+          issue.fixing_urls.map((url) => results.get(url)!),
         );
+        const judged = await judgeStep(
+          { ...merged, issue_updated_at: issue.updated_at },
+          fresh < judgementsPerRun,
+        );
+        if (judged.fresh) fresh++;
+        records.push(judged.record);
+      }
       return await regressionSummaryStep(records, window);
     }
     const schedule = await scheduleStep();

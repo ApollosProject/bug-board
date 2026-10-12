@@ -63,10 +63,11 @@ export async function Regressions({ slug }: { slug?: string }) {
                         {pullRequest(a.attribution!.url)}
                       </a>
                       <small>
-                        {a.attribution!.line_count} matching deleted lines ·{" "}
                         {a.manual_override
                           ? "manual correction"
-                          : `ranked first of ${a.candidates.length}`}
+                          : a.judgement
+                            ? `JEV ${Math.round((a.judgement.pick_p ?? 0) * 100)}% · ${a.judgement.source === "search" ? "found by search" : `SZZ suspect, ${a.attribution!.line_count} matching deleted lines`}`
+                            : `${a.attribution!.line_count} matching deleted lines · ranked first of ${a.candidates.length}`}
                         {!a.complete && " · incomplete blame data"}
                       </small>
                       <small>
