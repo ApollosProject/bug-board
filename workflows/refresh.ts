@@ -51,17 +51,19 @@ async function mergeStep(
 const judgementsPerRun = 40;
 async function judgeStep(record: Attribution, allowNew: boolean) {
   "use step";
-  const cached = await cachedJudgement(record);
-  if (cached) return { record: await applyJudgement(record, cached), fresh: false };
-  if (!allowNew) return { record, fresh: false };
+  let fresh = false;
   try {
+    const cached = await cachedJudgement(record);
+    if (cached) return { record: await applyJudgement(record, cached), fresh };
+    if (!allowNew) return { record, fresh };
+    fresh = true;
     const judgement = await judgeIssue(record);
     await saveJudgement(record, judgement);
-    return { record: await applyJudgement(record, judgement), fresh: true };
+    return { record: await applyJudgement(record, judgement), fresh };
   } catch (error) {
     // Keep the SZZ result; the next run tries again.
     console.warn("Bug judgement unavailable", record.identifier, error instanceof Error ? error.name : "");
-    return { record, fresh: true };
+    return { record, fresh };
   }
 }
 async function regressionSummaryStep(records: Attribution[], window: Window) {
@@ -123,10 +125,12 @@ export async function refresh(
           issue.fixing_urls,
           issue.fixing_urls.map((url) => results.get(url)!),
         );
-        const judged = await judgeStep(merged, fresh < judgementsPerRun);
+        const judged = await judgeStep(
+          { ...merged, issue_updated_at: issue.updated_at },
+          fresh < judgementsPerRun,
+        );
         if (judged.fresh) fresh++;
-        // A null record is a fix the judgement says no merged change introduced.
-        if (judged.record) records.push(judged.record);
+        records.push(judged.record);
       }
       return await regressionSummaryStep(records, window);
     }

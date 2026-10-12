@@ -147,7 +147,8 @@ async function issueText(identifier: string) {
     `query IssueText($id: String!) { issue(id: $id) { title description createdAt } }`,
     { id: identifier },
   );
-  const reported = issue.createdAt.slice(0, 10);
+  // Full timestamp: a PR merged later the same day cannot be the cause.
+  const reported = issue.createdAt;
   return {
     reported,
     text: `Reported ${reported}: ${issue.title}\n\n${scrub(issue.description || "")}`,
@@ -189,27 +190,31 @@ async function fixEvidence(urls: string[]) {
 async function szzSuspects(
   candidates: Candidate[],
   removed: Map<string, Set<string>>,
+  reported: string,
 ): Promise<Suspect[]> {
   return Promise.all(
-    candidates.slice(0, 10).map(async (c) => {
-      const { title, files } = await pr(c.url);
-      const hunks = files.flatMap((f) =>
-        introducingHunks(f.patch, removed.get(f.filename) || new Set()).map(
-          (h) => `${f.filename}\n${h}`,
-        ),
-      );
-      return {
-        url: c.url,
-        merged_at: c.merged_at,
-        source: "szz" as const,
-        evidence: [
-          `Title: ${scrub(title)}`,
-          hunks.length
-            ? trim(scrub(hunks.join("\n")), 1400)
-            : "None of its added lines were removed by the fix.",
-        ],
-      };
-    }),
+    candidates
+      .filter((c) => c.merged_at < reported)
+      .slice(0, 10)
+      .map(async (c) => {
+        const { title, files } = await pr(c.url);
+        const hunks = files.flatMap((f) =>
+          introducingHunks(f.patch, removed.get(f.filename) || new Set()).map(
+            (h) => `${f.filename}\n${h}`,
+          ),
+        );
+        return {
+          url: c.url,
+          merged_at: c.merged_at,
+          source: "szz" as const,
+          evidence: [
+            `Title: ${scrub(title)}`,
+            hunks.length
+              ? trim(scrub(hunks.join("\n")), 1400)
+              : "None of its added lines were removed by the fix.",
+          ],
+        };
+      }),
   );
 }
 
@@ -271,7 +276,7 @@ async function searchSuspects(
   for (const s of searches.slice(0, 3)) {
     // GitHub search allows 30 requests a minute.
     await new Promise((r) => setTimeout(r, 2000));
-    const q = `repo:${s.repo} is:pr is:merged merged:${from}..${reported} ${s.query}`;
+    const q = `repo:${s.repo} is:pr is:merged merged:${from}..${reported.slice(0, 10)} ${s.query}`;
     const { items } = await githubRest<{
       items: {
         html_url: string;
@@ -283,6 +288,7 @@ async function searchSuspects(
     for (const it of items) {
       const url = it.html_url;
       if (
+        it.pull_request.merged_at >= reported ||
         skip.has(url.toLowerCase()) ||
         found.some((f) => f.url === url) ||
         found.length >= 6
@@ -430,7 +436,7 @@ export async function judgeIssue(record: Attribution): Promise<Judgement> {
     issueText(record.identifier),
     fixEvidence(record.fixing_urls),
   ]);
-  const szz = await szzSuspects(record.candidates, fix.removed);
+  const szz = await szzSuspects(record.candidates, fix.removed, reported);
   const luna = await hypothesis(issue, fix.texts, szz);
   const skip = new Set(
     [...szz, ...record.fixing_urls.map((url) => ({ url }))].map((s) =>
@@ -466,9 +472,16 @@ export async function judgeIssue(record: Attribution): Promise<Judgement> {
 
 // Judgements are cached per issue and evidence, so each issue costs model
 // calls once; the workflow caps new judgements per run.
+// Merged PR diffs don't change, so the issue's last update stands in for edits.
 const judgementKey = (r: Attribution) =>
   `judgement:v1:${r.identifier}:${createHash("sha256")
-    .update(JSON.stringify([r.fixing_urls, r.candidates.map((c) => c.url)]))
+    .update(
+      JSON.stringify([
+        r.issue_updated_at,
+        r.fixing_urls,
+        r.candidates.map((c) => c.url),
+      ]),
+    )
     .digest("hex")
     .slice(0, 16)}`;
 export async function cachedJudgement(record: Attribution) {
@@ -477,13 +490,14 @@ export async function cachedJudgement(record: Attribution) {
 export async function saveJudgement(record: Attribution, judgement: Judgement) {
   await writeSnapshot(judgementKey(record), judgement, 45 * 86400);
 }
-// Apply a judgement: drop non-bugs, blame the chosen PR, or blame nobody.
+// Apply a judgement: blame the chosen PR, or nobody. Non-bugs keep their
+// judgement and the summary leaves them out unless a manual override applies.
 export async function applyJudgement(
   record: Attribution,
   j: Judgement,
-): Promise<Attribution | null> {
-  if (!j.introduced) return null;
-  if (!j.pick) return { ...record, attribution: null, judgement: j };
+): Promise<Attribution> {
+  if (!j.introduced || !j.pick)
+    return { ...record, attribution: null, judgement: j };
   const chosen =
     record.candidates.find((c) => c.url === j.pick) ||
     (await prMetadata(j.pick));

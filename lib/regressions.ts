@@ -28,6 +28,8 @@ export type Attribution = {
   manual_override?: boolean;
   // Present when the automated judgement chose (or withheld) the attribution.
   judgement?: Judgement;
+  // Linear's last update, so edited issues are judged again.
+  issue_updated_at?: string;
 };
 export type RegressionMetric = {
   slug: string;
@@ -282,6 +284,7 @@ export async function regressionIssues(window: Window) {
       identifier: i.identifier,
       url: i.url,
       fixing_urls: fixingURLs(i),
+      updated_at: i.updatedAt,
     }));
 }
 export async function prMetadata(url: string): Promise<Candidate | null> {
@@ -379,6 +382,8 @@ export async function summarizeRegressions(
   for (const record of records) {
     const override = overrides[record.identifier];
     if (override?.ignored) continue;
+    // The judgement found no introducing change; a manual correction still wins.
+    if (!override && record.judgement && !record.judgement.introduced) continue;
     if (override?.inducing_pr) {
       const candidate =
         record.candidates.find((c) => c.url === override.inducing_pr) ||
