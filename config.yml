@@ -97,3 +97,54 @@ platforms:
   transcriptions:
     lead: vincent
     developers: []
+
+# Release pipelines for /deploys, in promotion order. Confidence gates are
+# reusable workflows that run inside the staging publish, so they have no runs
+# of their own. The stage marked live is what users run; commits on the branch
+# after its last success are still waiting.
+deploys:
+  - name: Cluster
+    repo: apollos-cluster
+    branch: master
+    stages:
+      - { label: Staging, workflow: publish-staging-image.yml }
+      - { label: Release tag, workflow: release.yml }
+      - { label: Production, workflow: publish-production-image.yml, live: true }
+  - name: Admin
+    repo: apollos-admin
+    branch: main
+    stages:
+      - { label: Staging, workflow: admin-publish-staging.yml }
+      - { label: Release tag, workflow: create-admin-release-tag.yml }
+      - { label: Production, workflow: admin-publish-production.yml, live: true }
+  - name: Web
+    repo: apollos-admin
+    branch: main
+    stages:
+      - { label: Staging, workflow: web-publish-staging.yml }
+      - { label: Release tag, workflow: create-web-release-tag.yml }
+      - { label: Production, workflow: web-publish-production.yml, live: true }
+  - name: Web Embeds
+    repo: apollos-admin
+    branch: main
+    stages:
+      - { label: Production, workflow: publish.yml, live: true }
+  - name: Mobile
+    repo: apollos-platforms
+    branch: master
+    # A release job is not store evidence; the Apps page verifies what users run.
+    stages:
+      - { label: Weekly pre-release, workflow: pre-release.yml }
+      - { label: Weekly release, workflow: release.yml }
+      - { label: Deploy apps, workflow: deploy-apps.yml }
+  - name: Shovel
+    repo: apollos-shovel
+    branch: master
+    stages:
+      - { label: Production, workflow: deploy.yml, live: true }
+  - name: Infrastructure
+    repo: apollos-infrastructure
+    branch: main
+    stages:
+      - { label: Deploy, workflow: deploy-infrastructure.yml, live: true }
+      - { label: Review apps, workflow: review-app.yml }

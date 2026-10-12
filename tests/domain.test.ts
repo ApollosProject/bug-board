@@ -675,24 +675,25 @@ test("deploy stages ask GitHub for the latest run, last success, and exact failu
   const original = globalThis.fetch;
   const token = process.env.GITHUB_TOKEN;
   const urls: string[] = [];
-  const run = (sha: string) => ({ head_sha: sha, head_branch: "main", status: "completed", conclusion: sha === "ok" ? "success" : "failure", created_at: "2026-09-06T00:00:00Z", html_url: "", display_title: sha });
+  const run = (sha: string, updated: string) => ({ head_sha: sha, head_branch: "main", status: "completed", conclusion: "success", created_at: "2026-09-06T00:00:00Z", updated_at: updated, html_url: "", display_title: sha });
   try {
     process.env.GITHUB_TOKEN = "fixture";
     globalThis.fetch = async (url) => {
       const u = String(url);
-      urls.push(u.replace("https://api.github.com/repos/ApollosProject/repo/actions/workflows/deploy.yml/runs?exclude_pull_requests=true&per_page=1", ""));
+      urls.push(u.replace("https://api.github.com/repos/ApollosProject/repo/actions/workflows/deploy.yml/runs?exclude_pull_requests=true&per_page=10", ""));
       return Response.json(
         u.includes("status=success")
-          ? { total_count: 40, workflow_runs: [run("ok")] }
+          ? // Newest-created first, but the older run was re-run (a rollback) and finished last.
+            { total_count: 40, workflow_runs: [run("newer", "2026-09-06T01:00:00Z"), run("rolled-back-to", "2026-09-07T00:00:00Z")] }
           : u.includes("status=failure")
-            ? { total_count: 23, workflow_runs: [run("bad")] }
-            : { total_count: 300, workflow_runs: [run("newest")] },
+            ? { total_count: 23, workflow_runs: [run("bad", "2026-09-06T00:00:00Z")] }
+            : { total_count: 300, workflow_runs: [run("newest", "2026-09-07T01:00:00Z")] },
       );
     };
     const s = await stage("repo", "deploy.yml", now);
     assert.deepEqual(urls.sort(), ["", "&status=failure&created=>=2026-08-31T12:00:00Z", "&status=success"]);
     assert.equal(s.latest?.head_sha, "newest");
-    assert.equal(s.success?.head_sha, "ok");
+    assert.equal(s.success?.head_sha, "rolled-back-to");
     assert.equal(s.failures, 23);
   } finally {
     globalThis.fetch = original;

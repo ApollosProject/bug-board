@@ -14,6 +14,12 @@ type Config = {
   github_orgs: string[];
   people: Record<string, Person>;
   platforms: Record<string, { lead?: string; developers: string[] }>;
+  deploys: {
+    name: string;
+    repo: string;
+    branch: string;
+    stages: { label: string; workflow: string; live?: boolean }[];
+  }[];
 };
 export const config = YAML.parse(
   fs.readFileSync(path.join(process.cwd(), "config.yml"), "utf8"),

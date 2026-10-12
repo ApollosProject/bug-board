@@ -1,80 +1,16 @@
 import { unstable_cache } from "next/cache";
+import { config } from "./config";
 import { githubRest } from "./github";
 import { mapConcurrent } from "./http";
 import { DAY } from "./window";
-// Release pipelines, in promotion order. Confidence gates are reusable workflows
-// that run inside the staging publish, so they have no runs of their own. The stage marked `live` is what users run;
-// commits on the default branch after its last success are still waiting.
-const pipelines = [
-  {
-    name: "Cluster",
-    repo: "apollos-cluster",
-    branch: "master",
-    stages: [
-      ["Staging", "publish-staging-image.yml"],
-      ["Release tag", "release.yml"],
-      ["Production", "publish-production-image.yml", "live"],
-    ],
-  },
-  {
-    name: "Admin",
-    repo: "apollos-admin",
-    branch: "main",
-    stages: [
-      ["Staging", "admin-publish-staging.yml"],
-      ["Release tag", "create-admin-release-tag.yml"],
-      ["Production", "admin-publish-production.yml", "live"],
-    ],
-  },
-  {
-    name: "Web",
-    repo: "apollos-admin",
-    branch: "main",
-    stages: [
-      ["Staging", "web-publish-staging.yml"],
-      ["Release tag", "create-web-release-tag.yml"],
-      ["Production", "web-publish-production.yml", "live"],
-    ],
-  },
-  {
-    name: "Web Embeds",
-    repo: "apollos-admin",
-    branch: "main",
-    stages: [["Production", "publish.yml", "live"]],
-  },
-  {
-    name: "Mobile",
-    repo: "apollos-platforms",
-    branch: "master",
-    stages: [
-      ["Weekly pre-release", "pre-release.yml"],
-      // A release job is not store evidence; the Apps page verifies what users run.
-      ["Weekly release", "release.yml"],
-      ["Deploy apps", "deploy-apps.yml"],
-    ],
-  },
-  {
-    name: "Shovel",
-    repo: "apollos-shovel",
-    branch: "master",
-    stages: [["Production", "deploy.yml", "live"]],
-  },
-  {
-    name: "Infrastructure",
-    repo: "apollos-infrastructure",
-    branch: "main",
-    stages: [
-      ["Deploy", "deploy-infrastructure.yml", "live"],
-      ["Review apps", "review-app.yml"],
-    ],
-  },
-] as const;
+const pipelines = config.deploys;
 type Run = {
   head_sha: string;
   head_branch: string | null;
   status: string;
   conclusion: string | null;
   created_at: string;
+  updated_at: string;
   html_url: string;
   display_title: string;
 };
@@ -100,11 +36,18 @@ export type Pipeline = {
 };
 const repoPath = (repo: string) => `/repos/ApollosProject/${repo}`;
 // Latest run, last success (possibly older), and GitHub's exact count of failed
-// runs in the last seven days: three single-row requests.
+// runs in the last seven days. GitHub lists runs by creation, but a re-run of an
+// older run (a rollback) finishes later, so take the most recently updated of
+// the newest ten.
 export async function stage(repo: string, workflow: string, now = Date.now()) {
   const runs = (query: string) =>
     githubRest<{ total_count: number; workflow_runs: Run[] }>(
-      `${repoPath(repo)}/actions/workflows/${workflow}/runs?exclude_pull_requests=true&per_page=1${query}`,
+      `${repoPath(repo)}/actions/workflows/${workflow}/runs?exclude_pull_requests=true&per_page=10${query}`,
+    );
+  const newest = ({ workflow_runs: r }: { workflow_runs: Run[] }) =>
+    r.reduce<Run | null>(
+      (a, b) => (!a || b.updated_at > a.updated_at ? b : a),
+      null,
     );
   const since = new Date(now - 7 * DAY).toISOString().slice(0, 19) + "Z";
   const [latest, success, failed] = await Promise.all([
@@ -113,8 +56,8 @@ export async function stage(repo: string, workflow: string, now = Date.now()) {
     runs(`&status=failure&created=>=${since}`),
   ]);
   return {
-    latest: latest.workflow_runs[0] || null,
-    success: success.workflow_runs[0] || null,
+    latest: newest(latest),
+    success: newest(success),
     failures: failed.total_count,
   };
 }
@@ -124,9 +67,9 @@ async function pipeline(p: (typeof pipelines)[number]): Promise<Pipeline> {
     const stages: Stage[] = await mapConcurrent(
       [...p.stages],
       4,
-      async ([label, workflow, live]) => ({
+      async ({ label, workflow, live }) => ({
         label,
-        live: live === "live",
+        live: !!live,
         ...(await stage(p.repo, workflow)),
       }),
     );
