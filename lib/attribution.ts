@@ -199,13 +199,19 @@ async function fixEvidence(urls: string[]) {
       (a, b) => (b.deletions || 0) - (a.deletions || 0),
     )) {
       if (text.length > 9000 / urls.length) break;
-      text += `\n--- ${file.filename}\n${trim(scrub(file.patch || ""), 3000)}`;
+      text += `\n--- ${file.filename}\n${file.patch ? trim(scrub(file.patch), 3000) : "[diff unavailable]"}`;
     }
     return trim(text, Math.floor(9000 / urls.length));
   });
   return {
     texts,
     removed: removedLines(files),
+    // Files whose fixing diff GitHub omitted: no matches there are unknown.
+    missing: new Set(
+      files
+        .filter((f) => !f.patch && (f.deletions ?? 1) > 0)
+        .flatMap((f) => [f.filename, f.previous_filename || f.filename]),
+    ),
     touched: new Set(
       files.flatMap((f) => [f.filename, f.previous_filename || f.filename]),
     ),
@@ -214,6 +220,7 @@ async function fixEvidence(urls: string[]) {
 async function szzSuspects(
   candidates: Candidate[],
   removed: Map<string, Set<string>>,
+  missing: Set<string>,
   reported: string,
 ): Promise<Suspect[]> {
   return Promise.all(
@@ -236,7 +243,11 @@ async function szzSuspects(
             hunks.length
               ? trim(scrub(hunks.join("\n")), 1400)
               : // GitHub omits very large diffs; missing is not negative evidence.
-                files.some((f) => removed.has(f.filename) && !f.patch)
+                files.some(
+                    (f) =>
+                      (removed.has(f.filename) && !f.patch) ||
+                      missing.has(f.filename),
+                  )
                 ? "Its diff for files the fix changed is unavailable."
                 : "None of its added lines were removed by the fix.",
           ],
@@ -473,7 +484,12 @@ export async function judgeIssue(record: Attribution): Promise<Judgement> {
     issueText(record.identifier),
     fixEvidence(record.fixing_urls),
   ]);
-  const szz = await szzSuspects(record.candidates, fix.removed, reported);
+  const szz = await szzSuspects(
+    record.candidates,
+    fix.removed,
+    fix.missing,
+    reported,
+  );
   const luna = await hypothesis(issue, fix.texts, szz);
   const skip = new Set(
     [...szz, ...record.fixing_urls.map((url) => ({ url }))].map((s) =>
