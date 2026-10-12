@@ -286,6 +286,14 @@ async function hypothesis(issue: string, fixes: string[], suspects: Suspect[]) {
   });
   return output;
 }
+// Model text becomes plain keywords: no qualifiers (`repo:`), operators, or quotes.
+export const keywords = (query: string) =>
+  query
+    .split(/\s+/)
+    .map((w) => w.replace(/[^\w.-]/g, ""))
+    .filter((w) => w && !/^(OR|AND|NOT)$/i.test(w))
+    .slice(0, 5)
+    .join(" ");
 async function searchSuspects(
   searches: { repo: string; query: string }[],
   reported: string,
@@ -300,7 +308,7 @@ async function searchSuspects(
   for (const s of searches.slice(0, 3)) {
     // GitHub search allows 30 requests a minute.
     await new Promise((r) => setTimeout(r, 2000));
-    const q = `repo:${s.repo} is:pr is:merged merged:${from}..${reported.slice(0, 10)} ${s.query}`;
+    const q = `repo:${s.repo} is:pr is:merged merged:${from}..${reported.slice(0, 10)} ${keywords(s.query)}`;
     const { items } = await githubRest<{
       items: {
         html_url: string;
@@ -312,6 +320,7 @@ async function searchSuspects(
     for (const it of items) {
       const url = it.html_url;
       if (
+        !url.toLowerCase().startsWith(`https://github.com/${s.repo}/pull/`) ||
         it.pull_request.merged_at >= reported ||
         skip.has(url.toLowerCase()) ||
         found.some((f) => f.url === url) ||

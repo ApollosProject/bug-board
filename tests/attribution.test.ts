@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyJudgement, introducingHunks, judge, removedLines, type Judgement } from "../lib/attribution";
+import { applyJudgement, introducingHunks, judge, keywords, removedLines, type Judgement } from "../lib/attribution";
 
 const kind = (regression: number, not_regression: number, unknown: number) => ({ regression, not_regression, unknown });
 
@@ -36,4 +36,9 @@ test("a judged non-bug keeps its record but loses its blame", async () => {
   const applied = await applyJudgement(record, j);
   assert.equal(applied.attribution, null);
   assert.equal(applied.judgement?.introduced, false);
+});
+
+test("search keywords from the model cannot add qualifiers or operators", () => {
+  assert.equal(keywords('tiptap OR repo:private/repo is:pr "bump"'), "tiptap repoprivaterepo ispr bump");
+  assert.equal(keywords("expo  sdk-54 upgrade"), "expo sdk-54 upgrade");
 });
