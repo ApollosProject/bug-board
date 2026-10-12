@@ -10,8 +10,8 @@ export async function Regressions({ slug }: { slug?: string }) {
   if (!summary?.configured)
     return (
       <Unavailable
-        name="Regression metrics"
-        detail="Regression metrics require Linear, GitHub, and the scheduled attribution refresh."
+        name="Introduced-bug metrics"
+        detail="Introduced-bug metrics require Linear, GitHub, and the scheduled attribution refresh."
       />
     );
   const author = slug
@@ -23,12 +23,12 @@ export async function Regressions({ slug }: { slug?: string }) {
   return (
     <section>
       <h2>
-        Regression Signals <small>30d</small>
+        Introduced Bugs <small>30d</small>
       </h2>
       <div className="cards">
         {[
           {
-            label: "Authored Regressions",
+            label: "Bugs in Authored PRs",
             value: slug
               ? author?.regression_count
               : summary.authored_regression_count,
@@ -36,7 +36,7 @@ export async function Regressions({ slug }: { slug?: string }) {
             row: author,
           },
           {
-            label: "Approved Regressions",
+            label: "Bugs in Approved PRs",
             value: slug
               ? reviewer?.regression_count
               : summary.approved_regression_count,

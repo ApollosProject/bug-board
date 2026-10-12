@@ -82,7 +82,7 @@ Deployment POSTs require a verified GitHub session, same-origin request, a fresh
 
 ### Regression evidence
 
-The durable attribution refresh traces removed lines in fixing PRs to likely inducing PRs, ranks them by recency-weighted line counts, and records human author/approval attribution. Work is bounded at 50 files and 500 deleted lines per file. Exceeding either marks evidence incomplete. Manual overrides can ignore a Linear issue or select an inducing PR. Attribution is directional, not proof of causality. Regression cards always use their labeled 30-day window, independently of the page's selected delivery window.
+The durable attribution refresh traces removed lines in fixing PRs to likely inducing PRs, ranks them by recency-weighted line counts, and records human author/approval attribution. Work is bounded at 50 files and 500 deleted lines per file. Exceeding either marks evidence incomplete. Manual overrides can ignore a Linear issue or select an inducing PR. Attribution is directional, not proof of causality. The dashboard calls these introduced bugs: every fixed priority bug counts, whether it broke working behavior or shipped with new code. Regression cards always use their labeled 30-day window, independently of the page's selected delivery window.
 
 ## Environment
 
