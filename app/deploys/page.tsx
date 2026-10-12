@@ -1,6 +1,8 @@
+import { Suspense } from "react";
 import {
   Checked,
   Heading,
+  Loading,
   TableScroll,
   Unavailable,
 } from "@/components/dashboard";
@@ -23,14 +25,10 @@ const tone = (run: Stage["latest"]) =>
       : run.conclusion === "failure"
         ? "low"
         : "";
-export default async function Deploys() {
+async function Report() {
   const data = await deploys().catch(() => null);
   return (
     <>
-      <Heading
-        title="Deploys"
-        detail="What is on staging and production for each service, and what has merged but not shipped. From GitHub Actions, cached for up to five minutes."
-      />
       {/* The Data Cache can serve the previous copy while it refreshes. */}
       {data && (
         <p className="muted">
@@ -107,8 +105,8 @@ export default async function Deploys() {
                                     <code>{s.success.head_branch}</code>
                                   )}
                                 <small>
-                                  <time dateTime={s.success.created_at}>
-                                    {when(s.success.created_at)}
+                                  <time dateTime={s.success.updated_at}>
+                                    {when(s.success.updated_at)}
                                   </time>
                                 </small>
                               </>
@@ -126,8 +124,8 @@ export default async function Deploys() {
                                   {s.latest.conclusion || s.latest.status}
                                 </a>
                                 <small>
-                                  <time dateTime={s.latest.created_at}>
-                                    {when(s.latest.created_at)}
+                                  <time dateTime={s.latest.updated_at}>
+                                    {when(s.latest.updated_at)}
                                   </time>{" "}
                                   · {s.latest.display_title}
                                 </small>
@@ -153,6 +151,20 @@ export default async function Deploys() {
           </section>
         ))
       )}
+    </>
+  );
+}
+// A cold cache makes about 45 GitHub requests; stream them behind the heading.
+export default function Deploys() {
+  return (
+    <>
+      <Heading
+        title="Deploys"
+        detail="What is on staging and production for each service, and what has merged but not shipped. From GitHub Actions, cached for up to five minutes."
+      />
+      <Suspense fallback={<Loading />}>
+        <Report />
+      </Suspense>
     </>
   );
 }

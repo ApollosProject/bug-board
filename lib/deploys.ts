@@ -38,11 +38,11 @@ const repoPath = (repo: string) => `/repos/ApollosProject/${repo}`;
 // Latest run, last success (possibly older), and GitHub's exact count of failed
 // runs in the last seven days. GitHub lists runs by creation, but a re-run of an
 // older run (a rollback) finishes later, so take the most recently updated of
-// the newest ten.
+// the newest 100 (one request). Times shown are update times for the same reason.
 export async function stage(repo: string, workflow: string, now = Date.now()) {
-  const runs = (query: string) =>
+  const runs = (query: string, size = 100) =>
     githubRest<{ total_count: number; workflow_runs: Run[] }>(
-      `${repoPath(repo)}/actions/workflows/${workflow}/runs?exclude_pull_requests=true&per_page=10${query}`,
+      `${repoPath(repo)}/actions/workflows/${workflow}/runs?exclude_pull_requests=true&per_page=${size}${query}`,
     );
   const newest = ({ workflow_runs: r }: { workflow_runs: Run[] }) =>
     r.reduce<Run | null>(
@@ -53,7 +53,8 @@ export async function stage(repo: string, workflow: string, now = Date.now()) {
   const [latest, success, failed] = await Promise.all([
     runs(""),
     runs("&status=success"),
-    runs(`&status=failure&created=>=${since}`),
+    // Only total_count is used.
+    runs(`&status=failure&created=>=${since}`, 1),
   ]);
   return {
     latest: newest(latest),

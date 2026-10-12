@@ -680,7 +680,7 @@ test("deploy stages ask GitHub for the latest run, last success, and exact failu
     process.env.GITHUB_TOKEN = "fixture";
     globalThis.fetch = async (url) => {
       const u = String(url);
-      urls.push(u.replace("https://api.github.com/repos/ApollosProject/repo/actions/workflows/deploy.yml/runs?exclude_pull_requests=true&per_page=10", ""));
+      urls.push(u.replace("https://api.github.com/repos/ApollosProject/repo/actions/workflows/deploy.yml/runs?exclude_pull_requests=true", ""));
       return Response.json(
         u.includes("status=success")
           ? // Newest-created first, but the older run was re-run (a rollback) and finished last.
@@ -691,7 +691,7 @@ test("deploy stages ask GitHub for the latest run, last success, and exact failu
       );
     };
     const s = await stage("repo", "deploy.yml", now);
-    assert.deepEqual(urls.sort(), ["", "&status=failure&created=>=2026-08-31T12:00:00Z", "&status=success"]);
+    assert.deepEqual(urls.sort(), ["&per_page=100", "&per_page=100&status=success", "&per_page=1&status=failure&created=>=2026-08-31T12:00:00Z"].sort());
     assert.equal(s.latest?.head_sha, "newest");
     assert.equal(s.success?.head_sha, "rolled-back-to");
     assert.equal(s.failures, 23);
