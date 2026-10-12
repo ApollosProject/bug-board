@@ -158,8 +158,12 @@ async function pipeline(p: (typeof pipelines)[number]): Promise<Pipeline> {
 export const deploys = unstable_cache(
   async () => {
     if (!process.env.GITHUB_TOKEN) return null;
-    return mapConcurrent([...pipelines], 3, pipeline);
+    const checked_at = new Date().toISOString();
+    return {
+      checked_at,
+      pipelines: await mapConcurrent([...pipelines], 3, pipeline),
+    };
   },
-  ["deploys-v1"],
+  ["deploys-v2"],
   { revalidate: 300 },
 );

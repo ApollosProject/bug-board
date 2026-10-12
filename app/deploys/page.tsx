@@ -1,4 +1,9 @@
-import { Heading, TableScroll, Unavailable } from "@/components/dashboard";
+import {
+  Checked,
+  Heading,
+  TableScroll,
+  Unavailable,
+} from "@/components/dashboard";
 import { deploys, type Stage } from "@/lib/deploys";
 export const metadata = { title: "Deploys" };
 const when = (iso: string) =>
@@ -24,15 +29,21 @@ export default async function Deploys() {
     <>
       <Heading
         title="Deploys"
-        detail="What is on staging and production for each service, and what has merged but not shipped. From GitHub Actions; refreshed every five minutes."
+        detail="What is on staging and production for each service, and what has merged but not shipped. From GitHub Actions, cached for up to five minutes."
       />
+      {/* The Data Cache can serve the previous copy while it refreshes. */}
+      {data && (
+        <p className="muted">
+          <Checked at={data.checked_at} />
+        </p>
+      )}
       {!data ? (
         <Unavailable
           name="Deploy status"
           detail="Deploy status requires GITHUB_TOKEN with Actions read access."
         />
       ) : (
-        data.map((p) => (
+        data.pipelines.map((p) => (
           <section key={p.name}>
             <h2>
               {p.name} <small>{p.repo}</small>
