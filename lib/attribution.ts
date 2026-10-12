@@ -349,7 +349,10 @@ async function searchSuspects(
       const near = files.filter((f) => touched.has(f.filename));
       const detail = near.length
         ? near
-            .map((f) => `${f.filename}\n${trim(f.patch || "", 700)}`)
+            .map(
+              (f) =>
+                `${f.filename}\n${f.patch ? trim(f.patch, 700) : "[diff unavailable]"}`,
+            )
             .join("\n")
         : `Changed files: ${files
             .slice(0, 15)
