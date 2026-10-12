@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { Analytics } from "@vercel/analytics/next";
 import { session } from "@/lib/auth";
 import { NavLinks } from "@/components/nav";
+import { PageAnalytics } from "@/components/analytics";
 import "./globals.css";
 export function generateMetadata(): Metadata {
   return {
@@ -79,7 +79,7 @@ export default async function Layout({
           </div>
         </footer>
         {/* Page views from signed-in people only. */}
-        {user && <Analytics />}
+        {user && <PageAnalytics />}
       </body>
     </html>
   );
