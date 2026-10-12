@@ -1,6 +1,6 @@
 # Bug Board
 
-Apollos Engineering's dashboard for Linear work, GitHub delivery and reviews, app releases, project timelines, and Airflow fleet health. Built with Next.js App Router, React Server Components, TypeScript, Vercel Cron, and Vercel Workflow. No Flask server or persistent worker is needed.
+Apollos Engineering's dashboard for Linear work, GitHub delivery and reviews, app releases, project timelines, and Airflow fleet health. Built with Next.js App Router, React Server Components, TypeScript, Vercel Cron, and Vercel Workflow. No persistent worker is needed.
 
 ## Local development
 
@@ -32,7 +32,7 @@ npx e2e run tests/dashboard.e2e.ts --no-cache
 - Vercel Web Analytics: page views from signed-in people (URLs keep date, platform, and sort filters; person and church slugs become `[slug]`, and the `q`, `author`, and `reviewer` values become `[redacted]`), plus one server-side event, `Team CSV export` (window). Deploy requests show up as `/apps?deployed=1` page views. No names, issue titles, or church data are sent. Collection starts only after Web Analytics is enabled on the Vercel project. Pro bills $0.03 per 1,000 events.
 - Vercel Cron: fleet, metrics, and apps return `200` with `status: refreshed` only after completion. Failures return `503`. Regressions and notifications return `202` with a Workflow run ID, not a claim of completion. Inspect durable jobs in Vercel Workflow observability (locally: `npx workflow inspect runs`).
 
-The main views are `/`, `/team`, `/team/[slug]`, `/reviews`, `/projects`, `/apps`, and `/dags`. `/healthz` stays public and returns `{"status":"ok"}`. `/team.csv` exports the selected team/window with cohort z-scores. `/app-versions` and `/failing-dags` redirect to their current pages. Flask's internal `/partials/*` transport is retired. Streamed server components replace it.
+The main views are `/`, `/team`, `/team/[slug]`, `/reviews`, `/projects`, `/apps`, and `/dags`. `/healthz` stays public and returns `{"status":"ok"}`. `/team.csv` exports the selected team/window with cohort z-scores. `/app-versions` and `/failing-dags` redirect to their current pages.
 
 ### Refresh and notifications
 
@@ -55,20 +55,9 @@ Slack digests have a per-day delivery claim: since Slack webhooks have no idempo
 
 Ready lists include only unassigned projects without unfinished incoming dependencies. A milestone dependency uses milestone status, not the parent project's completion. Dependency pages are complete before a project can appear in Ready.
 
-### Slack handoff (separate operator approval required)
+### Slack notifications
 
-Preview deployments never send notifications. The production delivery claims prevent duplicates between Vercel deployments, but not between Vercel and Heroku.
-
-1. Deploy the production dashboard without `SLACK_WEBHOOK_URL` and `MANAGER_SLACK_WEBHOOK_URL`.
-2. Verify the production dashboard, snapshots, and scheduled refreshes before the worker handoff. Budget this short verification overlap from the live GitHub quota, including cold fills. The sampled native/legacy busy-hour forecast exceeds the shared 5,000-point limit. Do not leave both regular refresh schedulers active. If headroom is insufficient, postpone cutover.
-3. Choose a handoff time between notification schedules. Record the last Heroku deliveries in each channel.
-4. Confirm that no Heroku notification is in flight. Stop the Heroku worker only after approval for the coordinated handoff.
-5. Configure the current Slack webhooks on Vercel. Deploy these environment changes before the next notification schedule.
-6. Verify one delivery in the intended channel and its completed Workflow step.
-
-Do not run both notification systems concurrently. Do not use Heroku's `DEBUG=true` path or manually replay a digest during the handoff.
-
-Environment changes do not cancel active Workflow runs. For rollback, disable Vercel notifications and confirm that no notification run remains in flight. Then restore the Heroku worker. If a delivery is uncertain, inspect Slack before any retry. Do not clear a delivery claim without this check.
+Only Production sends Slack posts. Preview deployments never do. Delivery claims in Redis prevent duplicate posts across Production deployments. If a delivery is uncertain, check Slack before any retry, and do not clear a delivery claim without that check.
 
 ### App release evidence
 
@@ -112,7 +101,6 @@ Partially configured auth fails closed with `503`. Vercel production and preview
 - `SLACK_WEBHOOK_URL`, `MANAGER_SLACK_WEBHOOK_URL`.
 - `RIPPLING_PTO_CALENDAR_URL`, `RIPPLING_PTO_TIMEZONE` (default `America/New_York`). Only Rippling's HTTPS PTO feed is accepted. No redirects.
 
-Legacy `FLASK_SECRET_KEY`, `REDIS_URL`, Redis TCP/TLS settings, and worker interval variables are not used. Generate a new `AUTH_SECRET`. Old Flask sessions intentionally do not survive migration.
 
 ## JSON API
 
@@ -154,14 +142,8 @@ The manual `run_ai` input runs the Luna suite with the repository's `AI_GATEWAY_
 
 Manual runs write job summaries because they have no PR event context.
 
-## Vercel cutover (operator approval required)
+## Deploys and rollback
 
-1. Create/link the **Apollos** Vercel project with the Next.js preset, Node 24.x, and a plan supporting minute-level Cron and Workflow. Vercel assigns a new project’s first deployment to **production**, even with CLI `--target preview`. Do not assume the flag isolates that first deployment. Obtain separate approval for a harmless protected static bootstrap with no domain promotion, app credentials, or Cron. Then create the real preview and verify its actual API target. Keep Git auto-deployment disconnected until production deployment is authorized. The Heroku deployment still uses Flask.
-2. Configure server credentials and Upstash Redis REST access separately for preview and production. Do not copy a legacy Redis TCP URL into the REST variable.
-3. Configure a GitHub OAuth app/callback for the preview host. Confirm fail-closed behavior, active-member login, API-key access, and logout on the preview.
-4. Invoke authenticated preview refreshes for fleet, metrics, apps, and regressions. Confirm `200` responses for ordinary refreshes. Wait for the regression Workflow to complete. Compare real data against the current dashboard, including store build evidence, regression overrides, PTO, CSV, and person comparisons. Run the populated E2E suite.
-5. Add `AI_GATEWAY_API_KEY` and run the uncached Luna tests. Review all CI checks and attached runtime proof.
-6. Only after approval, set the production origin/OAuth callback and move `engineering.apollos.app` to Vercel. Verify the production dashboard and refresh jobs without Slack webhooks.
-7. Follow the separate Slack handoff procedure above. Coordinate fleet heartbeat ownership with the worker handoff. Do not stop the legacy worker before the new dashboard and refresh jobs are ready.
+Vercel's Git integration deploys `main` to Production (`engineering.apollos.app`), and every pull request gets a Preview deployment. Cron runs only on Production. Preview deployments use their own Redis namespace and never post to Slack.
 
-This repository change does not itself provision infrastructure, modify DNS/OAuth apps, send Slack posts, or shut down production services.
+To roll back, promote an earlier Production deployment in Vercel (Instant Rollback), then confirm that the Cron jobs point at it. The Heroku app, worker, and Redis add-on were deleted after the migration. Nothing else runs Bug Board.

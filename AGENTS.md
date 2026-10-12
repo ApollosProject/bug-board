@@ -29,4 +29,4 @@ Proof artifacts, .e2e/, .next/, local Workflow state, service doubles, and crede
 - Keep health public; all hosted deployments and partially configured OAuth fail closed.
 - Store publication is not a successful upload, observed runtime, tag, or dispatch. Preserve native-build matching and unverified/partial evidence states.
 - No external deployment, Slack posting, DNS/OAuth change, or production shutdown without explicit operator authorization.
-- Read README's Vercel cutover checklist before claiming migration is production-ready.
+- Merging to `main` deploys to Production through Vercel's Git integration; see README's Deploys and rollback section.
