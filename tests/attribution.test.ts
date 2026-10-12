@@ -28,6 +28,8 @@ test("evidence keeps the hunks that added lines a fix later removed", () => {
   // A fix that also renamed the file still matches suspects by the old path.
   const renamed = removedLines([{ filename: "new.ts", previous_filename: "old.ts", patch: "@@ -1 +1 @@\n-  return total || null;" }]);
   assert.ok(renamed.get("old.ts")?.has("return total || null;"));
+  // A deleted SQL comment ("-- note") appears as "--- note" in a hunk body.
+  assert.ok(removedLines([{ filename: "q.sql", patch: "@@ -1 +1 @@\n--- drop legacy rows" }]).get("q.sql")?.has("-- drop legacy rows"));
 });
 
 test("a judged non-bug keeps its record but loses its blame", async () => {

@@ -83,11 +83,8 @@ export function removedLines(
   const removed = new Map<string, Set<string>>();
   for (const f of files)
     for (const l of (f.patch || "").split("\n"))
-      if (
-        l.startsWith("-") &&
-        !l.startsWith("---") &&
-        l.slice(1).trim().length > 3
-      )
+      // GitHub patches are hunk bodies, so "---" is a deleted "--" line.
+      if (l.startsWith("-") && l.slice(1).trim().length > 3)
         // A renamed file's suspects wrote the line under its old path.
         for (const name of [f.filename, f.previous_filename])
           if (name)
@@ -221,6 +218,7 @@ async function fixEvidence(urls: string[]) {
 async function szzSuspects(
   candidates: Candidate[],
   removed: Map<string, Set<string>>,
+  touched: Set<string>,
   missing: Set<string>,
   reported: string,
 ): Promise<Suspect[]> {
@@ -238,7 +236,7 @@ async function szzSuspects(
         // GitHub omits very large diffs; missing is not negative evidence.
         const partial = files.some(
           (f) =>
-            (removed.has(f.filename) && !f.patch) || missing.has(f.filename),
+            (touched.has(f.filename) && !f.patch) || missing.has(f.filename),
         );
         const note = partial
           ? "Part of its diff, or the fix's, for files the fix changed is unavailable."
@@ -493,6 +491,7 @@ export async function judgeIssue(record: Attribution): Promise<Judgement> {
   const szz = await szzSuspects(
     record.candidates,
     fix.removed,
+    fix.touched,
     fix.missing,
     reported,
   );
