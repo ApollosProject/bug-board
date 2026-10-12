@@ -291,13 +291,15 @@ export async function prMetadata(url: string): Promise<Candidate | null> {
   const parsed = parsePR(url);
   if (!parsed) return null;
   const { owner, repo, number } = parsed;
+  // Deleted GitHub accounts come back as null users.
   const pr = await githubRest<{
     merged: boolean;
     merged_at: string;
-    user: { login: string };
+    user: { login: string } | null;
   }>(`/repos/${owner}/${repo}/pulls/${number}`);
   if (!pr.merged) return null;
-  const reviews: { user: { login: string }; state: string }[] = [];
+  const author = pr.user?.login || null;
+  const reviews: { user: { login: string } | null; state: string }[] = [];
   for (let page = 1; ; page++) {
     const batch = await githubRest<typeof reviews>(
       `/repos/${owner}/${repo}/pulls/${number}/reviews?per_page=100&page=${page}`,
@@ -308,17 +310,16 @@ export async function prMetadata(url: string): Promise<Candidate | null> {
   return {
     url,
     merged_at: pr.merged_at,
-    author: pr.user.login,
+    author,
     reviewers: [
       ...new Set(
         reviews
+          .filter((r) => r.state === "APPROVED")
+          .map((r) => r.user?.login || "")
           .filter(
-            (r) =>
-              r.state === "APPROVED" &&
-              !bot(r.user.login) &&
-              r.user.login.toLowerCase() !== pr.user.login.toLowerCase(),
-          )
-          .map((r) => r.user.login),
+            (login) =>
+              login && !bot(login) && login.toLowerCase() !== author?.toLowerCase(),
+          ),
       ),
     ],
     score: 0,
