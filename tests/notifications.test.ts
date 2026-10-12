@@ -32,6 +32,7 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
   const snapshots = new Map<string, string>();
   const posts: string[] = [];
   const postedAt: number[] = [];
+  const claimedAt: number[] = [];
   let issues: Issue[] = [];
   let failure: "rejected" | "ambiguous" | undefined;
   let failAt = 0;
@@ -55,6 +56,7 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
       if (op === "set") {
         if (records.has(key)) return null;
         records.set(key, args[0]);
+        if (records === claims) claimedAt.push(Date.now());
         return "OK";
       }
       if (op === "eval") {
@@ -82,6 +84,7 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
     await t.test("large digests deliver every issue and the footer without breaking links", async () => {
       posts.length = 0;
       postedAt.length = 0;
+      claimedAt.length = 0;
       issues = Array.from({ length: 1000 }, (_, i) => issue(i, `Issue ${i}: ${"🚀 <tag> & long title ".repeat(4)}`));
       const message = (await staleMessage())!;
       assert.ok(message.length > 80_000);
@@ -89,6 +92,7 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
       assert.ok(posts.length >= 3);
       assert.ok(posts.every((text) => text.length <= 39_000));
       assert.ok(postedAt.slice(1).every((at, i) => at - postedAt[i] >= 1_000), "Posts respect Slack's one-message-per-second limit");
+      assert.ok(claimedAt.slice(1).every((at, i) => at - postedAt[i] >= 1_000), "Parts are claimed only after the pacing wait");
       assert.equal(posts.join("\n"), message);
       for (const text of posts)
         for (const line of text.split("\n").filter((line) => line.startsWith("- ")))
