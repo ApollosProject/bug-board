@@ -2,7 +2,9 @@ export class UpstreamError extends Error {
   constructor(
     public service: string,
     public status: number,
-    reason = "",
+    public reason = "",
+    // Seconds the service asked us to wait (Retry-After or rate-limit reset).
+    public retryAfter?: number,
   ) {
     super(
       `${service} unavailable (HTTP ${status})${reason ? `: ${reason}` : ""}`,
@@ -33,7 +35,18 @@ export async function requestJson<T>(
             ? "organization SSO required"
             : "request rejected";
     }
-    throw new UpstreamError(service, response.status, reason);
+    const after = Number(response.headers.get("retry-after"));
+    const reset = Number(response.headers.get("x-ratelimit-reset"));
+    throw new UpstreamError(
+      service,
+      response.status,
+      reason,
+      after > 0
+        ? after
+        : response.headers.get("x-ratelimit-remaining") === "0" && reset
+          ? Math.max(0, reset - Math.floor(Date.now() / 1000))
+          : undefined,
+    );
   }
   return response.json() as Promise<T>;
 }

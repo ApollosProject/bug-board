@@ -19,6 +19,21 @@ import {
 import { notify, scheduledNotifications } from "@/lib/notifications";
 import { timeWindow, date } from "@/lib/window";
 import type { Job, Window } from "@/lib/types";
+import { UpstreamError } from "@/lib/http";
+import { RetryableError } from "workflow";
+// GitHub's secondary limits ask callers to back off for about a minute; the
+// default one-second step retry would spend every retry inside that window.
+async function patient<T>(work: () => Promise<T>) {
+  try {
+    return await work();
+  } catch (error) {
+    if (error instanceof UpstreamError && error.reason === "rate limit")
+      throw new RetryableError(error.message, {
+        retryAfter: Math.max(60, error.retryAfter ?? 0) * 1000,
+      });
+    throw error;
+  }
+}
 async function windowStep(days = 30) {
   "use step";
   return timeWindow({ days: String(days) });
@@ -33,12 +48,14 @@ async function regressionIssuesStep(window: Window) {
 }
 async function contextStep(url: string) {
   "use step";
-  return fixingContext(url);
+  return patient(() => fixingContext(url));
 }
+contextStep.maxRetries = 6;
 async function blameStep(context: Omit<FixContext, "files">, file: FixFile) {
   "use step";
-  return blameFile(context, file);
+  return patient(() => blameFile(context, file));
 }
+blameStep.maxRetries = 6;
 async function mergeStep(
   issue: { identifier: string; url: string },
   urls: string[],

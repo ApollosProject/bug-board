@@ -542,3 +542,30 @@ test("bounded fan-out preserves input order", async () => {
   assert.deepEqual(values, [2, 4, 6, 8, 10]);
   assert.equal(peak, 2);
 });
+
+test("GitHub rate-limit errors keep the wait the service asked for", async () => {
+  const { requestJson, UpstreamError } = await import("../lib/http");
+  const original = globalThis.fetch;
+  try {
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ message: "You have exceeded a secondary rate limit." }), {
+        status: 403,
+        headers: { "retry-after": "60" },
+      });
+    const error = await requestJson("https://api.github.com/graphql", {}, "GitHub").catch((e) => e);
+    assert.ok(error instanceof UpstreamError);
+    assert.equal(error.reason, "rate limit");
+    assert.equal(error.retryAfter, 60);
+    const reset = Math.floor(Date.now() / 1000) + 120;
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ message: "API rate limit exceeded" }), {
+        status: 403,
+        headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset": String(reset) },
+      });
+    const primary = await requestJson("https://api.github.com/graphql", {}, "GitHub").catch((e) => e);
+    assert.ok(primary instanceof UpstreamError);
+    assert.ok(primary.retryAfter! >= 119 && primary.retryAfter! <= 120);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
