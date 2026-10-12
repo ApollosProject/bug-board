@@ -156,7 +156,7 @@ async function issueText(identifier: string) {
   const reported = issue.createdAt;
   return {
     reported,
-    text: `Reported ${reported}: ${issue.title}\n\n${scrub(issue.description || "")}`,
+    text: `Reported ${reported}: ${scrub(issue.title)}\n\n${scrub(issue.description || "")}`,
   };
 }
 type File = {
