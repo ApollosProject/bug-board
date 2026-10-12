@@ -41,4 +41,5 @@ test("a judged non-bug keeps its record but loses its blame", async () => {
 test("search keywords from the model cannot add qualifiers or operators", () => {
   assert.equal(keywords('tiptap OR repo:private/repo is:pr "bump"'), "tiptap repoprivaterepo ispr bump");
   assert.equal(keywords("expo  sdk-54 upgrade"), "expo sdk-54 upgrade");
+  assert.equal(keywords("-crash -upgrade"), "crash upgrade");
 });

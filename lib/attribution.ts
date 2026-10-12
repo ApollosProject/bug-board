@@ -304,7 +304,8 @@ async function hypothesis(issue: string, fixes: string[], suspects: Suspect[]) {
 export const keywords = (query: string) =>
   query
     .split(/\s+/)
-    .map((w) => w.replace(/[^\w.-]/g, ""))
+    // Hyphens and dots only inside a word: a leading "-" excludes a term.
+    .map((w) => w.replace(/[^\w.-]/g, "").replace(/^[.-]+|[.-]+$/g, ""))
     .filter((w) => w && !/^(OR|AND|NOT)$/i.test(w))
     .slice(0, 5)
     .join(" ");
