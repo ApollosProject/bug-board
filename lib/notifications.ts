@@ -119,6 +119,16 @@ export async function projectMessage() {
   const today = date(Date.now()),
     now = Date.parse(today),
     weekday = new Date(now).getUTCDay();
+  const formatDate = (value: string) => {
+    const day = Date.parse(value.slice(0, 10));
+    if (day === now) return "Today";
+    return Math.abs(day - now) < 7 * DAY
+      ? new Date(day).toLocaleDateString("en-US", {
+          weekday: "short",
+          timeZone: "UTC",
+        })
+      : value.slice(0, 10);
+  };
   const sinceFriday = (weekday - 5 + 7) % 7 || 7,
     due = now - sinceFriday * DAY;
   const groups: Record<string, string[]> = {
@@ -147,7 +157,7 @@ export async function projectMessage() {
         );
       else if (days <= 3)
         groups["Projects Ending Soon"].push(
-          `- ${line} (${days === 0 ? "Today" : p.targetDate})`,
+          `- ${line} (${formatDate(date(target))})`,
         );
       if (
         p.status.type === "started" &&
@@ -156,11 +166,11 @@ export async function projectMessage() {
           Date.parse(p.lastUpdate.createdAt.slice(0, 10)) < due - 2 * DAY)
       )
         groups["Projects With Overdue Updates"].push(
-          `- ${line} (Due ${date(due)}; ${p.lastUpdate ? `last update ${p.lastUpdate.createdAt.slice(0, 10)}` : "no updates yet"})`,
+          `- ${line} (Due ${formatDate(date(due))}; ${p.lastUpdate ? `last update ${formatDate(p.lastUpdate.createdAt)}` : "no updates yet"})`,
         );
     }
     if (!inactive(p) && start > now && start <= now + 3 * DAY)
-      groups["Projects Starting Soon"].push(`- ${line} (${p.startDate})`);
+      groups["Projects Starting Soon"].push(`- ${line} (${formatDate(date(start))})`);
   }
   const sections = Object.entries(groups)
     .filter(([, rows]) => rows.length)
