@@ -51,6 +51,8 @@ async function mergeStep(
 const judgementsPerRun = 40;
 async function judgeStep(record: Attribution, allowNew: boolean) {
   "use step";
+  // Partial blame may miss the culprit; keep the SZZ result as before.
+  if (!record.complete) return { record, fresh: false };
   let fresh = false;
   try {
     const cached = await cachedJudgement(record);
