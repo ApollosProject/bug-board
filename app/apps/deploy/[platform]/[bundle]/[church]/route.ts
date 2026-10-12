@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { track } from "@vercel/analytics/server";
 import { callbackURL, sameOrigin, session } from "@/lib/auth";
 import { appsDashboard, deployTarget, dispatchDeploy } from "@/lib/apps";
 import { claim } from "@/lib/cache";
@@ -25,6 +26,7 @@ export async function POST(
     if (!(await claim(`deploy:${platform}:${bundle}:${church}`, 60)))
       return new NextResponse("Deployment recently requested", { status: 409 });
     await dispatchDeploy(church, platform);
+    await track("App deploy requested", { platform }, { request });
     return NextResponse.redirect(
       new URL("/apps?deployed=1", callbackURL()),
       303,

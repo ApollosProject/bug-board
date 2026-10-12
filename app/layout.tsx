@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
+import { Analytics } from "@vercel/analytics/next";
 import { session } from "@/lib/auth";
 import { NavLinks } from "@/components/nav";
 import "./globals.css";
@@ -77,6 +78,8 @@ export default async function Layout({
             </a>
           </div>
         </footer>
+        {/* Page views from signed-in people only. */}
+        {user && <Analytics />}
       </body>
     </html>
   );
