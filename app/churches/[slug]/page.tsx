@@ -177,7 +177,10 @@ export default async function ChurchPage({
             </table>
           </TableScroll>
         ) : (
-          <p className="muted">No app observations for this church.</p>
+          <p className="muted">
+            No app observations matched this church. Shared TV and web apps
+            list only their most recent build church.
+          </p>
         )}
       </section>
       <section>
