@@ -749,6 +749,13 @@ meter::-moz-meter-bar {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+.project-priority {
+  display: inline-block;
+  width: 0.8rem;
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
 .timeline-bar.completed {
   background: #6b7280;
 }

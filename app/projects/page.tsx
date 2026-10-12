@@ -8,6 +8,25 @@ import { ptoCalendar } from "@/lib/pto";
 import { readSnapshot } from "@/lib/cache";
 import { DAY, date, timeWindow } from "@/lib/window";
 export const metadata = { title: "Projects" };
+function ProjectPriority({ label = "No priority" }: { label?: string }) {
+  const symbols: Record<string, string> = {
+    Urgent: "!",
+    High: "▴",
+    Medium: "=",
+    Low: "▾",
+    "Very Low": "⌄",
+  };
+  return (
+    <span
+      className="project-priority"
+      role="img"
+      aria-label={`Priority: ${label}`}
+      title={`Priority: ${label}`}
+    >
+      <span aria-hidden="true">{symbols[label] || "–"}</span>
+    </span>
+  );
+}
 export async function Timeline() {
   const data = await Promise.all([
     projectDashboard(),
@@ -50,7 +69,8 @@ export async function Timeline() {
             ),
         )
         .flatMap((p) => {
-          if (!p.startDate && !p.targetDate && !p.completedAt) return [];
+          const undated = !p.startDate && !p.targetDate && !p.completedAt;
+          if (undated && inactive(p)) return [];
           const a = Date.parse(p.startDate || date(start)),
             hint = done(p) ? p.completedAt || p.targetDate : p.targetDate;
           const overdue =
@@ -66,6 +86,7 @@ export async function Timeline() {
               id: p.id,
               name: p.name,
               href: p.url,
+              priorityLabel: p.priorityLabel,
               start: Math.max(a, start),
               end: Math.min(b, end - DAY),
               className: done(p)
@@ -73,7 +94,7 @@ export async function Timeline() {
                 : overdue
                   ? "overdue"
                   : p.health || "neutral",
-              title: `${p.name} · Priority: ${p.priorityLabel || "No priority"} · ${p.startDate || "Earlier"} – ${hint?.slice(0, 10) || "Ongoing"}`,
+              title: `${p.name} · Priority: ${p.priorityLabel || "No priority"} · ${undated ? "Dates not set" : `${p.startDate || "Earlier"} – ${hint?.slice(0, 10) || "Ongoing"}`} · Opens in a new tab`,
               lane: 1,
             },
           ];
@@ -100,6 +121,7 @@ export async function Timeline() {
             id: `ooo-${i}`,
             name: "OOO",
             href: "",
+            priorityLabel: undefined,
             start: Math.max(a, start),
             end: Math.min(b, end - DAY),
             className: event.allDay ? "ooo" : "ooo partial",
@@ -154,8 +176,14 @@ export async function Timeline() {
           <h3>Ready · Unassigned projects</h3>
           <div className="toolbar">
             {ready.map((p) => (
-              <a href={p.url} key={p.id}>
-                {p.name} <small>{p.priorityLabel}</small>
+              <a
+                href={p.url}
+                key={p.id}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Opens in a new tab"
+              >
+                <ProjectPriority label={p.priorityLabel} /> {p.name}
               </a>
             ))}
           </div>
@@ -203,11 +231,13 @@ export async function Timeline() {
                     <a
                       key={bar.id}
                       href={bar.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className={`timeline-bar ${bar.className}`}
                       title={bar.title}
                       style={style}
                     >
-                      {bar.name}
+                      <ProjectPriority label={bar.priorityLabel} /> {bar.name}
                     </a>
                   ) : (
                     <span
@@ -222,7 +252,7 @@ export async function Timeline() {
                   );
                 })}
                 {!row.bars.length && (
-                  <small className="timeline-empty">No dated projects</small>
+                  <small className="timeline-empty">No projects in this window</small>
                 )}
               </div>
             </div>
