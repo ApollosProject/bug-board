@@ -152,7 +152,7 @@ Tests, traces, screenshots, videos, reports, and local Workflow state stay outsi
 
 The manual `run_ai` input runs the Luna suite with the repository's `AI_GATEWAY_API_KEY` secret. The `e2e` label enables Luna on same-repository PRs, with the same key and budget limit. TesterArmy's native `@e2e-dev/github` reporter posts results, model usage, and artifact links as PR comments. Reruns update those comments.
 
-Manual runs write job summaries because they have no PR event context. Repository rules still require the legacy Python check names. The workflow retains these names as explicit gates on native validation, not as Python tool runs.
+Manual runs write job summaries because they have no PR event context.
 
 ## Vercel cutover (operator approval required)
 
