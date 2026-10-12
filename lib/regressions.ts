@@ -9,6 +9,7 @@ import { DAY, inWindow, timeWindow } from "./window";
 import { readSnapshot } from "./cache";
 import { mapConcurrent } from "./http";
 import type { Issue, Review, Window } from "./types";
+import type { Judgement } from "./attribution";
 export type Candidate = {
   url: string;
   merged_at: string;
@@ -25,6 +26,8 @@ export type Attribution = {
   candidates: Candidate[];
   attribution: Candidate | null;
   manual_override?: boolean;
+  // Present when the automated judgement chose (or withheld) the attribution.
+  judgement?: Judgement;
 };
 export type RegressionMetric = {
   slug: string;
@@ -281,7 +284,7 @@ export async function regressionIssues(window: Window) {
       fixing_urls: fixingURLs(i),
     }));
 }
-async function overrideMetadata(url: string): Promise<Candidate | null> {
+export async function prMetadata(url: string): Promise<Candidate | null> {
   const parsed = parsePR(url);
   if (!parsed) return null;
   const { owner, repo, number } = parsed;
@@ -379,7 +382,7 @@ export async function summarizeRegressions(
     if (override?.inducing_pr) {
       const candidate =
         record.candidates.find((c) => c.url === override.inducing_pr) ||
-        (await overrideMetadata(override.inducing_pr).catch(() => null));
+        (await prMetadata(override.inducing_pr).catch(() => null));
       if (candidate) {
         record.attribution = candidate;
         record.manual_override = true;
