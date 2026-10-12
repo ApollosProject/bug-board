@@ -31,6 +31,14 @@ export async function writeSnapshot<T>(name: string, data: T, ttl: number) {
   if (!client) throw new Error("Configure Upstash Redis REST credentials");
   await client.set(key(name), { at: Date.now(), data }, { ex: ttl });
 }
+export async function snapshotOnce<T>(name: string, data: T, ttl: number): Promise<T> {
+  const client = redis();
+  if (!client) throw new Error("Configure Upstash Redis REST credentials");
+  await client.set(key(name), { at: Date.now(), data }, { nx: true, ex: ttl });
+  const saved = await client.get<{ data: T }>(key(name));
+  if (!saved) throw new Error("Saved snapshot unavailable");
+  return saved.data;
+}
 export async function claim(name: string, ttl: number) {
   const client = redis();
   if (!client) throw new Error("Configure Upstash Redis REST credentials");

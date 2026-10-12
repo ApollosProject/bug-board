@@ -1,6 +1,44 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { redis, writeSnapshot } from "../lib/cache";
+import { redis, snapshotOnce, writeSnapshot } from "../lib/cache";
+
+test("snapshotOnce retains the first writer and fails closed when storage is unavailable", async (t) => {
+  const names = ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"];
+  const previous = names.map((name) => process.env[name]);
+  process.env.UPSTASH_REDIS_REST_URL = "https://redis.example.test";
+  process.env.UPSTASH_REDIS_REST_TOKEN = "fixture-redis";
+  let saved: string | null = null;
+  t.mock.method(globalThis, "fetch", async (_url: unknown, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body));
+    const command = ([op, , value, ...args]: string[]) => {
+      if (op === "set") {
+        assert.ok(args.includes("nx"));
+        if (saved !== null) return null;
+        saved = value;
+        return "OK";
+      }
+      assert.equal(op, "get");
+      return saved;
+    };
+    return Response.json(Array.isArray(body[0])
+      ? body.map((c: string[]) => ({ result: command(c) }))
+      : { result: command(body) });
+  });
+  try {
+    assert.equal(await snapshotOnce("digest", "first", 60), "first");
+    assert.equal(await snapshotOnce("digest", "second", 60), "first");
+    t.mock.method(globalThis, "fetch", async (_url: unknown, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      return Response.json(Array.isArray(body[0]) ? body.map(() => ({ result: null })) : { result: null });
+    });
+    await assert.rejects(snapshotOnce("missing", "value", 60), /Saved snapshot unavailable/);
+  } finally {
+    names.forEach((name, i) => {
+      if (previous[i] === undefined) delete process.env[name];
+      else process.env[name] = previous[i];
+    });
+  }
+});
 
 test("cache accepts Marketplace credentials without mixing partial standalone pairs", async () => {
   const names = [
