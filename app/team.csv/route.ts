@@ -1,3 +1,4 @@
+import { track } from "@vercel/analytics/server";
 import { csv } from "@/lib/metrics";
 import { reportFor, sortedTeam } from "@/lib/reports";
 import { timeWindow } from "@/lib/window";
@@ -7,6 +8,7 @@ export async function GET(request: Request) {
   try {
     const window = timeWindow(query),
       report = await reportFor(window);
+    await track("Team CSV export", { window: window.label }, { request });
     return new Response(csv(sortedTeam(report.rows, query)), {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
