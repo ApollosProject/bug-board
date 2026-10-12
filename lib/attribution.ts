@@ -177,9 +177,10 @@ async function prFiles(url: string) {
       `${prPath(url)}/files?per_page=100&page=${page}`,
     );
     files.push(...batch);
-    if (batch.length < 100) break;
+    if (batch.length < 100) return files;
   }
-  return files;
+  // Partial evidence must not be judged; the issue keeps its SZZ result.
+  throw new Error("PR changes more files than GitHub lists");
 }
 async function pr(
   url: string,
