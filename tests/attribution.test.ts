@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { blameFile } from "../lib/regressions";
 import { applyJudgement, introducingHunks, judge, keywords, removedLines, type Judgement } from "../lib/attribution";
 
 const kind = (regression: number, not_regression: number, unknown: number) => ({ regression, not_regression, unknown });
@@ -44,4 +45,11 @@ test("search keywords from the model cannot add qualifiers or operators", () => 
   assert.equal(keywords('tiptap OR repo:private/repo is:pr "bump"'), "tiptap repoprivaterepo ispr bump");
   assert.equal(keywords("expo  sdk-54 upgrade"), "expo sdk-54 upgrade");
   assert.equal(keywords("-crash -upgrade"), "crash upgrade");
+});
+
+test("a fixing file whose diff GitHub omitted makes blame incomplete", async () => {
+  const context = { owner: "o", repo: "r", url: "https://github.com/o/r/pull/1", oid: "abc", mergedAt: "2026-09-01T00:00:00Z", complete: true };
+  assert.deepEqual(await blameFile(context, { filename: "big.ts", status: "modified", deletions: 40 }), { candidates: [], complete: false });
+  // A file with only additions has nothing to blame and stays complete.
+  assert.deepEqual(await blameFile(context, { filename: "new.ts", status: "added", deletions: 0 }), { candidates: [], complete: true });
 });

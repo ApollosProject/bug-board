@@ -98,6 +98,7 @@ export type FixFile = {
   previous_filename?: string;
   status: string;
   patch?: string;
+  deletions?: number;
 };
 export type FixContext = {
   owner: string;
@@ -142,6 +143,9 @@ export async function blameFile(
   context: Omit<FixContext, "files">,
   file: FixFile,
 ): Promise<{ candidates: Candidate[]; complete: boolean }> {
+  // GitHub omits very large diffs; their deleted lines are unknown, not absent.
+  if (file.patch === undefined && (file.deletions ?? 0) > 0)
+    return { candidates: [], complete: false };
   const allLines = deletedLines(file.patch),
     lines = allLines.slice(0, 500);
   if (!lines.length) return { candidates: [], complete: true };
