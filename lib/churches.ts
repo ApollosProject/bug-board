@@ -52,9 +52,12 @@ export function churchActivity(
 ) {
   const slugs = [church.slug, ...church.altSlugs].map((s) => s.toLowerCase());
   // Shared mobile apps have no single build church; match the church's bundles.
-  const bundles = [church.appleBundleId, church.androidPkgId]
-    .filter((b): b is string => !!b)
-    .map((b) => b.toLowerCase());
+  // Apple and Android IDs are separate namespaces, so match within the platform.
+  const bundleFor = (platform: string) =>
+    (platform === "ios"
+      ? church.appleBundleId
+      : church.androidPkgId
+    )?.toLowerCase();
   // Match the church name or slug as whole words, so short names don't match inside other words.
   const names = [church.name, ...slugs]
     .filter((v) => v && v.length > 2)
@@ -65,7 +68,7 @@ export function churchActivity(
     apps: data.apps.filter(
       (r) =>
         slugs.includes((r.build_church || r.church).toLowerCase()) ||
-        bundles.includes(r.bundle_id.toLowerCase()),
+        bundleFor(r.apollos_platform) === r.bundle_id.toLowerCase(),
     ),
     dags: data.dags.filter((d) =>
       slugs.some((s) => d.dag_id.toLowerCase().startsWith(`${s}_`)),

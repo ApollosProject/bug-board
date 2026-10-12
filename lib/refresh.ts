@@ -55,7 +55,10 @@ export async function refreshSnapshot(
     churchDirectory(),
   ]);
   const listed = directory.status === "fulfilled" ? directory.value : [];
-  if (listed.length) await writeSnapshot("churches", listed, 3600);
+  if (listed.length)
+    await writeSnapshot("churches", listed, 3600).catch(() =>
+      console.warn("Church directory snapshot write unavailable"),
+    );
   if (apps.status === "rejected") throw apps.reason;
   await writeSnapshot("apps", apps.value, 300);
   return { apps: apps.value.rows.length, churches: listed.length };
