@@ -1,6 +1,5 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { unstable_cache } from "next/cache";
 import {
   Heading,
   Loading,
@@ -9,7 +8,7 @@ import {
 } from "@/components/dashboard";
 import { session } from "@/lib/auth";
 import { people, personName, priorityLabels } from "@/lib/config";
-import { reviewQueue } from "@/lib/reviews";
+import { cachedReviewQueue } from "@/lib/reviews";
 import { param, queryString } from "@/lib/window";
 import type { Search } from "@/lib/types";
 export const metadata = { title: "Reviews" };
@@ -27,11 +26,7 @@ async function Queue({ search }: { search: Search }) {
   const approved = param(search, "approved") === "1",
     author = loginFor(param(search, "author")).toLowerCase(),
     reviewer = loginFor(param(search, "reviewer")).toLowerCase();
-  const queue = await unstable_cache(
-    () => reviewQueue(approved),
-    ["reviews-v1", String(approved)],
-    { revalidate: 60 },
-  )().catch(() => null);
+  const queue = await cachedReviewQueue(approved).catch(() => null);
   if (!queue)
     return (
       <Unavailable

@@ -11,6 +11,7 @@ import { reportFor, sortedTeam } from "@/lib/reports";
 import { teamColumns, type TeamKey } from "@/lib/metrics";
 import { param, queryString, timeWindow } from "@/lib/window";
 import type { Search, Window } from "@/lib/types";
+import { Pipeline } from "@/components/pipeline";
 export const metadata = { title: "Team" };
 async function TeamTable({
   window,
@@ -108,6 +109,7 @@ export default async function Team({
       <Suspense fallback={<Loading window={window} />}>
         <TeamTable window={window} search={search} />
       </Suspense>
+      <Pipeline window={window} everyone={everyone} />
     </>
   );
 }

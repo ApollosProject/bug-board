@@ -22,6 +22,7 @@ test("preset and custom date windows survive navigation", async ({
   browser,
 }) => {
   await app.open("/team");
+  await expect(screen.getByRole("heading", "Shipping pipeline", { exact: true })).toBeVisible();
   await screen.getByRole("link", "7d", { exact: true }).tap();
   await expect(browser).toHaveURL(/days=7/);
   await screen.getByLabel("Start", { exact: true }).fill("2026-08-01");

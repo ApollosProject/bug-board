@@ -151,6 +151,7 @@ test("Linear keeps every assignment page and only report-relevant attachment met
                 nodes: [
                   {
                     id: "issue",
+                    updatedAt: "2026-09-01T00:00:00Z",
                     history: {
                       edges: [
                         { node: { toAssignee: null, updatedAt: "2026-09-01" } },
@@ -193,6 +194,96 @@ test("Linear keeps every assignment page and only report-relevant attachment met
     else process.env.LINEAR_API_KEY = token;
   }
 });
+
+test("Linear histories batch cold loads, reuse unchanged versions, and invalidate changes and expiry", async (t) => {
+  const names = ["LINEAR_API_KEY", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "KV_REST_API_URL", "KV_REST_API_TOKEN"];
+  const env = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  const original = globalThis.fetch, records = new Map<string, string>();
+  let clock = Date.parse("2026-10-07T12:00:00Z"), calls = 0, active = 0, peak = 0;
+  const issues = Array.from({ length: 101 }, (_, i) => ({ id: `i-${i}`, updatedAt: "v1" }));
+  t.mock.method(Date, "now", () => clock);
+  try {
+    for (const name of names) delete process.env[name];
+    process.env.LINEAR_API_KEY = "fixture-key";
+    process.env.KV_REST_API_URL = "https://cache.example.test";
+    process.env.KV_REST_API_TOKEN = "fixture-cache";
+    globalThis.fetch = async (url, init) => {
+      const body = JSON.parse(String(init?.body));
+      if (String(url).startsWith("https://cache.example.test")) {
+        const single = typeof body[0] === "string";
+        const results = (single ? [body] : body).map(([command, key, value]: string[]) => {
+          if (command === "get") return { result: records.get(key) ?? null };
+          assert.equal(command, "set"); records.set(key, value); return { result: "OK" };
+        });
+        return Response.json(single ? results[0] : results);
+      }
+      if (body.query.includes("query Histories(")) {
+        calls++;
+        assert.ok(body.variables.ids.length <= 25);
+        assert.match(body.query, /createdAt/);
+        assert.match(body.query, /fromState \{ id name type \} toState \{ id name type \}/);
+        peak = Math.max(peak, ++active);
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        active--;
+        return Response.json({ data: { issues: {
+          nodes: issues.filter((issue) => body.variables.ids.includes(issue.id)).map((issue) => ({
+            ...issue, history: { edges: [], pageInfo: pageInfo() },
+          })), pageInfo: pageInfo(),
+        } } });
+      }
+      assert.ok(!body.query.includes("history(first:"));
+      return Response.json({ data: { issues: { nodes: structuredClone(issues), pageInfo: pageInfo() } } });
+    };
+    assert.equal((await fetchIssues({}, true)).length, 101);
+    assert.equal(calls, 5);
+    assert.equal(peak, 4);
+    assert.equal((await fetchIssues({}, true)).length, 101);
+    assert.equal(calls, 5);
+    issues[0].updatedAt = "v2";
+    await fetchIssues({}, true);
+    assert.equal(calls, 6);
+    // Open and completed polling cannot overwrite each other's history caches.
+    await fetchIssues({}, true, "open");
+    assert.equal(calls, 11);
+    await fetchIssues({}, true);
+    assert.equal(calls, 11);
+    clock += 3600001;
+    await fetchIssues({}, true);
+    assert.equal(calls, 16);
+  } finally {
+    globalThis.fetch = original;
+    for (const [name, value] of Object.entries(env))
+      if (value === undefined) delete process.env[name]; else process.env[name] = value;
+  }
+});
+
+test("Linear history batches reject missing issues, changed versions, and broken pagination", async () => {
+  const original = globalThis.fetch, token = process.env.LINEAR_API_KEY;
+  process.env.LINEAR_API_KEY = "fixture-key";
+  try {
+    for (const failure of ["missing", "changed", "cursor", "repeated"]) {
+      globalThis.fetch = async (_url, init) => {
+        const body = JSON.parse(String(init?.body));
+        const issue = { id: "issue", updatedAt: "v1" };
+        if (body.query.includes("query Histories(")) return Response.json({ data: { issues: {
+          nodes: failure === "missing" ? [] : [{ ...issue,
+            updatedAt: failure === "changed" ? "v2" : "v1",
+            history: { edges: [], pageInfo: pageInfo(true, failure === "cursor" ? null : "same") },
+          }], pageInfo: pageInfo(),
+        } } });
+        if (body.query.includes("query History(")) return Response.json({ data: { issue: {
+          history: { edges: [], pageInfo: pageInfo(true, "same") },
+        } } });
+        return Response.json({ data: { issues: { nodes: [issue], pageInfo: pageInfo() } } });
+      };
+      await assert.rejects(fetchIssues({}, true), /Incomplete Linear histor|changed during refresh/);
+    }
+  } finally {
+    globalThis.fetch = original;
+    if (token === undefined) delete process.env.LINEAR_API_KEY; else process.env.LINEAR_API_KEY = token;
+  }
+});
+
 test("GitHub partitions over-cap date searches and rejects a single overflowing day", async () => {
   const fetch = globalThis.fetch,
     token = process.env.GITHUB_TOKEN;
@@ -435,6 +526,125 @@ test("review timelines reuse complete history across variants and invalidate on 
       if (value === undefined) delete process.env[name]; else process.env[name] = value;
   }
 });
+
+test("first-review pagination skips bot/self reviews and stops at the first human response", async () => {
+  const original = globalThis.fetch, token = process.env.GITHUB_TOKEN;
+  process.env.GITHUB_TOKEN = "fixture-key";
+  let calls = 0;
+  const review = (login: string, at: string, kind = "User") => ({
+    author: { login, __typename: kind }, state: "COMMENTED", submittedAt: at,
+  });
+  try {
+    globalThis.fetch = async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      if (body.query.includes("query FirstReview(")) {
+        calls++;
+        assert.equal(body.variables.cursor, "bots");
+        return Response.json({ data: { node: { firstReviews: {
+          nodes: [review("human", "2026-09-01T01:00:00Z")], pageInfo: pageInfo(true, "more-never-needed"),
+        } } } });
+      }
+      assert.match(body.query, /firstReviews: reviews\(first: 5/);
+      assert.match(body.query, /READY_FOR_REVIEW_EVENT, CONVERT_TO_DRAFT_EVENT/);
+      return Response.json({ data: { search: {
+        issueCount: 1, pageInfo: pageInfo(), nodes: [{
+          id: "pr", author: { login: "solideo-gloria" }, createdAt: "2026-09-01T00:00:00Z",
+          mergedAt: "2026-09-01T12:00:00Z", readiness: { nodes: [] }, reviews: { nodes: [], pageInfo: pageInfo() },
+          firstReviews: { nodes: [review("bot", "2026-09-01T00:01:00Z", "Bot"),
+            review("solideo-gloria", "2026-09-01T00:02:00Z")], pageInfo: pageInfo(true, "bots") },
+        }],
+      } } });
+    };
+    const [pr] = await mergedPRs("2026-09-01T00:00:00Z", "2026-09-02T00:00:00Z");
+    assert.equal(calls, 1);
+    assert.equal(pr.firstHumanReviewAt, "2026-09-01T01:00:00Z");
+    assert.equal(pr.firstReviews, undefined);
+  } finally {
+    globalThis.fetch = original;
+    if (token === undefined) delete process.env.GITHUB_TOKEN; else process.env.GITHUB_TOKEN = token;
+  }
+});
+
+test("approved-only pipeline searches are bounded to eight repos and never fetch request timelines", async () => {
+  const original = globalThis.fetch, token = process.env.GITHUB_TOKEN;
+  process.env.GITHUB_TOKEN = "fixture-key";
+  let calls = 0, active = 0, peak = 0;
+  try {
+    globalThis.fetch = async (_url, init) => {
+      const body = JSON.parse(String(init?.body));
+      assert.match(body.query, /query Search/);
+      assert.match(body.variables.query, /is:open draft:false review:approved$/);
+      peak = Math.max(peak, ++active);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      active--; calls++;
+      return Response.json({ data: { search: { issueCount: 1, pageInfo: pageInfo(), nodes: [{
+        id: body.variables.query, reviewDecision: "APPROVED", reviews: { nodes: [], pageInfo: pageInfo() },
+        reviewRequests: { nodes: [], pageInfo: { hasNextPage: false } },
+      }] } } });
+    };
+    assert.equal((await openPRs("only")).length, 8);
+    assert.equal(calls, 8);
+    assert.equal(peak, 4);
+  } finally {
+    globalThis.fetch = original;
+    if (token === undefined) delete process.env.GITHUB_TOKEN; else process.env.GITHUB_TOKEN = token;
+  }
+});
+
+test("reports use Redis beyond Next's size limit and retain compact stage totals and assignments", async (t) => {
+  const names = ["LINEAR_API_KEY", "GITHUB_TOKEN", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "KV_REST_API_URL", "KV_REST_API_TOKEN", "VERCEL_ENV"];
+  const env = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  const original = globalThis.fetch, records = new Map<string, string>();
+  let calls = 0, clock = Date.parse("2026-10-07T12:00:00Z");
+  t.mock.method(Date, "now", () => clock);
+  const todo = { id: "todo", name: "Todo", type: "unstarted" }, done = { id: "done", name: "Done", type: "completed" };
+  const assignment = { node: { toAssignee: { displayName: "zach" }, updatedAt: "2026-09-02T00:00:00Z" } };
+  const issue = { id: "i", identifier: "APO-1", title: "x".repeat(2100000), createdAt: "2026-09-01T00:00:00Z",
+    updatedAt: "2026-09-03T00:00:00Z", completedAt: "2026-09-03T00:00:00Z", state: done,
+    assignee: { displayName: "zach" }, project: null, priority: 2, labels: { nodes: [] } };
+  try {
+    for (const name of names) delete process.env[name];
+    process.env.LINEAR_API_KEY = process.env.GITHUB_TOKEN = "fixture-key";
+    process.env.KV_REST_API_URL = "https://cache.example.test";
+    process.env.KV_REST_API_TOKEN = "fixture-cache";
+    globalThis.fetch = async (url, init) => {
+      const body = JSON.parse(String(init?.body));
+      if (String(url).startsWith("https://cache.example.test")) {
+        const single = typeof body[0] === "string";
+        const results = (single ? [body] : body).map(([command, key, value]: string[]) => {
+          if (command === "get") return { result: records.get(key) ?? null };
+          assert.equal(command, "set"); records.set(key, value); return { result: "OK" };
+        });
+        return Response.json(single ? results[0] : results);
+      }
+      calls++;
+      if (String(url).includes("api.github.com")) return Response.json({ data: { search: { nodes: [], issueCount: 0, pageInfo: pageInfo() } } });
+      if (body.query.includes("query Projects")) return Response.json({ data: { teams: { nodes: [{ projects: { nodes: [], pageInfo: pageInfo() } }] } } });
+      if (body.query.includes("query Histories")) return Response.json({ data: { issues: { nodes: [{ ...issue, history: {
+        edges: [assignment, { node: { fromState: todo, toState: done, toAssignee: null, createdAt: issue.completedAt, updatedAt: issue.completedAt } }],
+        pageInfo: pageInfo(),
+      } }], pageInfo: pageInfo() } } });
+      return Response.json({ data: { issues: { nodes: [issue], pageInfo: pageInfo() } } });
+    };
+    const { reportFor } = await import("../lib/reports");
+    const { timeWindow } = await import("../lib/window");
+    const window = timeWindow({ start: "2026-09-01", end: "2026-09-03" });
+    const first = await reportFor(window), before = calls;
+    assert.equal(first.completed[0].stageDurations?.[0].seconds, 2 * 86400);
+    assert.deepEqual(first.completed[0].history?.edges, [assignment]);
+    assert.deepEqual(await reportFor(window), first);
+    assert.equal(calls, before);
+    assert.ok([...records].some(([key, value]) => key.includes("report-v3:") && value.length > 2097152));
+    clock += 61000;
+    await reportFor(window);
+    assert.ok(calls > before);
+  } finally {
+    globalThis.fetch = original;
+    for (const [name, value] of Object.entries(env))
+      if (value === undefined) delete process.env[name]; else process.env[name] = value;
+  }
+});
+
 test("blame loads metadata only for removed-line commits and exposes failures for durable retry", async () => {
   const fetch = globalThis.fetch,
     token = process.env.GITHUB_TOKEN;

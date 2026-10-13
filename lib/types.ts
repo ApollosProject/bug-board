@@ -10,7 +10,8 @@ export type Connection<T> = {
   nodes: T[];
   pageInfo: { hasNextPage: boolean; endCursor: string | null };
 };
-export type Identity = { name?: string; displayName?: string; login?: string };
+export type Identity = { name?: string; displayName?: string; login?: string; __typename?: string };
+export type IssueState = { id?: string; name: string; type: string };
 export type Issue = {
   id: string;
   identifier: string;
@@ -30,13 +31,20 @@ export type Issue = {
   slaStartedAt?: string;
   assignee: Identity | null;
   project: { id: string; name: string } | null;
-  state: { name: string; type: string };
+  state: IssueState;
   labels: { nodes: { name: string }[] };
   attachments?: {
     nodes: { metadata: { url?: string; status?: string; linkKind?: string } }[];
   };
+  stageDurations?: { state: IssueState; seconds: number }[] | null;
   history?: {
-    edges: { node: { toAssignee: Identity | null; updatedAt: string } }[];
+    edges: { node: {
+      toAssignee: Identity | null;
+      updatedAt: string;
+      createdAt?: string;
+      fromState?: IssueState | null;
+      toState?: IssueState | null;
+    } }[];
   };
 };
 export type Project = {
@@ -73,6 +81,9 @@ export type PullRequest = {
   url: string;
   createdAt: string;
   mergedAt?: string;
+  readiness?: { nodes: { __typename: string; createdAt: string }[] };
+  firstReviews?: Connection<Review>;
+  firstHumanReviewAt?: string | null;
   updatedAt?: string;
   timelineCount?: { totalCount: number };
   author: Identity | null;

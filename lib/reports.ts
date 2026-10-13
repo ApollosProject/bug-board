@@ -2,7 +2,7 @@ import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { completed, contributors, openIssues, projects } from "./linear";
 import { merged } from "./github";
-import { readSnapshot } from "./cache";
+import { readSnapshot, redis, writeSnapshot } from "./cache";
 import {
   comparisons,
   done,
@@ -24,6 +24,7 @@ import { engineers, people, personName, slugFor, normalize } from "./config";
 import { DAY, inWindow, param, timeWindow } from "./window";
 import type { Issue, Project, PullRequest, Search, Window } from "./types";
 import { regressionDashboard } from "./regressions";
+import { issueStageTimes } from "./pipeline";
 export type Report = {
   completed: Issue[];
   prs: PullRequest[];
@@ -42,7 +43,17 @@ export async function computeReport(window: Window): Promise<Report> {
     .map((p) => p.id);
   const members = await contributors(scoring);
   return {
-    completed: issues,
+    completed: issues.map((issue) => {
+      const totals = issueStageTimes(issue)?.totals;
+      return {
+        ...issue,
+        stageDurations: totals ? [...totals.values()] : null,
+        // Reports need status totals and assignment events, not a second full timeline copy.
+        history: { edges: (issue.history?.edges || []).filter(({ node }) => node.toAssignee).map(({ node }) => ({
+          node: { toAssignee: node.toAssignee, updatedAt: node.updatedAt },
+        })) },
+      };
+    }),
     prs,
     projects: projectList,
     rows: teamRows(issues, prs, projectList, members, window),
@@ -60,13 +71,19 @@ export const report = cache(async (query: string): Promise<Report> => {
         "Team metrics are refreshing. Configure Cron and Upstash Redis.",
       );
   }
+  const compute = () => computeReport(timeWindow(search, Math.floor(Date.now() / 60_000) * 60_000));
+  // Full reports exceed Next's 2 MB cache limit on real team windows.
+  if (redis()) {
+    const name = `report-v3:${query}`, saved = await readSnapshot<Report>(name, 60);
+    if (saved) return saved;
+    const data = await compute();
+    await writeSnapshot(name, data, 60).catch(() => console.warn("Report cache write unavailable"));
+    return data;
+  }
   // Only integration data is cached. Session checks stay outside the data cache.
   return unstable_cache(
-    async () =>
-      computeReport(
-        timeWindow(search, Math.floor(Date.now() / 60_000) * 60_000),
-      ),
-    ["report-v1", query],
+    compute,
+    ["report-v3", query],
     { revalidate: 60 },
   )();
 });
@@ -81,7 +98,7 @@ export const openWork = cache(async () => {
       );
     return snapshot;
   }
-  return unstable_cache(openIssues, ["open-work-v1"], { revalidate: 60 })();
+  return unstable_cache(openIssues, ["open-work-v2"], { revalidate: 60 })();
 });
 export function sortedTeam(rows: TeamRow[], search: Search) {
   const everyone = param(search, "everyone") === "1";

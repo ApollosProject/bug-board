@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { config } from "./config";
-import { graphql } from "./http";
+import { graphql, mapConcurrent } from "./http";
+import { readSnapshot, redis, writeSnapshot } from "./cache";
 import type { Connection, Issue, Project, Window } from "./types";
 export const linear = <T>(query: string, variables: object = {}) =>
   graphql<T>(
@@ -11,61 +12,79 @@ export const linear = <T>(query: string, variables: object = {}) =>
   );
 const fields = `id identifier number title url priority createdAt updatedAt completedAt startedAt dueDate
  slaType slaStartedAt slaMediumRiskAt slaHighRiskAt slaBreachesAt
- assignee { name displayName } project { id name } state { name type }
+ assignee { name displayName } project { id name } state { id name type }
  labels(first: 100) { nodes { name } } attachments(first: 100) { nodes { metadata } }`;
 const openTypes = ["triage", "backlog", "unstarted", "started"];
+const historyFields = `edges { node { toAssignee { displayName } updatedAt createdAt
+ fromState { id name type } toState { id name type } } } pageInfo { hasNextPage endCursor }`;
+type History = NonNullable<Issue["history"]> & { pageInfo: Connection<never>["pageInfo"] };
+// Batch cold histories; unchanged issues reuse a complete, versioned history for an hour.
+async function issueHistories(issues: Issue[], scope: string) {
+  type Cached = { updatedAt: string; at: number; history: Issue["history"] };
+  const name = `linear-histories:${scope}`, now = Date.now();
+  const saved = Object.fromEntries(Object.entries(
+    (await readSnapshot<Record<string, Cached>>(name, 3600)) || {},
+  ).filter(([, value]) => now - value.at < 3600000));
+  const missing = issues.filter((issue) => {
+    if (!issue.id || !issue.updatedAt) throw new Error("Missing Linear history version");
+    const cached = saved[issue.id];
+    if (issue.updatedAt && cached?.updatedAt === issue.updatedAt) {
+      issue.history = cached.history;
+      return false;
+    }
+    return true;
+  });
+  const batches: Issue[][] = [];
+  for (let i = 0; i < missing.length; i += 25) batches.push(missing.slice(i, i + 25));
+  await mapConcurrent(batches, 4, async (batch) => {
+    const { issues: page } = await linear<{ issues: Connection<Issue & { history: History }> }>(
+      `query Histories($ids: [ID!]!) { issues(first: 25, filter: { id: { in: $ids } }) {
+        nodes { id updatedAt history(first: 100) { ${historyFields} } } pageInfo { hasNextPage endCursor }
+      } }`, { ids: batch.map((issue) => issue.id) },
+    );
+    const byId = new Map(page.nodes.map((issue) => [issue.id, issue]));
+    if (page.pageInfo.hasNextPage || byId.size !== batch.length)
+      throw new Error("Incomplete Linear histories");
+    for (const issue of batch) {
+      const source = byId.get(issue.id);
+      if (!source?.history || source.updatedAt !== issue.updatedAt)
+        throw new Error("Linear history changed during refresh");
+      const edges = [...source.history.edges];
+      let info = source.history.pageInfo;
+      while (info.hasNextPage) {
+        if (!info.endCursor) throw new Error("Incomplete Linear history");
+        const { issue: next } = await linear<{ issue: { history: History } }>(
+          `query History($id: String!, $cursor: String) { issue(id: $id) {
+            history(first: 100, after: $cursor) { ${historyFields} }
+          } }`, { id: issue.id, cursor: info.endCursor },
+        );
+        if (!next.history.pageInfo.endCursor || next.history.pageInfo.endCursor === info.endCursor)
+          throw new Error("Incomplete Linear history");
+        edges.push(...next.history.edges);
+        info = next.history.pageInfo;
+      }
+      issue.history = { edges: edges.filter(({ node }) => node.toAssignee || node.toState || node.fromState) };
+      saved[issue.id] = { updatedAt: issue.updatedAt, at: now, history: issue.history };
+    }
+  });
+  if (missing.length && redis()) await writeSnapshot(name, saved, 3600).catch(() =>
+    console.warn("Linear history cache write unavailable"),
+  );
+}
 export async function fetchIssues(
   filter: object,
   history = false,
+  historyScope = "completed",
 ): Promise<Issue[]> {
   const query = `query Issues($filter: IssueFilter, $cursor: String) { issues(first: 250, after: $cursor, filter: $filter) {
-    nodes { ${fields} ${history ? "history(first: 100) { edges { node { toAssignee { displayName } updatedAt } } pageInfo { hasNextPage endCursor } }" : ""} }
+    nodes { ${fields} }
     pageInfo { hasNextPage endCursor }
   } }`;
   const issues: Issue[] = [];
   let cursor: string | null = null;
   do {
-    const {
-      issues: page,
-    }: {
-      issues: Connection<
-        Issue & {
-          history?: Issue["history"] & {
-            pageInfo: Connection<never>["pageInfo"];
-          };
-        }
-      >;
-    } = await linear<{
-      issues: Connection<
-        Issue & {
-          history?: Issue["history"] & {
-            pageInfo: Connection<never>["pageInfo"];
-          };
-        }
-      >;
-    }>(query, { filter, cursor });
+    const { issues: page }: { issues: Connection<Issue> } = await linear<{ issues: Connection<Issue> }>(query, { filter, cursor });
     for (const issue of page.nodes) {
-      let historyPage = issue.history?.pageInfo;
-      while (historyPage?.hasNextPage) {
-        const { issue: next } = await linear<{
-          issue: { history: NonNullable<typeof issue.history> };
-        }>(
-          `query History($id: String!, $cursor: String) { issue(id: $id) { history(first: 100, after: $cursor) { edges { node { toAssignee { displayName } updatedAt } } pageInfo { hasNextPage endCursor } } } }`,
-          { id: issue.id, cursor: historyPage.endCursor },
-        );
-        if (
-          !next.history.pageInfo.endCursor ||
-          next.history.pageInfo.endCursor === historyPage.endCursor
-        )
-          throw new Error("Incomplete Linear history");
-        issue.history?.edges.push(...next.history.edges);
-        historyPage = next.history.pageInfo;
-      }
-      // Only assignment events and fixing-PR metadata are used by reports.
-      if (issue.history)
-        issue.history.edges = issue.history.edges.filter(
-          (edge) => edge.node.toAssignee,
-        );
       if (issue.attachments)
         issue.attachments.nodes = issue.attachments.nodes.map(({ metadata }) => ({
           metadata: {
@@ -81,11 +100,12 @@ export async function fetchIssues(
       throw new Error("Incomplete Linear issue pagination");
     cursor = page.pageInfo.endCursor;
   } while (cursor);
+  if (history) await issueHistories(issues, historyScope);
   return issues;
 }
 const team = { team: { key: { eq: config.linear_team_key } } };
 export const openIssues = cache(() =>
-  fetchIssues({ ...team, state: { type: { in: openTypes } } }),
+  fetchIssues({ ...team, state: { type: { in: openTypes } } }, true, "open"),
 );
 export const completedIssues = cache((after: string, before: string) =>
   fetchIssues(

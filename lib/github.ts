@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { config } from "./config";
+import { config, people } from "./config";
 import { readSnapshot, redis, writeSnapshot } from "./cache";
 import { graphql, mapConcurrent, requestJson } from "./http";
 import { DAY, date } from "./window";
@@ -37,7 +37,7 @@ export const githubRest = <T>(path: string, token = process.env.GITHUB_TOKEN) =>
   );
 class SearchLimit extends Error {}
 const reviewFields =
-  "nodes { author { login } state submittedAt } pageInfo { hasNextPage endCursor }";
+  "nodes { author { login __typename } state submittedAt } pageInfo { hasNextPage endCursor }";
 async function search(query: string, fields: string, size = 100) {
   if (!process.env.GITHUB_TOKEN) throw new Error("GitHub not configured");
   const result: PullRequest[] = [];
@@ -78,15 +78,55 @@ async function completeReviews(pr: PullRequest, opinionated: boolean) {
   }
   pr.reviews.pageInfo = page.pageInfo;
 }
-// Keep nested search pages small; completeReviews fetches any remaining approvals.
-const mergedFields = `id url mergedAt author { login } reviews(first: 10, states: [APPROVED]) { ${reviewFields} }
+// Keep nested search pages small; paginate approvals, but stop first-review reads at the first human.
+const mergedFields = `id url createdAt mergedAt author { login }
+ readiness: timelineItems(first: 1, itemTypes: [READY_FOR_REVIEW_EVENT, CONVERT_TO_DRAFT_EVENT]) {
+   nodes { __typename ... on ReadyForReviewEvent { createdAt } ... on ConvertToDraftEvent { createdAt } }
+ }
+ reviews(first: 10, states: [APPROVED]) { ${reviewFields} }
+ firstReviews: reviews(first: 5, states: [APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED]) { ${reviewFields} }
  commits(first: 1) { nodes { commit { author { user { login } } authors(first: 10) { nodes { user { login } } } } } }`;
+export function reviewReadyAt(pr: PullRequest) {
+  const event = pr.readiness?.nodes[0];
+  return event?.__typename === "ReadyForReviewEvent" ? event.createdAt : pr.createdAt;
+}
+export function humanReview(review: Review, pr: PullRequest) {
+  return !!review.author?.login && review.author.__typename !== "Bot" &&
+    !review.author.login.endsWith("[bot]") &&
+    review.author.login.toLowerCase() !== pr.author?.login?.toLowerCase() &&
+    ["APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED"].includes(review.state);
+}
+async function completeFirstReview(pr: PullRequest) {
+  if (pr.firstHumanReviewAt !== undefined) return;
+  const authors = creditedAuthors(pr), ready = Date.parse(reviewReadyAt(pr));
+  let page = pr.firstReviews;
+  pr.firstHumanReviewAt = null;
+  if (Object.values(people).some((p) => authors.includes(p.github_username.toLowerCase()))) {
+    while (page) {
+      const first = page.nodes.find((review) => humanReview(review, pr) &&
+        Date.parse(review.submittedAt || "") >= ready);
+      if (first) { pr.firstHumanReviewAt = first.submittedAt || null; break; }
+      if (!page.pageInfo?.hasNextPage) break;
+      const cursor: string | null = page.pageInfo.endCursor;
+      if (!cursor) throw new Error("Incomplete first-review history");
+      const data = await github<{ node: { firstReviews: Connection<Review> } }>(
+        `query FirstReview($id: ID!, $cursor: String!) { node(id: $id) { ... on PullRequest {
+          firstReviews: reviews(first: 100, after: $cursor, states: [APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED]) { ${reviewFields} }
+        } } }`, { id: pr.id, cursor },
+      );
+      page = data.node.firstReviews;
+      if (page.pageInfo.hasNextPage && (!page.pageInfo.endCursor || page.pageInfo.endCursor === cursor))
+        throw new Error("Incomplete first-review history");
+    }
+  }
+  delete pr.firstReviews;
+}
 export const mergedPRs = cache(async (after: string, before: string) => {
   if (!process.env.GITHUB_TOKEN) throw new Error("GitHub not configured");
   const snapshots: [string, PullRequest[]][] = [];
   async function range(start: number, end: number): Promise<PullRequest[]> {
     const historical = end < Date.parse(date(Date.now())),
-      name = `merged-prs:${config.github_orgs.join(",")}:${date(start)}:${date(end)}`;
+      name = `merged-prs-v3:${config.github_orgs.join(",")}:${date(start)}:${date(end)}`;
     const snapshot = historical
       ? await readSnapshot<PullRequest[]>(name, 3600)
       : null;
@@ -117,7 +157,10 @@ export const mergedPRs = cache(async (after: string, before: string) => {
   const prs = (
     await mapConcurrent(weeks, 4, (day) => range(day, Math.min(day + 6 * DAY, end)))
   ).flat();
-  await mapConcurrent(prs, 4, (pr) => completeReviews(pr, false));
+  await mapConcurrent(prs, 4, async (pr) => {
+    await completeReviews(pr, false);
+    await completeFirstReview(pr);
+  });
   await Promise.all(snapshots.map(([name, data]) =>
     writeSnapshot(name, data, 3600).catch(() =>
       console.warn("Historical PR cache write unavailable"),
@@ -153,14 +196,14 @@ export function prCounts(prs: PullRequest[], username: string) {
     prs_merged: prs.filter((pr) => creditedAuthors(pr).includes(login)).length,
     prs_reviewed: prs.filter((pr) =>
       pr.reviews.nodes.some(
-        (review) => review.author?.login?.toLowerCase() === login,
+        (review) => review.state === "APPROVED" && review.author?.login?.toLowerCase() === login,
       ),
     ).length,
   };
 }
 const timelineFields =
   "nodes { __typename ... on ReadyForReviewEvent { createdAt } ... on ReviewRequestedEvent { createdAt requestedReviewer { ... on User { login } } } } pageInfo { hasPreviousPage startCursor }";
-export const openPRs = cache(async (approved: boolean) => {
+export const openPRs = cache(async (approved: boolean | "only") => {
   const fields = `id number title url createdAt updatedAt baseRefName headRefName additions deletions mergeable reviewDecision author { login }
  timelineCount: timelineItems(first: 1) { totalCount }
  repository { nameWithOwner defaultBranchRef { name } } statusCheckRollup { state }
@@ -169,13 +212,18 @@ export const openPRs = cache(async (approved: boolean) => {
   const prs = (
     await mapConcurrent(repositories, 4, (repo) =>
       search(
-        `repo:${repo} is:pr is:open draft:false${approved ? "" : " -review:approved"}`,
+        `repo:${repo} is:pr is:open draft:false${approved === "only" ? " review:approved" : approved ? "" : " -review:approved"}`,
         fields,
         // Three nested connections round up to two GitHub points at 50 PRs.
         49,
       ),
     )
   ).flat();
+  // Approved aging needs current approvals, not review-request timelines.
+  if (approved === "only") {
+    await mapConcurrent(prs, 4, (pr) => completeReviews(pr, true));
+    return prs;
+  }
   type Timeline = NonNullable<PullRequest["timelineItems"]> & {
     pageInfo: { hasPreviousPage: boolean; startCursor: string };
   };

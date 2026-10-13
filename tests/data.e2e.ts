@@ -6,7 +6,11 @@ test("populated team metrics, person work, and CSV export", async ({
   browser,
 }) => {
   await app.open("/team");
-  await expect(screen.getByRole("table")).toBeVisible();
+  await expect(screen.getByRole("region", "Team metrics").getByRole("table")).toBeVisible();
+  await expect(screen.getByRole("region", "Linear stage timing").getByRole("table")).toBeVisible();
+  await expect(screen.getByRole("heading", "First-review wait", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("heading", /Approved but unmerged/)).toBeVisible();
+  await app.screenshot("populated-pipeline");
   await screen.getByRole("link", "Zach", { exact: true }).tap();
   await expect(
     screen.getByRole("heading", "Zach", { exact: true }),
