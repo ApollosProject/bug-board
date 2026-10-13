@@ -35,6 +35,38 @@ test("populated team metrics, person work, and CSV export", async ({
   }
   await expect(browser).toHaveURL(/everyone=1/);
 });
+test("populated mobile cards and issue lists stay readable", async ({ app, browser, screen }) => {
+  for (const width of [320, 390]) {
+    await browser.setViewport({ width, height: 844 });
+    await app.open("/team/zach");
+    await expect(screen.getByRole("heading", /Delivery/)).toBeVisible();
+    await expect(browser.locator(".metric-value").first()).toBeVisible();
+    for (const summary of await browser.locator("main details > summary").all()) {
+      await summary.tap();
+    }
+    expect(await browser.evaluate(async () => {
+      await Promise.all(document.getAnimations().map((animation) => animation.finished));
+      return [...document.querySelectorAll<HTMLElement>(".cards *, details summary")]
+        .filter((el) => el.clientWidth && el.scrollWidth > el.clientWidth + 1)
+        .map((el) => el.textContent);
+    })).toEqual([]);
+    expect(await browser.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>(".cards article")]
+        .every((card) => card.getBoundingClientRect().width >= 190)
+        && document.documentElement.scrollWidth <= innerWidth,
+    )).toBe(true);
+    await app.screenshot(`populated-mobile-person-${width}`);
+    await app.open("/team");
+    await expect(screen.getByRole("region", "Linear stage timing").getByRole("table")).toBeVisible();
+    for (const summary of await browser.locator("main details > summary").all()) {
+      await summary.tap();
+    }
+    expect(await browser.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>(".issue-list li:not(:has(> .badge)) > div")]
+        .every((el) => getComputedStyle(el.parentElement!).gridTemplateColumns.split(" ").length === 1),
+    )).toBe(true);
+  }
+});
 test("populated fleet and app releases filter on the real server", async ({
   app,
   screen,

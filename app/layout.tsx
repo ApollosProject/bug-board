@@ -54,7 +54,7 @@ export default async function Layout({
             {user && (
               <form action="/logout" method="post">
                 <button className="account" type="submit">
-                  @{String(user.login)} · log out
+                  @{String(user.login)} · log&nbsp;out
                 </button>
               </form>
             )}
