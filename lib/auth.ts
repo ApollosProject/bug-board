@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 export const COOKIE = "bug-board-session";
 export const FLOW_COOKIE = "bug-board-oauth";
 export const org = () => process.env.GITHUB_OAUTH_ORG || "ApollosProject";
-const hosted = () => ["production", "preview"].includes(process.env.VERCEL_ENV || "") || !!process.env.HEROKU_APP_NAME;
+const hosted = () => ["production", "preview"].includes(process.env.VERCEL_ENV || "") || !!(process.env.DYNO || process.env.HEROKU_APP_NAME);
 export function oauthEnabled() {
   return (
     hosted() ||

@@ -152,11 +152,15 @@ test("OAuth fails closed, protects unknown APIs and resources, and separates coo
   }
 });
 test("Heroku review apps fail closed even when OAuth was not configured", async () => {
-  const names = ["VERCEL_ENV", "HEROKU_APP_NAME", "GITHUB_OAUTH_ENABLED", "GITHUB_OAUTH_CLIENT_ID", "GITHUB_OAUTH_CLIENT_SECRET", "GITHUB_OAUTH_CALLBACK_URL", "APP_URL", "AUTH_SECRET"];
+  const names = ["VERCEL_ENV", "HEROKU_APP_NAME", "DYNO", "GITHUB_OAUTH_ENABLED", "GITHUB_OAUTH_CLIENT_ID", "GITHUB_OAUTH_CLIENT_SECRET", "GITHUB_OAUTH_CALLBACK_URL", "APP_URL", "AUTH_SECRET"];
   const old = Object.fromEntries(names.map((name) => [name, process.env[name]]));
   try {
     for (const name of names) delete process.env[name];
     process.env.HEROKU_APP_NAME = "review-app";
+    assert.equal((await proxy(new NextRequest("https://review-app.herokuapp.com/team"))).status, 503);
+    // DYNO is always present on Heroku; app-name metadata is optional.
+    delete process.env.HEROKU_APP_NAME;
+    process.env.DYNO = "web.1";
     assert.equal((await proxy(new NextRequest("https://review-app.herokuapp.com/team"))).status, 503);
     Object.assign(process.env, { GITHUB_OAUTH_CLIENT_ID: "test-client", GITHUB_OAUTH_CLIENT_SECRET: "test-secret", AUTH_SECRET: "a".repeat(40), APP_URL: "http://localhost:3000" });
     assert.equal(authConfigured(), false);
