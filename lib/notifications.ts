@@ -19,7 +19,8 @@ import {
 } from "./metrics";
 import { DAY, date, timeWindow } from "./window";
 import { claim, readSnapshot, release, snapshotOnce } from "./cache";
-import type { Issue } from "./types";
+import { activeChangeRequests, ciState, reviewQueue, type ReviewRow } from "./reviews";
+import type { Issue, PullRequest } from "./types";
 const escape = (s: string) =>
   s
     .replace(/&/g, "&amp;")
@@ -93,7 +94,73 @@ export async function priorityMessage() {
     ? `${text.join("\n\n")}\n\n${link(process.env.APP_URL || "", "View Bug Board")}`
     : null;
 }
+// The old review reminder's gates, with Urgent/High Linear priority replacing its 200-line cap.
+export function reviewReminders(rows: ReviewRow[], now = Date.now()) {
+  const waiting = new Map<string, { pr: PullRequest; days: number }[]>();
+  for (const { pr, issue } of rows) {
+    if (
+      ![1, 2].includes(issue?.priority || 0) ||
+      !pr.baseRefName ||
+      pr.baseRefName !== pr.repository.defaultBranchRef?.name ||
+      pr.mergeable === "CONFLICTING" ||
+      pr.reviewDecision === "APPROVED" ||
+      !["none", "passing"].includes(ciState(pr))
+    )
+      continue;
+    const requested = new Set(
+      pr.reviewRequests.nodes
+        .map((r) => r.requestedReviewer?.login?.toLowerCase())
+        .filter((login): login is string => !!login),
+    );
+    const active = activeChangeRequests(pr);
+    const reviewers =
+      pr.reviewDecision === "CHANGES_REQUESTED" || active.length
+        ? active.filter((login) => requested.has(login))
+        : [...requested];
+    for (const login of reviewers) {
+      const requestedAt = Math.max(
+        ...(pr.timelineItems?.nodes
+          .filter((n) => n.requestedReviewer?.login?.toLowerCase() === login)
+          .map((n) => Date.parse(n.createdAt))
+          .filter(Number.isFinite) || []),
+      );
+      if (!Number.isFinite(requestedAt) || now - requestedAt <= DAY) continue;
+      const latest = pr.reviews.nodes
+        .filter(
+          (r) =>
+            r.author?.login?.toLowerCase() === login &&
+            ["APPROVED", "CHANGES_REQUESTED", "DISMISSED"].includes(r.state) &&
+            Date.parse(r.submittedAt || "") >= requestedAt,
+        )
+        .sort((a, b) => Date.parse(b.submittedAt!) - Date.parse(a.submittedAt!))[0];
+      const slug = engineers.find(
+        (s) => people[s].github_username.toLowerCase() === login,
+      );
+      if (latest?.state === "APPROVED" || !slug) continue;
+      waiting
+        .set(slug, waiting.get(slug) || [])
+        .get(slug)!
+        .push({ pr, days: Math.floor((now - requestedAt) / DAY) });
+    }
+  }
+  const sections = engineers.flatMap((slug) => {
+    const prs = waiting.get(slug);
+    return prs
+      ? [
+          `${mention(slug)}:\n${prs
+            .sort((a, b) => b.days - a.days)
+            .map(({ pr, days }) => `- ${link(pr.url, pr.title)} (+${days}d)`)
+            .join("\n")}`,
+        ]
+      : [];
+  });
+  return sections.length
+    ? `*PRs - Checks Passing, Waiting for Review (+24h, Urgent/High priority)*\n\n${sections.join("\n\n")}`
+    : null;
+}
 export async function staleMessage() {
+  // GitHub's -review:approved search also drops PRs with one approval and another pending review.
+  const reviews = reviewReminders(await reviewQueue(true));
   const issues = (await openWork()).filter(
     (i) =>
       !i.project &&
@@ -102,8 +169,7 @@ export async function staleMessage() {
         slugFor(i.assignee?.name, i.assignee?.displayName) || "",
       ),
   );
-  if (!issues.length) return null;
-  return `*Stale Open Issues*\n\n${engineers
+  const stale = issues.length ? `*Stale Open Issues*\n\n${engineers
     .flatMap((slug) => {
       const owned = issues.filter(
         (i) => slugFor(i.assignee?.name, i.assignee?.displayName) === slug,
@@ -114,7 +180,11 @@ export async function staleMessage() {
           ]
         : [];
     })
-    .join("\n\n")}\n\n${link(process.env.APP_URL || "", "View Bug Board")}`;
+    .join("\n\n")}` : null;
+  const sections = [reviews, stale].filter(Boolean);
+  return sections.length
+    ? `${sections.join("\n\n")}\n\n${link(process.env.APP_URL || "", "View Bug Board")}`
+    : null;
 }
 export async function projectMessage() {
   const today = date(Date.now()),

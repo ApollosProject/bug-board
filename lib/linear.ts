@@ -129,6 +129,18 @@ export async function issuesByNumber(numbers: number[]) {
     );
   return new Map(issues.map((issue) => [issue.number, issue]));
 }
+// Linear attaches PRs linked by branch, title, or magic words like "closes" in the body.
+export async function issuesLinkedTo(urls: string[]) {
+  const issues: Issue[] = [];
+  for (let i = 0; i < urls.length; i += 250)
+    issues.push(
+      ...(await fetchIssues({
+        ...team,
+        attachments: { some: { url: { in: urls.slice(i, i + 250) } } },
+      })),
+    );
+  return issues;
+}
 export const projects = cache(async (): Promise<Project[]> => {
   type Relations = NonNullable<Project["inverseRelations"]> & {
     pageInfo: Connection<never>["pageInfo"];

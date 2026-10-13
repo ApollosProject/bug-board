@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { notify, staleMessage } from "../lib/notifications";
-import type { Issue } from "../lib/types";
+import { notify, reviewReminders, staleMessage } from "../lib/notifications";
+import type { ReviewRow } from "../lib/reviews";
+import type { Issue, PullRequest } from "../lib/types";
 
 const issue = (index: number, title = `Stale issue ${index}`): Issue => ({
   id: String(index),
@@ -25,6 +26,7 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
     UPSTASH_REDIS_REST_TOKEN: "fixture-redis",
     SLACK_WEBHOOK_URL: "https://slack.example.test",
     APP_URL: "https://board.example.test",
+    GITHUB_TOKEN: "fixture-github",
   };
   const previous = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
   Object.assign(process.env, env);
@@ -38,6 +40,8 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
   let failAt = 0;
   t.mock.method(globalThis, "fetch", async (url: unknown, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body));
+    if (String(url) === "https://api.github.com/graphql")
+      return Response.json({ data: { search: { issueCount: 0, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] } } });
     if (String(url) === env.SLACK_WEBHOOK_URL) {
       posts.push(body.text);
       postedAt.push(Date.now());
@@ -49,7 +53,7 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
     }
     assert.ok(String(url).startsWith(env.UPSTASH_REDIS_REST_URL));
     const command = ([op, key, ...args]: string[]) => {
-      const records = key.includes(":notification-message:") ? snapshots : claims;
+      const records = key.includes(":notification:") ? claims : snapshots;
       if (op === "get") return key.endsWith(":open-issues")
         ? JSON.stringify({ at: Date.now(), data: issues })
         : records.get(key) ?? null;
@@ -145,4 +149,51 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
   }
+});
+
+test("review reminders keep the old gates with Urgent/High priority instead of size", () => {
+  const now = Date.parse("2026-10-13T14:00:00Z");
+  const row = (number: number, priority: number | null, pr: Partial<PullRequest> = {}) => ({
+    issue: priority === null ? undefined : { priority },
+    pr: {
+      number,
+      title: `PR ${number}`,
+      url: `https://github.com/apollosproject/apollos-platforms/pull/${number}`,
+      additions: 5_000,
+      baseRefName: "main",
+      repository: { nameWithOwner: "apollosproject/apollos-platforms", defaultBranchRef: { name: "main" } },
+      mergeable: "MERGEABLE",
+      reviewDecision: "REVIEW_REQUIRED",
+      statusCheckRollup: { state: "SUCCESS" },
+      reviewRequests: { nodes: [{ requestedReviewer: { login: "redreceipt" } }, { requestedReviewer: { login: "nlewis84" } }] },
+      reviews: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } },
+      timelineItems: { nodes: [
+        { __typename: "ReviewRequestedEvent", createdAt: "2026-10-10T12:00:00Z", requestedReviewer: { login: "redreceipt" } },
+        { __typename: "ReviewRequestedEvent", createdAt: "2026-10-13T12:00:00Z", requestedReviewer: { login: "nlewis84" } },
+      ] },
+      ...pr,
+    },
+  }) as unknown as ReviewRow;
+  const message = reviewReminders([
+    row(1, 1),
+    row(2, 2, { title: "High <one>" }),
+    row(3, 3),
+    row(4, 0),
+    row(5, null),
+    row(6, 1, { baseRefName: "stacked" }),
+    row(7, 1, { mergeable: "CONFLICTING" }),
+    row(8, 1, { statusCheckRollup: { state: "PENDING" } }),
+    row(9, 1, { statusCheckRollup: null }),
+    row(11, 1, { reviewDecision: "APPROVED" }),
+    row(10, 1, { reviews: { nodes: [{ author: { login: "redreceipt" }, state: "APPROVED", submittedAt: "2026-10-11T00:00:00Z" }], pageInfo: { hasNextPage: false, endCursor: null } } }),
+  ], now);
+  assert.equal(message, [
+    "*PRs - Checks Passing, Waiting for Review (+24h, Urgent/High priority)*",
+    "",
+    "<@U01865757S9>:",
+    "- <https://github.com/apollosproject/apollos-platforms/pull/1|PR 1> (+3d)",
+    "- <https://github.com/apollosproject/apollos-platforms/pull/2|High &lt;one&gt;> (+3d)",
+    "- <https://github.com/apollosproject/apollos-platforms/pull/9|PR 9> (+3d)",
+  ].join("\n"));
+  assert.equal(reviewReminders([row(3, 3)], now), null);
 });
