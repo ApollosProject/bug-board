@@ -53,7 +53,7 @@ Complete Linear assignment/status histories cache for one hour per issue update 
 
 Cron only runs on production deployments. Preview team metrics, open work, and projects load on demand through deployment-scoped 60-second caches when fresh snapshots are absent; their first load can take a few minutes. They never read production's Redis namespace. Fleet, apps, PTO, and regressions still require their authenticated refresh routes and fresh preview snapshots; fleet/store/blame work does not run in page requests. Notifications and Better Stack heartbeat delivery are disabled outside `VERCEL_ENV=production`.
 
-Priority bug notifications run at 12:00 UTC. Stale work notifications run at 10:00 New York, and project updates at 14:00 New York. Manager performance outliers run on Friday at 13:00 UTC. New York schedules follow daylight saving time. Weekly leaderboard posting remains unscheduled, as it was previously.
+Priority bug notifications run at 12:00 UTC. Stale work notifications run at 10:00 New York and start with PRs whose review has waited over 24 hours, limited to PRs linked to Urgent/High Linear issues (by branch, title, or a "closes"/"refs" link in the body), on the default branch, without conflicts, and with passing or no checks, and project updates at 14:00 New York. Manager performance outliers run on Friday at 13:00 UTC. New York schedules follow daylight saving time. Weekly leaderboard posting remains unscheduled, as it was previously.
 
 Refresh locks prevent overlapping executions. Ordinary Cron functions have a 300-second limit and a 360-second lease. A timeout cannot block refreshes for eight hours. Failed polls retry on the next Cron tick. Durable jobs retain their eight-hour lease and Workflow retries.
 

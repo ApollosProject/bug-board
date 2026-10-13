@@ -17,7 +17,7 @@ import {
   supportSlugs,
   teamRows,
 } from "../lib/metrics";
-import { classify, reviewRows, ticketNumber } from "../lib/reviews";
+import { classify, linkIssues, reviewRows, ticketNumber } from "../lib/reviews";
 import { creditedAuthors } from "../lib/github";
 import { fleetStats } from "../lib/fleet";
 import { churchActivity, matchChurches, type Church } from "../lib/churches";
@@ -450,6 +450,26 @@ test("review ticket parsing prefers branches and handles underscores without acc
   assert.equal(
     ticketNumber(pr({ headRefName: "XAPO-123X", title: "No issue" })),
     null,
+  );
+});
+test("review rows use Linear-linked issues and the most urgent link", () => {
+  const url = (n: number) => `https://github.com/apollosproject/repo/pull/${n}`;
+  const attached = (number: number, priority: number, ...urls: string[]) =>
+    issue({ number, identifier: `APO-${number}`, priority, attachments: { nodes: urls.map((u) => ({ metadata: { url: u } })) } });
+  const prs = [
+    pr({ number: 1, url: url(1), title: "Body says closes APO-10", headRefName: "fix" }),
+    pr({ number: 2, url: url(2), title: "APO-20", headRefName: "fix" }),
+    pr({ number: 3, url: url(3), title: "APO-30", headRefName: "fix" }),
+    pr({ number: 4, url: url(4), title: "No link", headRefName: "fix" }),
+  ];
+  const rows = reviewRows(prs, linkIssues(
+    prs,
+    new Map([[20, attached(20, 3)], [30, attached(30, 0)]]),
+    [attached(10, 2, url(1)), attached(21, 1, url(2)), attached(31, 4, url(3))],
+  ), now);
+  assert.deepEqual(
+    Object.fromEntries(rows.map((r) => [r.pr.number, r.issue?.identifier])),
+    { 1: "APO-10", 2: "APO-21", 3: "APO-31", 4: undefined },
   );
 });
 test("mixed review sections preserve priority order and longest approved wait", () => {

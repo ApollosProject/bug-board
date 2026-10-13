@@ -2,7 +2,7 @@ import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { config, people } from "./config";
 import { openPRs } from "./github";
-import { issuesByNumber } from "./linear";
+import { issuesByNumber, issuesLinkedTo } from "./linear";
 import type { Issue, PullRequest } from "./types";
 export function ticketNumber(pr: Pick<PullRequest, "headRefName" | "title">) {
   const pattern = new RegExp(
@@ -94,7 +94,7 @@ export type ReviewRow = {
 };
 export function reviewRows(
   prs: PullRequest[],
-  issues: Map<number, Issue>,
+  issues: Map<number | string, Issue>,
   now = Date.now(),
 ): ReviewRow[] {
   const team = new Set(
@@ -103,7 +103,7 @@ export function reviewRows(
   return prs
     .map((pr) => {
       const number = ticketNumber(pr),
-        issue = number ? issues.get(number) : undefined;
+        issue = issues.get(pr.url) ?? (number ? issues.get(number) : undefined);
       const events =
         pr.timelineItems?.nodes
           .filter(
@@ -154,10 +154,28 @@ export const cachedReviewQueue = cache((approved: boolean | "only") => unstable_
 )());
 export async function reviewQueue(approved: boolean | "only") {
   const prs = await openPRs(approved);
-  return reviewRows(
-    prs,
-    await issuesByNumber([
+  const [byNumber, linked] = await Promise.all([
+    issuesByNumber([
       ...new Set(prs.map(ticketNumber).filter((n): n is number => n !== null)),
     ]),
-  );
+    issuesLinkedTo(prs.map((pr) => pr.url)),
+  ]);
+  return reviewRows(prs, linkIssues(prs, byNumber, linked));
+}
+// A PR can link several issues; show its most urgent one.
+export function linkIssues(
+  prs: PullRequest[],
+  byNumber: Map<number, Issue>,
+  linked: Issue[],
+) {
+  const issues = new Map<number | string, Issue>(byNumber);
+  for (const pr of prs) {
+    const number = ticketNumber(pr);
+    const [issue] = [
+      ...(number && byNumber.has(number) ? [byNumber.get(number)!] : []),
+      ...linked.filter((i) => i.attachments?.nodes.some((a) => a.metadata.url === pr.url)),
+    ].sort((a, b) => (a.priority || 99) - (b.priority || 99));
+    if (issue) issues.set(pr.url, issue);
+  }
+  return issues;
 }
