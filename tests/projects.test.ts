@@ -74,10 +74,13 @@ test("timeline includes undated active ownership, preserves dated bounds, and ke
     assert.ok(!html.includes(`https://linear.app/project/${id}`));
   }
   assert.match(anchor("unassigned"), /target="_blank" rel="noopener noreferrer"/);
-  for (const [id, label, symbol] of [["undated-lead", "High", "▴"], ["undated-member", "Low", "▾"], ["dated", "Medium", "="], ["unassigned", "Urgent", "!"], ["start-only", "No priority", "–"]]) {
+  for (const [id, label, filled] of [["undated-lead", "High", 3], ["undated-member", "Low", 1], ["dated", "Medium", 2], ["start-only", "No priority", 0]] as const) {
     assert.match(anchor(id), new RegExp(`aria-label="Priority: ${label}"`));
-    assert.ok(anchor(id).includes(`<span aria-hidden="true">${symbol}</span>`));
+    assert.equal(anchor(id).match(/opacity="1"/g)?.length || 0, filled);
     assert.ok(!anchor(id).includes(`<small>${label}</small>`));
   }
+  assert.match(anchor("unassigned"), /aria-label="Priority: Urgent"[^]*fill-rule="evenodd"/);
+  assert.match(anchor("undated-lead"), /class="timeline-bar neutral lead"[^>]*title="undated-lead · Lead · /);
+  assert.doesNotMatch(anchor("undated-member"), / lead"|· Lead/);
   assert.ok(html.includes("No projects in this window"));
 });

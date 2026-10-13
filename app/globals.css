@@ -761,10 +761,14 @@ meter::-moz-meter-bar {
   text-overflow: ellipsis;
 }
 .project-priority {
-  display: inline-block;
   width: 0.8rem;
-  text-align: center;
-  font-size: 0.7rem;
+  height: 0.8rem;
+  margin-right: 0.15rem;
+  fill: currentColor;
+  vertical-align: -0.1em;
+}
+.timeline-bar.lead {
+  box-shadow: inset 0 0 0 2px #fff;
   font-weight: 600;
 }
 .timeline-bar.completed {
