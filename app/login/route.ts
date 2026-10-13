@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   authConfigured,
+  appOrigin,
   callbackURL,
   COOKIE,
   FLOW_COOKIE,
@@ -13,8 +14,12 @@ import {
 export async function GET(request: NextRequest) {
   if (!authConfigured())
     return new NextResponse("Authentication unavailable", { status: 503 });
-  const state = random(),
-    verifier = random();
+  const origin = appOrigin(request);
+  if (!origin) return new NextResponse("Invalid preview origin", { status: 400 });
+  const state = process.env.VERCEL_ENV === "preview"
+    ? await sign({ origin, nonce: random() }, 600, "oauth-preview")
+    : random();
+  const verifier = random();
   const params = new URLSearchParams({
     client_id: process.env.GITHUB_OAUTH_CLIENT_ID!,
     redirect_uri: callbackURL(),

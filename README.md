@@ -27,12 +27,18 @@ npx e2e run tests/dashboard.e2e.ts --no-cache
 - `app/`: streamed server-rendered pages and explicit route handlers. Native forms keep filters in the URL. No HTMX, client data-fetching layer, or chart CDN.
 - `lib/`: typed integrations, scoring, comparisons, attribution, and snapshot access. `config.yml` remains the single source for people, teams, platforms, and ownership. `regression_overrides.yml` retains manual attribution corrections.
 - `lib/refresh.ts`: fleet, metrics, and app refreshes run inside authenticated Cron functions. Fleet lookups retain a limit of 120 simultaneous requests and retry each failed lookup once; every Airflow request, from inventory onward, must finish within 230 seconds of the job start, and lookups past that deadline count as unchecked; health is `unknown` when more than 10% of active DAGs cannot be checked. Store lookups retain a limit of eight.
-- `workflows/refresh.ts`: durable regression attribution and notifications. Each blame step receives one file and PR metadata, not every file patch. Fleet/store/blame work never runs in a deployed page request. Other delivery windows and review queues use Next.js Data Cache and streamed server rendering.
+- `workflows/refresh.ts`: durable regression attribution and notifications. Each blame step receives one file and PR metadata, not every file patch. Fleet/store/blame work never runs in a deployed page request. Other delivery windows use Redis snapshots when configured; review queues use Next.js Data Cache. Pages stream server-rendered sections.
 - Upstash Redis REST: expiring snapshots and compare-and-delete refresh locks. Production, local, and individual preview deployments have separate namespaces. Expired records cannot establish healthy/current status. Merged-PR date chunks that end before today retain complete approval data for one hour. The chunk that includes today always uses GitHub. Historical metadata corrections can take up to one hour to appear. Complete review timelines cache for one hour, keyed by the PR update timestamp and unfiltered timeline count. A changed marker requires a new individual timeline lookup. CI, approvals, and requested reviewers still use the queue's 60-second refresh policy.
 - Vercel Web Analytics: page views from signed-in people (URLs keep date, platform, and sort filters; person and church slugs become `[slug]`, and the `q`, `author`, and `reviewer` values become `[redacted]`), plus one server-side event, `Team CSV export` (window). Deploy requests show up as `/apps?deployed=1` page views. No names, issue titles, or church data are sent. Collection starts only after Web Analytics is enabled on the Vercel project. Pro bills $0.03 per 1,000 events.
 - Vercel Cron: fleet, metrics, and apps return `200` with `status: refreshed` only after completion. Failures return `503`. Regressions and notifications return `202` with a Workflow run ID, not a claim of completion. Inspect durable jobs in Vercel Workflow observability (locally: `npx workflow inspect runs`).
 
-The main views are `/`, `/team`, `/team/[slug]`, `/reviews`, `/projects`, `/apps`, and `/dags`. `/healthz` stays public and returns `{"status":"ok"}`. `/team.csv` exports the selected team/window with cohort z-scores. `/app-versions` and `/failing-dags` redirect to their current pages.
+The main views are `/`, `/team`, `/team/[slug]`, `/reviews`, `/projects`, `/apps`, and `/dags`.
+
+`/team` also shows the shipping pipeline: elapsed calendar time in each Linear status (median/p85 for issues completed in the selected window, summing repeat visits per issue), current queue counts and the five oldest items per status, first submitted human-review wait for merged PRs, and the ten oldest approved-but-unmerged PRs. Linear includes project, support, and unassigned issues; assigned issues and PR authors follow the engineering/everyone cohort filter. Current queues are independent of the historical window. Missing or inconsistent histories remain unknown, and sample coverage is shown. Review time starts at the first ready-for-review event, or creation for initially non-draft PRs; author/bot reviews and ordinary conversation comments do not count. Approval aging starts at the latest current approval, not a review request. These are elapsed status times, not hands-on effort or proof of production shipping.
+
+Complete Linear assignment/status histories cache for one hour per issue update timestamp, with separate open/completed caches. Cold histories load in batches of 25 with at most four concurrent requests; later history pages are fully fetched before caching. The default historical view reuses the metrics Cron snapshot; other reports use a 60-second Redis cache when configured (real reports exceed Next's 2 MB Data Cache limit). Reports retain compact status totals and assignment events; open snapshots retain the current status-entry timestamp instead of a full timeline, so ages keep advancing between refreshes. First-review pagination stops at the first human response and is only extended for configured authors. The current PR section uses the existing 60-second review-queue cache policy, searches only approved PRs, and skips review-request timeline lookups. Tables bound oldest-item drilldowns rather than rendering the entire backlog.
+
+`/healthz` stays public and returns `{"status":"ok"}`. `/team.csv` exports the selected team/window with cohort z-scores. `/app-versions` and `/failing-dags` redirect to their current pages.
 
 ### Refresh and notifications
 
@@ -45,7 +51,7 @@ The main views are `/`, `/team`, `/team/[slug]`, `/reviews`, `/projects`, `/apps
 | Regression summary | 24 hours |
 | Published store builds | 30 minutes (quota backoff: 1 hour) |
 
-Cron only runs on production deployments. Preview snapshots require manually invoking the authenticated Cron route after configuring a preview-only Redis namespace. Notifications and Better Stack heartbeat delivery are disabled outside `VERCEL_ENV=production`.
+Cron only runs on production deployments. Preview team metrics, open work, and projects load on demand through deployment-scoped 60-second caches when fresh snapshots are absent; their first load can take a few minutes. They never read production's Redis namespace. Fleet, apps, PTO, and regressions still require their authenticated refresh routes and fresh preview snapshots; fleet/store/blame work does not run in page requests. Notifications and Better Stack heartbeat delivery are disabled outside `VERCEL_ENV=production`.
 
 Priority bug notifications run at 12:00 UTC. Stale work notifications run at 10:00 New York, and project updates at 14:00 New York. Manager performance outliers run on Friday at 13:00 UTC. New York schedules follow daylight saving time. Weekly leaderboard posting remains unscheduled, as it was previously.
 
@@ -89,7 +95,9 @@ See `.env.example` for names and defaults. Set server credentials in the appropr
 
 GitHub OAuth requests `read:org`, validates active membership, and uses PKCE with a ten-minute signed state cookie. It keeps the verified identity in a signed HTTP-only session for at most 30 days, not the access token.
 
-Partially configured auth fails closed with `503`. Vercel production and preview deployments require auth even if `GITHUB_OAUTH_ENABLED` was omitted. Hosted callback URLs must use HTTPS. Sessions and authenticated responses are private/no-store. The no-auth local development path never enables deployment.
+Previews use a separate OAuth app, session secret, and fixed callback host (`APP_URL` / `GITHUB_OAUTH_CALLBACK_URL`). Point that preview-only alias at a current **Preview** deployment with this callback handler. Login accepts only the canonical host and Vercel's deployment/branch hosts, signs the initiating origin into the ten-minute OAuth state, and relays the callback back to it. The PKCE verifier and session cookies stay host-only; codes are exchanged only where the matching flow cookie exists. Production does not use this relay.
+
+Partially configured auth fails closed with `503`. Vercel production/preview deployments and Heroku review apps require auth even if `GITHUB_OAUTH_ENABLED` was omitted. Hosted callback URLs must use HTTPS. Sessions and authenticated responses are private/no-store. The no-auth local development path never enables deployment.
 
 **Optional features:**
 
@@ -144,6 +152,6 @@ Manual runs write job summaries because they have no PR event context.
 
 ## Deploys and rollback
 
-Vercel's Git integration deploys `main` to Production (`engineering.apollos.app`), and every pull request gets a Preview deployment. Cron runs only on Production. Preview deployments use their own Redis namespace and never post to Slack.
+Vercel's Git integration deploys `main` to Production (`engineering.apollos.app`), and every pull request gets a Preview deployment. Cron runs only on Production. Preview team views can read through their own caches; other snapshot views need an explicit refresh. Preview deployments use their own Redis namespace and never post to Slack.
 
-To roll back, promote an earlier Production deployment in Vercel (Instant Rollback), then confirm that the Cron jobs point at it. The Heroku app, worker, and Redis add-on were deleted after the migration. Nothing else runs Bug Board.
+To roll back, promote an earlier Production deployment in Vercel (Instant Rollback), then confirm that the Cron jobs point at it. Bug Board's Heroku apps, add-ons, review-app configuration, pipeline, and repository webhook have been removed. Vercel is the only supported deployment surface.

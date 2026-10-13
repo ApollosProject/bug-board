@@ -75,15 +75,16 @@ export function Checked({ at }: { at: string }) {
     </time>
   );
 }
-// Only the 30-day window has a refreshed snapshot; other windows query Linear and GitHub.
+// Production's 30-day window uses Cron; previews read through their own cache.
 export function Loading({ window }: { window?: Window }) {
   return (
     <article aria-busy="true">
       Loading live data…
-      {window && window.preset_days !== 30 && (
+      {window && (window.preset_days !== 30 || process.env.VERCEL_ENV === "preview") && (
         <p className="muted">
-          Only the 30-day preset uses the refreshed snapshot. Other windows
-          query Linear and GitHub directly and can take a few minutes.
+          {process.env.VERCEL_ENV === "preview"
+            ? "Preview data loads on demand from Linear and GitHub, with a separate cache. The first load can take a few minutes."
+            : "Only the 30-day preset uses the refreshed snapshot. Other windows query Linear and GitHub directly and can take a few minutes."}
         </p>
       )}
     </article>

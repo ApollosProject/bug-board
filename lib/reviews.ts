@@ -1,3 +1,5 @@
+import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { config, people } from "./config";
 import { openPRs } from "./github";
 import { issuesByNumber } from "./linear";
@@ -147,7 +149,10 @@ export function reviewRows(
             b.seconds - a.seconds),
     );
 }
-export async function reviewQueue(approved: boolean) {
+export const cachedReviewQueue = cache((approved: boolean | "only") => unstable_cache(
+  () => reviewQueue(approved), ["reviews-v1", String(approved)], { revalidate: 60 },
+)());
+export async function reviewQueue(approved: boolean | "only") {
   const prs = await openPRs(approved);
   return reviewRows(
     prs,

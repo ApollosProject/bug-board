@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { callbackURL, sameOrigin, session } from "@/lib/auth";
+import { appOrigin, sameOrigin, session } from "@/lib/auth";
 import { appsDashboard, deployTarget, dispatchDeploy } from "@/lib/apps";
 import { claim } from "@/lib/cache";
 export const maxDuration = 60;
@@ -26,7 +26,7 @@ export async function POST(
       return new NextResponse("Deployment recently requested", { status: 409 });
     await dispatchDeploy(church, platform);
     return NextResponse.redirect(
-      new URL("/apps?deployed=1", callbackURL()),
+      new URL("/apps?deployed=1", appOrigin(request)!),
       303,
     );
   } catch {

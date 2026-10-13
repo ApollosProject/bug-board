@@ -5,9 +5,10 @@ import { NextResponse } from "next/server";
 export const COOKIE = "bug-board-session";
 export const FLOW_COOKIE = "bug-board-oauth";
 export const org = () => process.env.GITHUB_OAUTH_ORG || "ApollosProject";
+const hosted = () => ["production", "preview"].includes(process.env.VERCEL_ENV || "") || !!(process.env.DYNO || process.env.HEROKU_APP_NAME);
 export function oauthEnabled() {
   return (
-    ["production", "preview"].includes(process.env.VERCEL_ENV || "") ||
+    hosted() ||
     /^(true|1|yes|on)$/i.test(process.env.GITHUB_OAUTH_ENABLED || "") ||
     !!(
       process.env.GITHUB_OAUTH_CLIENT_ID ||
@@ -33,7 +34,7 @@ export function authConfigured() {
       !url.search &&
       !url.hash &&
       (url.protocol === "https:" ||
-        (!["production", "preview"].includes(process.env.VERCEL_ENV || "") &&
+        (!hosted() &&
           url.protocol === "http:" &&
           ["localhost", "127.0.0.1"].includes(url.hostname)))
     );
@@ -141,11 +142,19 @@ export function apiKeyError(request: Request) {
       },
     );
 }
+export function appOrigin(request: Request) {
+  try {
+    const canonical = new URL(callbackURL() || request.url).origin;
+    if (process.env.VERCEL_ENV !== "preview") return canonical;
+    const origin = `https://${request.headers.get("host") || new URL(request.url).host}`;
+    const allowed = [canonical, ...[process.env.VERCEL_URL, process.env.VERCEL_BRANCH_URL]
+      .filter(Boolean).map((host) => `https://${host}`)];
+    return allowed.includes(origin) ? origin : null;
+  } catch {
+    return null;
+  }
+}
 export function sameOrigin(request: Request) {
   const origin = request.headers.get("origin");
-  try {
-    return !!origin && origin === new URL(callbackURL() || request.url).origin;
-  } catch {
-    return false;
-  }
+  return !!origin && origin === appOrigin(request);
 }

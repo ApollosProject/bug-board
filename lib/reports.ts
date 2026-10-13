@@ -2,7 +2,7 @@ import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { completed, contributors, openIssues, projects } from "./linear";
 import { merged } from "./github";
-import { readSnapshot } from "./cache";
+import { readSnapshot, redis, writeSnapshot } from "./cache";
 import {
   comparisons,
   done,
@@ -24,6 +24,7 @@ import { engineers, people, personName, slugFor, normalize } from "./config";
 import { DAY, inWindow, param, timeWindow } from "./window";
 import type { Issue, Project, PullRequest, Search, Window } from "./types";
 import { regressionDashboard } from "./regressions";
+import { compactOpenIssues, issueStageTimes } from "./pipeline";
 export type Report = {
   completed: Issue[];
   prs: PullRequest[];
@@ -42,7 +43,17 @@ export async function computeReport(window: Window): Promise<Report> {
     .map((p) => p.id);
   const members = await contributors(scoring);
   return {
-    completed: issues,
+    completed: issues.map((issue) => {
+      const totals = issueStageTimes(issue)?.totals;
+      return {
+        ...issue,
+        stageDurations: totals ? [...totals.values()] : null,
+        // Reports need status totals and assignment events, not a second full timeline copy.
+        history: { edges: (issue.history?.edges || []).filter(({ node }) => node.toAssignee).map(({ node }) => ({
+          node: { toAssignee: node.toAssignee, updatedAt: node.updatedAt },
+        })) },
+      };
+    }),
     prs,
     projects: projectList,
     rows: teamRows(issues, prs, projectList, members, window),
@@ -55,18 +66,24 @@ export const report = cache(async (query: string): Promise<Report> => {
   if (window.preset_days === 30) {
     const snapshot = await readSnapshot<Report>("metrics", 180);
     if (snapshot) return snapshot;
-    if (process.env.VERCEL_ENV)
+    if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== "preview")
       throw new Error(
         "Team metrics are refreshing. Configure Cron and Upstash Redis.",
       );
   }
+  const compute = () => computeReport(timeWindow(search, Math.floor(Date.now() / 60_000) * 60_000));
+  // Full reports exceed Next's 2 MB cache limit on real team windows.
+  if (redis()) {
+    const name = `report-v3:${query}`, saved = await readSnapshot<Report>(name, 60);
+    if (saved) return saved;
+    const data = await compute();
+    await writeSnapshot(name, data, 60).catch(() => console.warn("Report cache write unavailable"));
+    return data;
+  }
   // Only integration data is cached. Session checks stay outside the data cache.
   return unstable_cache(
-    async () =>
-      computeReport(
-        timeWindow(search, Math.floor(Date.now() / 60_000) * 60_000),
-      ),
-    ["report-v1", query],
+    compute,
+    ["report-v3", query],
     { revalidate: 60 },
   )();
 });
@@ -75,13 +92,14 @@ export const reportFor = (window: Window) =>
 export const openWork = cache(async () => {
   if (process.env.VERCEL_ENV) {
     const snapshot = await readSnapshot<Issue[]>("open-issues", 180);
-    if (!snapshot)
+    if (snapshot) return snapshot;
+    if (process.env.VERCEL_ENV !== "preview")
       throw new Error(
         "Open work is refreshing. Configure Cron and Upstash Redis.",
       );
-    return snapshot;
   }
-  return unstable_cache(openIssues, ["open-work-v1"], { revalidate: 60 })();
+  return unstable_cache(async () => compactOpenIssues(await openIssues()),
+    ["open-work-v4", process.env.VERCEL_URL || "local"], { revalidate: 60 })();
 });
 export function sortedTeam(rows: TeamRow[], search: Search) {
   const everyone = param(search, "everyone") === "1";
@@ -211,6 +229,8 @@ export const daysSince = (value: string, now = Date.now()) =>
 export async function projectDashboard() {
   const snapshot = await readSnapshot<Project[]>("projects", 180);
   if (snapshot) return snapshot;
+  if (process.env.VERCEL_ENV === "preview")
+    return unstable_cache(projects, ["preview-projects-v1", process.env.VERCEL_URL || "preview"], { revalidate: 60 })();
   if (process.env.VERCEL_ENV)
     throw new Error(
       "Projects are refreshing. Configure Cron and Upstash Redis.",
