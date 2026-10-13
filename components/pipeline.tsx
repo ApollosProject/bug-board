@@ -105,7 +105,7 @@ async function Approved({ everyone }: { everyone: boolean }) {
           ))}</tbody>
         </table> : <p>No approved PRs waiting to merge.</p>}
       </TableScroll>
-      {approved.length > 10 && <p className="muted">Showing the ten oldest. See the full approved queue on <a href="/reviews?approved=1">Reviews</a>.</p>}
+      {approved.length > 10 && <p className="muted">Showing the ten oldest. <a href="/reviews?approved=1">View full approved queue</a>.</p>}
     </section>
   );
 }
