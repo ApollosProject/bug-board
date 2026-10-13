@@ -146,7 +146,7 @@ export function appOrigin(request: Request) {
   try {
     const canonical = new URL(callbackURL() || request.url).origin;
     if (process.env.VERCEL_ENV !== "preview") return canonical;
-    const origin = new URL(request.url).origin;
+    const origin = `https://${request.headers.get("host") || new URL(request.url).host}`;
     const allowed = [canonical, ...[process.env.VERCEL_URL, process.env.VERCEL_BRANCH_URL]
       .filter(Boolean).map((host) => `https://${host}`)];
     return allowed.includes(origin) ? origin : null;

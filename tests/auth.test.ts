@@ -223,6 +223,10 @@ test("preview callback relays only signed origins and exchanges codes with the i
       assert.equal((await callback(new NextRequest(`${values.GITHUB_OAUTH_CALLBACK_URL}?code=fixture-code&state=${bad}`))).status, 400);
     assert.equal((await login(new NextRequest("https://evil.example/login"))).status, 400);
     assert.equal(appOrigin(new Request("https://branch-preview.vercel.app/team")), "https://branch-preview.vercel.app");
+    assert.equal(appOrigin(new Request(`${origin}/team`, { headers: { Host: "branch-preview.vercel.app" } })), "https://branch-preview.vercel.app");
+    assert.equal(appOrigin(new Request(`${origin}/team`, { headers: { Host: "evil.example" } })), null);
+    assert.equal((await callback(new NextRequest(destination.replace("unique-preview", "branch-preview")))).status, 400);
+    assert.equal(calls, 3);
     assert.equal(sameOrigin(new Request(`${origin}/logout`, { headers: { Origin: "https://evil.example" } })), false);
     assert.equal((await logout(new NextRequest(`${origin}/logout`, { headers: { Origin: origin } }))).headers.get("location"), `${origin}/signin`);
     process.env.VERCEL_ENV = "production";
