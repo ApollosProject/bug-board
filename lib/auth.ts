@@ -5,9 +5,10 @@ import { NextResponse } from "next/server";
 export const COOKIE = "bug-board-session";
 export const FLOW_COOKIE = "bug-board-oauth";
 export const org = () => process.env.GITHUB_OAUTH_ORG || "ApollosProject";
+const hosted = () => ["production", "preview"].includes(process.env.VERCEL_ENV || "") || !!process.env.HEROKU_APP_NAME;
 export function oauthEnabled() {
   return (
-    ["production", "preview"].includes(process.env.VERCEL_ENV || "") ||
+    hosted() ||
     /^(true|1|yes|on)$/i.test(process.env.GITHUB_OAUTH_ENABLED || "") ||
     !!(
       process.env.GITHUB_OAUTH_CLIENT_ID ||
@@ -33,7 +34,7 @@ export function authConfigured() {
       !url.search &&
       !url.hash &&
       (url.protocol === "https:" ||
-        (!["production", "preview"].includes(process.env.VERCEL_ENV || "") &&
+        (!hosted() &&
           url.protocol === "http:" &&
           ["localhost", "127.0.0.1"].includes(url.hostname)))
     );

@@ -592,7 +592,7 @@ test("approved-only pipeline searches are bounded to eight repos and never fetch
 });
 
 test("reports use Redis beyond Next's size limit and retain compact stage totals and assignments", async (t) => {
-  const names = ["LINEAR_API_KEY", "GITHUB_TOKEN", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "KV_REST_API_URL", "KV_REST_API_TOKEN", "VERCEL_ENV"];
+  const names = ["LINEAR_API_KEY", "GITHUB_TOKEN", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "KV_REST_API_URL", "KV_REST_API_TOKEN", "VERCEL_ENV", "VERCEL_URL"];
   const env = Object.fromEntries(names.map((name) => [name, process.env[name]]));
   const original = globalThis.fetch, records = new Map<string, string>();
   let calls = 0, clock = Date.parse("2026-10-07T12:00:00Z");
@@ -626,7 +626,7 @@ test("reports use Redis beyond Next's size limit and retain compact stage totals
       } }], pageInfo: pageInfo() } } });
       return Response.json({ data: { issues: { nodes: [issue], pageInfo: pageInfo() } } });
     };
-    const { reportFor } = await import("../lib/reports");
+    const { reportFor, openWork, projectDashboard } = await import("../lib/reports");
     const { timeWindow } = await import("../lib/window");
     const window = timeWindow({ start: "2026-09-01", end: "2026-09-03" });
     const first = await reportFor(window), before = calls;
@@ -638,6 +638,30 @@ test("reports use Redis beyond Next's size limit and retain compact stage totals
     clock += 61000;
     await reportFor(window);
     assert.ok(calls > before);
+
+    // Previews have no Cron: the default window must read through, including after expiry.
+    clock = Date.parse("2026-09-03T12:00:00Z");
+    process.env.VERCEL_ENV = "preview";
+    process.env.VERCEL_URL = "first-preview.vercel.app";
+    const defaultWindow = timeWindow({ days: "30" });
+    assert.equal((await reportFor(defaultWindow)).completed.length, 1);
+    const warmCalls = calls;
+    await reportFor(defaultWindow);
+    assert.equal(calls, warmCalls);
+    clock += 181000;
+    await reportFor(defaultWindow);
+    assert.ok(calls > warmCalls);
+    process.env.VERCEL_URL = "second-preview.vercel.app";
+    await reportFor(defaultWindow);
+    assert.ok([...records.keys()].some((key) => key.includes(":preview:first-preview.vercel.app:") && key.includes("report-v3:")));
+    assert.ok([...records.keys()].some((key) => key.includes(":preview:second-preview.vercel.app:") && key.includes("report-v3:")));
+    // Production still requires fresh Cron snapshots and cannot read either preview's cache.
+    process.env.VERCEL_ENV = "production";
+    const beforeProduction = calls;
+    await assert.rejects(reportFor(defaultWindow), /Team metrics are refreshing/);
+    await assert.rejects(openWork(), /Open work is refreshing/);
+    await assert.rejects(projectDashboard(), /Projects are refreshing/);
+    assert.equal(calls, beforeProduction);
   } finally {
     globalThis.fetch = original;
     for (const [name, value] of Object.entries(env))

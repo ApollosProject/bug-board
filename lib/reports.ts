@@ -66,7 +66,7 @@ export const report = cache(async (query: string): Promise<Report> => {
   if (window.preset_days === 30) {
     const snapshot = await readSnapshot<Report>("metrics", 180);
     if (snapshot) return snapshot;
-    if (process.env.VERCEL_ENV)
+    if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== "preview")
       throw new Error(
         "Team metrics are refreshing. Configure Cron and Upstash Redis.",
       );
@@ -92,13 +92,14 @@ export const reportFor = (window: Window) =>
 export const openWork = cache(async () => {
   if (process.env.VERCEL_ENV) {
     const snapshot = await readSnapshot<Issue[]>("open-issues", 180);
-    if (!snapshot)
+    if (snapshot) return snapshot;
+    if (process.env.VERCEL_ENV !== "preview")
       throw new Error(
         "Open work is refreshing. Configure Cron and Upstash Redis.",
       );
-    return snapshot;
   }
-  return unstable_cache(async () => compactOpenIssues(await openIssues()), ["open-work-v3"], { revalidate: 60 })();
+  return unstable_cache(async () => compactOpenIssues(await openIssues()),
+    ["open-work-v4", process.env.VERCEL_URL || "local"], { revalidate: 60 })();
 });
 export function sortedTeam(rows: TeamRow[], search: Search) {
   const everyone = param(search, "everyone") === "1";
@@ -228,6 +229,8 @@ export const daysSince = (value: string, now = Date.now()) =>
 export async function projectDashboard() {
   const snapshot = await readSnapshot<Project[]>("projects", 180);
   if (snapshot) return snapshot;
+  if (process.env.VERCEL_ENV === "preview")
+    return unstable_cache(projects, ["preview-projects-v1", process.env.VERCEL_URL || "preview"], { revalidate: 60 })();
   if (process.env.VERCEL_ENV)
     throw new Error(
       "Projects are refreshing. Configure Cron and Upstash Redis.",

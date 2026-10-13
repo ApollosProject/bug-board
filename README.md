@@ -51,7 +51,7 @@ Complete Linear assignment/status histories cache for one hour per issue update 
 | Regression summary | 24 hours |
 | Published store builds | 30 minutes (quota backoff: 1 hour) |
 
-Cron only runs on production deployments. Preview snapshots require manually invoking the authenticated Cron route after configuring a preview-only Redis namespace. Notifications and Better Stack heartbeat delivery are disabled outside `VERCEL_ENV=production`.
+Cron only runs on production deployments. Preview team metrics, open work, and projects load on demand through deployment-scoped 60-second caches when fresh snapshots are absent; their first load can take a few minutes. They never read production's Redis namespace. Fleet, apps, PTO, and regressions still require their authenticated refresh routes and fresh preview snapshots; fleet/store/blame work does not run in page requests. Notifications and Better Stack heartbeat delivery are disabled outside `VERCEL_ENV=production`.
 
 Priority bug notifications run at 12:00 UTC. Stale work notifications run at 10:00 New York, and project updates at 14:00 New York. Manager performance outliers run on Friday at 13:00 UTC. New York schedules follow daylight saving time. Weekly leaderboard posting remains unscheduled, as it was previously.
 
@@ -95,7 +95,7 @@ See `.env.example` for names and defaults. Set server credentials in the appropr
 
 GitHub OAuth requests `read:org`, validates active membership, and uses PKCE with a ten-minute signed state cookie. It keeps the verified identity in a signed HTTP-only session for at most 30 days, not the access token.
 
-Partially configured auth fails closed with `503`. Vercel production and preview deployments require auth even if `GITHUB_OAUTH_ENABLED` was omitted. Hosted callback URLs must use HTTPS. Sessions and authenticated responses are private/no-store. The no-auth local development path never enables deployment.
+Partially configured auth fails closed with `503`. Vercel production/preview deployments and Heroku review apps require auth even if `GITHUB_OAUTH_ENABLED` was omitted. Hosted callback URLs must use HTTPS. Sessions and authenticated responses are private/no-store. The no-auth local development path never enables deployment.
 
 **Optional features:**
 
@@ -150,6 +150,6 @@ Manual runs write job summaries because they have no PR event context.
 
 ## Deploys and rollback
 
-Vercel's Git integration deploys `main` to Production (`engineering.apollos.app`), and every pull request gets a Preview deployment. Cron runs only on Production. Preview deployments use their own Redis namespace and never post to Slack.
+Vercel's Git integration deploys `main` to Production (`engineering.apollos.app`), and every pull request gets a Preview deployment. Cron runs only on Production. Preview team views can read through their own caches; other snapshot views need an explicit refresh. Preview deployments use their own Redis namespace and never post to Slack.
 
-To roll back, promote an earlier Production deployment in Vercel (Instant Rollback), then confirm that the Cron jobs point at it. The Heroku app, worker, and Redis add-on were deleted after the migration. Nothing else runs Bug Board.
+To roll back, promote an earlier Production deployment in Vercel (Instant Rollback), then confirm that the Cron jobs point at it. The Heroku production app, worker, and Redis add-on were retired after the migration. Automatic Heroku review-app creation is disabled; old review apps are not a supported preview surface and require separate operator cleanup.
