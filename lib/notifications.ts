@@ -103,6 +103,7 @@ export function reviewReminders(rows: ReviewRow[], now = Date.now()) {
       !pr.baseRefName ||
       pr.baseRefName !== pr.repository.defaultBranchRef?.name ||
       pr.mergeable === "CONFLICTING" ||
+      pr.reviewDecision === "APPROVED" ||
       !["none", "passing"].includes(ciState(pr))
     )
       continue;
@@ -158,7 +159,8 @@ export function reviewReminders(rows: ReviewRow[], now = Date.now()) {
     : null;
 }
 export async function staleMessage() {
-  const reviews = reviewReminders(await reviewQueue(false));
+  // GitHub's -review:approved search also drops PRs with one approval and another pending review.
+  const reviews = reviewReminders(await reviewQueue(true));
   const issues = (await openWork()).filter(
     (i) =>
       !i.project &&

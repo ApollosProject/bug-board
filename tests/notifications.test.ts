@@ -184,6 +184,7 @@ test("review reminders keep the old gates with Urgent/High priority instead of s
     row(7, 1, { mergeable: "CONFLICTING" }),
     row(8, 1, { statusCheckRollup: { state: "PENDING" } }),
     row(9, 1, { statusCheckRollup: null }),
+    row(11, 1, { reviewDecision: "APPROVED" }),
     row(10, 1, { reviews: { nodes: [{ author: { login: "redreceipt" }, state: "APPROVED", submittedAt: "2026-10-11T00:00:00Z" }], pageInfo: { hasNextPage: false, endCursor: null } } }),
   ], now);
   assert.equal(message, [
