@@ -95,6 +95,8 @@ See `.env.example` for names and defaults. Set server credentials in the appropr
 
 GitHub OAuth requests `read:org`, validates active membership, and uses PKCE with a ten-minute signed state cookie. It keeps the verified identity in a signed HTTP-only session for at most 30 days, not the access token.
 
+Previews use a separate OAuth app, session secret, and fixed callback host (`APP_URL` / `GITHUB_OAUTH_CALLBACK_URL`). Point that preview-only alias at a current **Preview** deployment with this callback handler. Login accepts only the canonical host and Vercel's deployment/branch hosts, signs the initiating origin into the ten-minute OAuth state, and relays the callback back to it. The PKCE verifier and session cookies stay host-only; codes are exchanged only where the matching flow cookie exists. Production does not use this relay.
+
 Partially configured auth fails closed with `503`. Vercel production/preview deployments and Heroku review apps require auth even if `GITHUB_OAUTH_ENABLED` was omitted. Hosted callback URLs must use HTTPS. Sessions and authenticated responses are private/no-store. The no-auth local development path never enables deployment.
 
 **Optional features:**
@@ -152,4 +154,4 @@ Manual runs write job summaries because they have no PR event context.
 
 Vercel's Git integration deploys `main` to Production (`engineering.apollos.app`), and every pull request gets a Preview deployment. Cron runs only on Production. Preview team views can read through their own caches; other snapshot views need an explicit refresh. Preview deployments use their own Redis namespace and never post to Slack.
 
-To roll back, promote an earlier Production deployment in Vercel (Instant Rollback), then confirm that the Cron jobs point at it. The Heroku production app, worker, and Redis add-on were retired after the migration. Automatic Heroku review-app creation is disabled; old review apps are not a supported preview surface and require separate operator cleanup.
+To roll back, promote an earlier Production deployment in Vercel (Instant Rollback), then confirm that the Cron jobs point at it. Bug Board's Heroku apps, add-ons, review-app configuration, pipeline, and repository webhook have been removed. Vercel is the only supported deployment surface.

@@ -142,11 +142,19 @@ export function apiKeyError(request: Request) {
       },
     );
 }
+export function appOrigin(request: Request) {
+  try {
+    const canonical = new URL(callbackURL() || request.url).origin;
+    if (process.env.VERCEL_ENV !== "preview") return canonical;
+    const origin = new URL(request.url).origin;
+    const allowed = [canonical, ...[process.env.VERCEL_URL, process.env.VERCEL_BRANCH_URL]
+      .filter(Boolean).map((host) => `https://${host}`)];
+    return allowed.includes(origin) ? origin : null;
+  } catch {
+    return null;
+  }
+}
 export function sameOrigin(request: Request) {
   const origin = request.headers.get("origin");
-  try {
-    return !!origin && origin === new URL(callbackURL() || request.url).origin;
-  } catch {
-    return false;
-  }
+  return !!origin && origin === appOrigin(request);
 }

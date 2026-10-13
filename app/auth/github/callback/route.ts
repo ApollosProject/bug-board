@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   authConfigured,
+  appOrigin,
   callbackURL,
   COOKIE,
   FLOW_COOKIE,
@@ -24,9 +25,31 @@ export async function GET(request: NextRequest) {
     return response;
   };
   if (!authConfigured()) return fail("Authentication unavailable", 503);
-  const flow = await verify(request.cookies.get(FLOW_COOKIE)?.value, "oauth");
+  const origin = appOrigin(request);
+  if (!origin) return fail("Invalid preview origin", 400);
   const state = request.nextUrl.searchParams.get("state"),
     code = request.nextUrl.searchParams.get("code");
+  if (process.env.VERCEL_ENV === "preview") {
+    const relay = await verify(state || undefined, "oauth-preview");
+    const target = typeof relay?.origin === "string" && URL.canParse(relay.origin)
+      ? new URL(relay.origin) : null;
+    if (!target || target.protocol !== "https:" || target.origin !== relay?.origin)
+      return fail("Sign-in request expired or could not be verified.", 400);
+    if (origin !== target.origin) {
+      if (origin !== new URL(callbackURL()).origin)
+        return fail("Invalid preview callback origin", 400);
+      // The PKCE verifier stays in the initiating host's HTTP-only cookie.
+      target.pathname = "/auth/github/callback";
+      for (const key of ["state", "code", "error"]) {
+        const value = request.nextUrl.searchParams.get(key);
+        if (value !== null) target.searchParams.set(key, value);
+      }
+      const response = NextResponse.redirect(target);
+      response.headers.set("Cache-Control", "no-store");
+      return response;
+    }
+  }
+  const flow = await verify(request.cookies.get(FLOW_COOKIE)?.value, "oauth");
   if (
     !flow ||
     typeof flow.state !== "string" ||
@@ -76,7 +99,7 @@ export async function GET(request: NextRequest) {
     const response = NextResponse.redirect(
       new URL(
         safeNext(typeof flow.next === "string" ? flow.next : "/"),
-        callbackURL(),
+        origin,
       ),
     );
     setCookie(response, FLOW_COOKIE, "", 0);

@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
 import {
   apiKeyError,
+  appOrigin,
   authConfigured,
   COOKIE,
+  FLOW_COOKIE,
   equal,
   pkce,
   safeNext,
@@ -14,6 +16,9 @@ import {
   verify,
 } from "../lib/auth";
 import { proxy } from "../proxy";
+import { GET as login } from "../app/login/route";
+import { GET as callback } from "../app/auth/github/callback/route";
+import { POST as logout } from "../app/logout/route";
 test("API requires configuration and accepts both constant-time key headers", () => {
   const original = process.env.BUG_BOARD_API_KEY;
   try {
@@ -170,6 +175,63 @@ test("Heroku review apps fail closed even when OAuth was not configured", async 
   } finally {
     for (const [name, value] of Object.entries(old))
       if (value === undefined) delete process.env[name]; else process.env[name] = value;
+  }
+});
+test("preview callback relays only signed origins and exchanges codes with the initiating cookie", async () => {
+  const values = { VERCEL_ENV: "preview", VERCEL_URL: "unique-preview.vercel.app", VERCEL_BRANCH_URL: "branch-preview.vercel.app", APP_URL: "https://preview.example", GITHUB_OAUTH_CALLBACK_URL: "https://preview.example/auth/github/callback", GITHUB_OAUTH_CLIENT_ID: "test-client", GITHUB_OAUTH_CLIENT_SECRET: "test-secret", AUTH_SECRET: "a".repeat(40), GITHUB_OAUTH_ORG: "ApollosProject" };
+  const old = Object.fromEntries(Object.keys(values).map(key => [key, process.env[key]]));
+  const oldFetch = globalThis.fetch;
+  try {
+    Object.assign(process.env, values);
+    const origin = "https://unique-preview.vercel.app";
+    const start = await login(new NextRequest(`${origin}/login?next=/team?days=7`));
+    const auth = new URL(start.headers.get("location")!);
+    const state = auth.searchParams.get("state")!;
+    assert.equal((await verify(state, "oauth-preview"))?.origin, origin);
+    assert.equal(auth.searchParams.get("redirect_uri"), values.GITHUB_OAUTH_CALLBACK_URL);
+    const cookie = start.cookies.get(FLOW_COOKIE)!;
+    const flow = (await verify(cookie.value, "oauth"))!;
+    assert.equal(auth.searchParams.get("code_challenge"), pkce(flow.verifier as string));
+    assert.equal(start.cookies.get(FLOW_COOKIE)?.domain, undefined);
+    assert.equal(start.cookies.get(FLOW_COOKIE)?.secure, true);
+    let calls = 0;
+    globalThis.fetch = async (input, init) => {
+      calls++;
+      const url = String(input);
+      if (url.endsWith("/access_token")) {
+        const body = JSON.parse(String(init?.body));
+        assert.equal(body.code_verifier, flow.verifier);
+        assert.equal(body.redirect_uri, values.GITHUB_OAUTH_CALLBACK_URL);
+        return Response.json({ access_token: "fixture-token" });
+      }
+      if (url.endsWith("/user")) return Response.json({ login: "fixture-user", id: 42 });
+      if (url.includes("/memberships/")) return Response.json({ state: "active" });
+      throw new Error(`Unexpected fetch ${url}`);
+    };
+    const broker = await callback(new NextRequest(`${values.GITHUB_OAUTH_CALLBACK_URL}?code=fixture-code&state=${state}`));
+    const destination = broker.headers.get("location")!;
+    assert.equal(new URL(destination).origin, origin);
+    assert.equal(broker.cookies.get(COOKIE), undefined);
+    assert.equal(broker.headers.get("cache-control"), "no-store");
+    assert.equal(calls, 0);
+    assert.equal((await callback(new NextRequest(destination))).status, 400);
+    const finish = await callback(new NextRequest(destination, { headers: { Cookie: `${FLOW_COOKIE}=${cookie.value}` } }));
+    assert.equal(finish.headers.get("location"), `${origin}/team?days=7`);
+    assert.equal((await session(finish.cookies.get(COOKIE)?.value))?.userId, 42);
+    assert.equal(calls, 3);
+    for (const bad of [state + "tampered", await sign({ origin }, -1, "oauth-preview"), await sign({ origin }, 60, "dashboard"), await sign({ origin: "https://evil.example/path" }, 60, "oauth-preview")])
+      assert.equal((await callback(new NextRequest(`${values.GITHUB_OAUTH_CALLBACK_URL}?code=fixture-code&state=${bad}`))).status, 400);
+    assert.equal((await login(new NextRequest("https://evil.example/login"))).status, 400);
+    assert.equal(appOrigin(new Request("https://branch-preview.vercel.app/team")), "https://branch-preview.vercel.app");
+    assert.equal(sameOrigin(new Request(`${origin}/logout`, { headers: { Origin: "https://evil.example" } })), false);
+    assert.equal((await logout(new NextRequest(`${origin}/logout`, { headers: { Origin: origin } }))).headers.get("location"), `${origin}/signin`);
+    process.env.VERCEL_ENV = "production";
+    assert.equal(appOrigin(new Request(`${origin}/team`)), values.APP_URL);
+    assert.equal(await verify(new URL((await login(new NextRequest(`${origin}/login`))).headers.get("location")!).searchParams.get("state")!, "oauth-preview"), null);
+  } finally {
+    globalThis.fetch = oldFetch;
+    for (const [key, value] of Object.entries(old))
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
   }
 });
 test("return URLs reject open redirects and PKCE uses SHA256", () => {
