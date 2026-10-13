@@ -65,12 +65,58 @@ test("mobile navigation stays usable", async ({ app, browser, screen }) => {
   await expect(
     screen.getByRole("heading", "Reviews", { exact: true }),
   ).toBeVisible();
-  expect(
-    await browser.evaluate(
-      () => document.documentElement.scrollWidth <= window.innerWidth,
-    ),
-  ).toBe(true);
   await app.screenshot("mobile-reviews");
+  for (const width of [320, 390]) {
+    await browser.setViewport({ width, height: 844 });
+    await app.open("/");
+    // CI is signed out; exercise the account's shared CSS without bypassing auth.
+    expect(await browser.evaluate(() => {
+      const form = document.createElement("form");
+      const button = document.createElement("button");
+      button.type = "submit";
+      button.className = "account";
+      button.textContent = "@example-engineering-long-github-username · log\u00a0out";
+      form.append(button);
+      document.querySelector(".site-header nav")!.append(form);
+      return document.documentElement.scrollWidth <= innerWidth;
+    })).toBe(true);
+    for (const path of ["/", "/team", "/team/zach", "/reviews", "/apps", "/projects", "/dags", "/churches", "/churches/example", "/missing-page"]) {
+      await app.open(path);
+      await expect(screen.getByRole("heading", { level: 1 })).toBeVisible();
+      expect(
+        await browser.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+      ).toBe(true);
+    }
+  }
+});
+test("sign-in card has room around its action on phones and desktop", async ({
+  app,
+  browser,
+  screen,
+}) => {
+  for (const width of [320, 390, 1280]) {
+    await browser.setViewport({ width, height: 844 });
+    await app.open("/signin?next=%2Freviews");
+    await expect(screen.getByRole("link", "Sign in with GitHub")).toHaveAttribute(
+      "href", "/login?next=%2Freviews",
+    );
+    const layout = await browser.evaluate(() => {
+      const card = document.querySelector<HTMLElement>(".auth-card")!;
+      const action = card.querySelector("a")!.getBoundingClientRect();
+      const note = card.querySelector("p:last-child")!.getBoundingClientRect();
+      return {
+        padding: parseFloat(getComputedStyle(card).paddingLeft),
+        gap: note.top - action.bottom,
+        contained: document.documentElement.scrollWidth <= window.innerWidth,
+      };
+    });
+    expect(layout.padding).toBeGreaterThanOrEqual(20);
+    expect(layout.gap).toBeGreaterThanOrEqual(12);
+    expect(layout.contained).toBe(true);
+    await app.screenshot(`signin-${width}`);
+  }
 });
 test("health is public, API and cron remain closed without authentication", async ({
   app,

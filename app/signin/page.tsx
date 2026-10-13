@@ -14,11 +14,13 @@ export default async function SignIn({
     <article className="auth-card">
       <h1>Sign in</h1>
       <p>Sign in with GitHub to open Bug Board.</p>
-      {/* A plain link: prefetching /login would end the current session. */}
-      <a className="button" href={`/login?next=${encodeURIComponent(next)}`}>
-        Sign in with GitHub
-      </a>
-      <p>Active {org()} organization membership required.</p>
+      <p>
+        {/* A plain link: prefetching /login would end the current session. */}
+        <a className="button" href={`/login?next=${encodeURIComponent(next)}`}>
+          Sign in with GitHub
+        </a>
+      </p>
+      <p className="muted">Active {org()} organization membership required.</p>
     </article>
   );
 }

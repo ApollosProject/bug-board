@@ -150,7 +150,9 @@ td small,
   background: var(--surface);
   font-weight: 600;
 }
-.account {
+.site-header .account {
+  white-space: normal;
+  overflow-wrap: anywhere;
   padding: 0.3rem 0.6rem;
   border: 1px solid var(--pico-muted-border-color);
   background: transparent;
@@ -207,6 +209,7 @@ main {
 }
 .page-heading {
   margin-bottom: 1.5rem;
+  overflow-wrap: anywhere;
 }
 .page-heading h1 {
   margin: 0.35rem 0 0.35rem;
@@ -263,7 +266,7 @@ article p:last-child {
 }
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
   gap: 0.75rem;
 }
 .cards article {
@@ -497,9 +500,14 @@ details > summary {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  overflow-wrap: anywhere;
 }
 details > summary::after {
+  flex: none;
   margin-left: auto;
+}
+details > summary .badge {
+  flex: none;
 }
 /* Status badges lead with a dot in their status color. */
 .badge:is(.low, .high, .priority-1, .priority-2)::before {
@@ -556,7 +564,10 @@ details > summary::after {
 }
 /* A fixed badge column keeps titles aligned whatever the priority label. */
 .issue-list .badge {
-  flex: 0 0 5rem;
+  flex: 0 0 6rem;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
   text-align: center;
 }
 .issue-list a {
@@ -609,7 +620,7 @@ details[open] summary {
 }
 .facts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
   gap: 0.75rem 1.5rem;
   margin: 0;
 }
@@ -839,14 +850,22 @@ footer div {
 }
 .auth-card {
   max-width: 500px;
-  margin: 4rem auto;
+  margin: clamp(1rem, 5vw, 4rem) auto;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
 }
 .button {
-  display: inline-block;
-  padding: 0.6rem 1rem;
+  display: block;
+  padding: 0.75rem 1rem;
   background: var(--pico-primary-background);
   color: white;
   border-radius: var(--pico-border-radius);
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+}
+.button:hover {
+  background: var(--pico-primary-hover-background);
+  color: white;
 }
 @media (max-width: 760px) {
   .site-header nav {
@@ -882,27 +901,28 @@ footer div {
   .window-controls small {
     margin-left: 0;
   }
-  .cards {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  /* With an odd number of cards, the first spans the row so none sits alone. */
-  .cards > :first-child:nth-last-child(odd) {
-    grid-column: 1 / -1;
-  }
   .cards article {
     padding: 0.85rem;
   }
   .metric-value {
     font-size: 1.4rem;
   }
-  .filter-form label {
-    flex: 1;
-    min-width: 130px;
+  .filter-form label:not(.checkbox) {
+    flex: 1 1 12rem;
+    min-width: 0;
   }
   .issue-list li {
-    gap: 0.6rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.3rem 0.6rem;
+  }
+  .issue-list li:has(> .badge) {
+    grid-template-columns: 6rem minmax(0, 1fr);
+  }
+  .issue-list li:has(> .badge) > :last-child:not(div) {
+    grid-column: 2;
   }
   .issue-list .badge {
-    flex-basis: 4.25rem;
+    align-self: start;
   }
 }
