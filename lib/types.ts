@@ -37,6 +37,7 @@ export type Issue = {
     nodes: { metadata: { url?: string; status?: string; linkKind?: string } }[];
   };
   stageDurations?: { state: IssueState; seconds: number }[] | null;
+  stageEnteredAt?: string | null;
   history?: {
     edges: { node: {
       toAssignee: Identity | null;

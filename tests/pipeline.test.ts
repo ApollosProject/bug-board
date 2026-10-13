@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  approvalAge, duration, durationStats, firstReviewSeconds, issueStageTimes,
+  approvalAge, compactOpenIssues, duration, durationStats, firstReviewSeconds, issueStageTimes,
   mergeBlocker, stageSummary, teamIssue, teamPR,
 } from "../lib/pipeline";
 import { humanReview, prCounts } from "../lib/github";
@@ -76,6 +76,15 @@ test("current age uses latest status entry, not issue updates or total prior vis
   assert.equal(timing.age, day / 2);
   assert.equal(timing.totals.get("dev")?.seconds, 2.5 * day);
   assert.equal(issueStageTimes(issue({ history: { edges: [] } }), now)?.age, 7 * day);
+});
+test("compact open snapshots discard timelines but keep a clock that ages after caching", () => {
+  const work = issue({ history: { edges: [transition(todo, dev, "2026-09-02T00:00:00Z")] } });
+  const [compact] = compactOpenIssues([work]);
+  assert.equal(compact.history, undefined);
+  assert.equal(compact.stageEnteredAt, "2026-09-02T00:00:00.000Z");
+  assert.equal(stageSummary([], [compact], now).rows[0].oldest[0].seconds, 6 * day);
+  assert.equal(stageSummary([], [compact], now + day * 1000).rows[0].oldest[0].seconds, 7 * day);
+  assert.equal(compactOpenIssues([issue()])[0].stageEnteredAt, null);
 });
 test("reopened work does not count its previous completed interval as active work", () => {
   const work = issue({ state: done, completedAt: "2026-09-07T00:00:00Z", history: { edges: [

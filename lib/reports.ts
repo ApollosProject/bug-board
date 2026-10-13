@@ -24,7 +24,7 @@ import { engineers, people, personName, slugFor, normalize } from "./config";
 import { DAY, inWindow, param, timeWindow } from "./window";
 import type { Issue, Project, PullRequest, Search, Window } from "./types";
 import { regressionDashboard } from "./regressions";
-import { issueStageTimes } from "./pipeline";
+import { compactOpenIssues, issueStageTimes } from "./pipeline";
 export type Report = {
   completed: Issue[];
   prs: PullRequest[];
@@ -98,7 +98,7 @@ export const openWork = cache(async () => {
       );
     return snapshot;
   }
-  return unstable_cache(openIssues, ["open-work-v2"], { revalidate: 60 })();
+  return unstable_cache(async () => compactOpenIssues(await openIssues()), ["open-work-v3"], { revalidate: 60 })();
 });
 export function sortedTeam(rows: TeamRow[], search: Search) {
   const everyone = param(search, "everyone") === "1";

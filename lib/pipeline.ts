@@ -46,7 +46,13 @@ export function issueStageTimes(issue: Issue, now = Date.now()) {
   }
   if (stateKey(state) !== stateKey(issue.state)) return null;
   add(end);
-  return { totals, age: (end - start) / 1000 };
+  return { totals, age: (end - start) / 1000, enteredAt: start };
+}
+export function compactOpenIssues(issues: Issue[]) {
+  return issues.map((issue) => {
+    const timing = issueStageTimes(issue);
+    return { ...issue, history: undefined, stageEnteredAt: timing ? new Date(timing.enteredAt).toISOString() : null };
+  });
 }
 
 export function durationStats(values: number[]) {
@@ -82,9 +88,11 @@ export function stageSummary(completed: Issue[], open: Issue[], now = Date.now()
     for (const { state, seconds } of visits.values()) stage(state).durations.push(seconds);
   }
   for (const issue of open) {
-    const timing = issueStageTimes(issue, now);
-    if (!timing) unknownOpen++;
-    stage(issue.state).items.push({ issue, seconds: timing?.age ?? null });
+    const entered = Date.parse(issue.stageEnteredAt || "");
+    const age = issue.stageEnteredAt === undefined ? issueStageTimes(issue, now)?.age ?? null :
+      Number.isFinite(entered) && entered <= now ? (now - entered) / 1000 : null;
+    if (age === null) unknownOpen++;
+    stage(issue.state).items.push({ issue, seconds: age });
   }
   const order = ["triage", "backlog", "unstarted", "started"];
   return {

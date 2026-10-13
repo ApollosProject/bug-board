@@ -10,6 +10,7 @@ import {
 import { openIssues } from "./linear";
 import { ptoCalendar } from "./pto";
 import { computeReport } from "./reports";
+import { compactOpenIssues } from "./pipeline";
 import type { Job } from "./types";
 import { timeWindow } from "./window";
 
@@ -25,7 +26,7 @@ export async function refreshSnapshot(
     await Promise.all([
       writeSnapshot("metrics", report, 900),
       writeSnapshot("projects", report.projects, 900),
-      writeSnapshot("open-issues", open, 900),
+      writeSnapshot("open-issues", compactOpenIssues(open), 900),
       writeSnapshot("pto", pto, 900),
     ]);
     return { people: report.rows.length, completed: report.completed.length };
