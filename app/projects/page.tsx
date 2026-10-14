@@ -1,16 +1,16 @@
 import { Suspense, type CSSProperties } from "react";
 import Link from "next/link";
 import { Heading, Loading, Unavailable } from "@/components/dashboard";
-import { engineers, personName, slugFor, normalize } from "@/lib/config";
+import { engineers, personName, slugFor, normalize, priorityLabels } from "@/lib/config";
 import { inactive, done, blocked } from "@/lib/metrics";
 import { projectDashboard } from "@/lib/reports";
 import { ptoCalendar } from "@/lib/pto";
 import { readSnapshot } from "@/lib/cache";
 import { DAY, date, timeWindow } from "@/lib/window";
 export const metadata = { title: "Projects" };
-// Linear's priority icons: signal bars for High/Medium/Low, a badge for Urgent, dashes for none.
+// Linear's priority icons: signal bars for High to Very Low, a badge for Urgent, dashes for none.
 function ProjectPriority({ label = "No priority" }: { label?: string }) {
-  const filled = { High: 3, Medium: 2, Low: 1 }[label];
+  const filled = { High: 3, Medium: 2, Low: 1, "Very Low": 0 }[label];
   return (
     <svg
       className="project-priority"
@@ -24,7 +24,7 @@ function ProjectPriority({ label = "No priority" }: { label?: string }) {
           fillRule="evenodd"
           d="M3 1h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2ZM7 3.5v6h2v-6ZM7 11v2h2v-2Z"
         />
-      ) : filled ? (
+      ) : filled !== undefined ? (
         [0, 1, 2].map((i) => (
           <rect
             key={i}
@@ -187,7 +187,7 @@ export async function Timeline() {
         </li>
       </ul>
       <ul className="legend" aria-label="Priority key">
-        {["Urgent", "High", "Medium", "Low", "No priority"].map((name) => (
+        {[...Object.values(priorityLabels).slice(1), priorityLabels[0]].map((name) => (
           <li key={name}>
             <ProjectPriority label={name} />
             {name}
