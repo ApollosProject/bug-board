@@ -260,7 +260,8 @@ export async function Timeline() {
                       title={bar.title}
                       style={style}
                     >
-                      <ProjectPriority label={bar.priorityLabel} /> {bar.name}
+                      <ProjectPriority label={bar.priorityLabel} />
+                      <span className="timeline-label">{bar.name}</span>
                     </a>
                   ) : (
                     <span
