@@ -36,6 +36,7 @@ test("timeline includes undated active ownership, preserves dated bounds, and ke
     project("start-only", { startDate: "2026-10-19" }),
     project("target-only", { targetDate: "2026-10-25" }),
     project("past", { startDate: "2026-09-01", targetDate: "2026-09-07", completedAt: "2026-09-07", status: { name: "Completed", type: "completed" } }),
+    project("very-low", { startDate: "2026-10-19", priorityLabel: "Very Low" }),
     project("future", { startDate: "2026-12-01", targetDate: "2026-12-07" }),
     project("canceled", { status: { name: "Canceled", type: "canceled" } }),
     project("undated-completed", { status: { name: "Completed", type: "completed" } }),
@@ -74,10 +75,16 @@ test("timeline includes undated active ownership, preserves dated bounds, and ke
     assert.ok(!html.includes(`https://linear.app/project/${id}`));
   }
   assert.match(anchor("unassigned"), /target="_blank" rel="noopener noreferrer"/);
-  for (const [id, label, symbol] of [["undated-lead", "High", "▴"], ["undated-member", "Low", "▾"], ["dated", "Medium", "="], ["unassigned", "Urgent", "!"], ["start-only", "No priority", "–"]]) {
+  for (const [id, label, filled] of [["undated-lead", "High", 3], ["undated-member", "Low", 1], ["dated", "Medium", 2], ["very-low", "Very Low", 0], ["start-only", "No priority", 0]] as const) {
     assert.match(anchor(id), new RegExp(`aria-label="Priority: ${label}"`));
-    assert.ok(anchor(id).includes(`<span aria-hidden="true">${symbol}</span>`));
+    assert.equal(anchor(id).match(/opacity="1"/g)?.length || 0, filled);
     assert.ok(!anchor(id).includes(`<small>${label}</small>`));
   }
+  assert.match(anchor("very-low"), /opacity="0.35"/);
+  assert.doesNotMatch(anchor("start-only"), /opacity="0.35"/);
+  assert.match(html, /aria-label="Priority key"[^]*Very Low[^]*No priority/);
+  assert.match(anchor("unassigned"), /aria-label="Priority: Urgent"[^]*fill-rule="evenodd"/);
+  assert.match(anchor("undated-lead"), /class="timeline-bar neutral lead"[^>]*title="undated-lead · Lead · /);
+  assert.doesNotMatch(anchor("undated-member"), / lead"|· Lead/);
   assert.ok(html.includes("No projects in this window"));
 });
