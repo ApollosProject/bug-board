@@ -163,7 +163,6 @@ export async function staleMessage() {
   const reviews = reviewReminders(await reviewQueue(true));
   const issues = (await openWork()).filter(
     (i) =>
-      !i.project &&
       daysSince(i.updatedAt) > 21 &&
       engineers.includes(
         slugFor(i.assignee?.name, i.assignee?.displayName) || "",
