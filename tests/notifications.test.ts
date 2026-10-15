@@ -85,6 +85,25 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
       assert.deepEqual(await notify("stale", "short"), { status: "already-claimed" });
       assert.equal(posts.length, 1);
     });
+    await t.test("stale issues include projects without changing age or assignee gates", async () => {
+      const project = { id: "project", name: "Backlog cleanup" };
+      issues = [
+        issue(2, "Standalone stale"),
+        { ...issue(3, "Project stale"), project },
+        { ...issue(4, "Project merged"), project, state: { name: "Merged", type: "started" } },
+        { ...issue(5, "Project parked"), project, state: { name: "Not Now", type: "backlog" } },
+        { ...issue(6, "Project recent"), project, updatedAt: new Date(Date.now() - 21 * 86_400_000).toISOString() },
+        { ...issue(7, "Project unassigned"), project, assignee: null },
+        { ...issue(8, "Project outside engineering"), project, assignee: { name: "vincent", displayName: "vincent" } },
+      ];
+      const message = (await staleMessage())!;
+      assert.match(message, /\*Stale Open Issues\*/);
+      assert.match(message, /<@U0BLNNPAB>:/);
+      for (const title of ["Standalone stale", "Project stale", "Project merged", "Project parked"])
+        assert.ok(message.includes(`|${title}>`), title);
+      for (const title of ["Project recent", "Project unassigned", "Project outside engineering"])
+        assert.ok(!message.includes(title), title);
+    });
     await t.test("large digests deliver every issue and the footer without breaking links", async () => {
       posts.length = 0;
       postedAt.length = 0;
