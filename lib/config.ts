@@ -12,6 +12,7 @@ export type Person = {
 type Config = {
   linear_team_key: string;
   github_orgs: string[];
+  automated_reviewers?: string[];
   people: Record<string, Person>;
   platforms: Record<string, { lead?: string; developers: string[] }>;
 };

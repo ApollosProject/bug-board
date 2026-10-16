@@ -32,10 +32,10 @@ const mention = (slug: string | undefined) =>
   slug && people[slug]?.slack_id
     ? `<@${people[slug].slack_id}>`
     : "No Assignee";
-function bugLine(issue: Issue) {
+function bugLine(issue: Issue, reviewers: string[]) {
   const platform = platformFor(issue),
     assignee = slugFor(issue.assignee?.name, issue.assignee?.displayName);
-  return `- ${issue.priority === 1 ? "🚨 " : ""}${link(issue.url, issue.title)} (${slaText(issue) || `+${daysSince(issue.createdAt)}d`}${platform ? `, ${platform}` : ""}${assignee ? `, ${mention(assignee)}` : ""})`;
+  return `- ${issue.priority === 1 ? "🚨 " : ""}${link(issue.url, issue.title)} (${slaText(issue) || `+${daysSince(issue.createdAt)}d`}${platform ? `, ${platform}` : ""}${assignee ? `, ${mention(assignee)}` : ""}${reviewers.length ? `, Review requested: ${reviewers.map(mention).join(", ")}` : ""})`;
 }
 export async function priorityMessage() {
   const bugs = (await openWork()).filter(
@@ -50,6 +50,13 @@ export async function priorityMessage() {
         i.slaBreachesAt,
       ].some(Boolean),
   );
+  const waiting = new Map<string, Set<string>>();
+  if (bugs.length) {
+    for (const { issue, slug } of waitingReviews(await reviewQueue(true))) {
+      if (!waiting.has(issue.id)) waiting.set(issue.id, new Set());
+      waiting.get(issue.id)!.add(slug);
+    }
+  }
   const unassigned = bugs.filter((b) => !b.assignee),
     overdue = bugs.filter(
       (b) => Date.parse(b.slaBreachesAt || "") <= Date.now(),
@@ -70,7 +77,7 @@ export async function priorityMessage() {
         `*${title}*\n\n${items
           .slice()
           .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-          .map(bugLine)
+          .map((issue) => bugLine(issue, [...(waiting.get(issue.id) || [])]))
           .join("\n")}`,
     );
   if (unassigned.length) {
@@ -95,11 +102,12 @@ export async function priorityMessage() {
     : null;
 }
 // The old review reminder's gates, with Urgent/High Linear priority replacing its 200-line cap.
-export function reviewReminders(rows: ReviewRow[], now = Date.now()) {
-  const waiting = new Map<string, { pr: PullRequest; days: number }[]>();
+function waitingReviews(rows: ReviewRow[], now = Date.now()) {
+  const waiting: { pr: PullRequest; issue: Issue; slug: string; days: number }[] = [];
   for (const { pr, issue } of rows) {
     if (
-      ![1, 2].includes(issue?.priority || 0) ||
+      !issue ||
+      ![1, 2].includes(issue.priority) ||
       !pr.baseRefName ||
       pr.baseRefName !== pr.repository.defaultBranchRef?.name ||
       pr.mergeable === "CONFLICTING" ||
@@ -137,15 +145,16 @@ export function reviewReminders(rows: ReviewRow[], now = Date.now()) {
         (s) => people[s].github_username.toLowerCase() === login,
       );
       if (latest?.state === "APPROVED" || !slug) continue;
-      waiting
-        .set(slug, waiting.get(slug) || [])
-        .get(slug)!
-        .push({ pr, days: Math.floor((now - requestedAt) / DAY) });
+      waiting.push({ pr, issue, slug, days: Math.floor((now - requestedAt) / DAY) });
     }
   }
+  return waiting;
+}
+export function reviewReminders(rows: ReviewRow[], now = Date.now()) {
+  const waiting = waitingReviews(rows, now);
   const sections = engineers.flatMap((slug) => {
-    const prs = waiting.get(slug);
-    return prs
+    const prs = waiting.filter((review) => review.slug === slug);
+    return prs.length
       ? [
           `${mention(slug)}:\n${prs
             .sort((a, b) => b.days - a.days)

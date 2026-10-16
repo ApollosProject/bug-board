@@ -3,6 +3,9 @@ linear_team_key: APO
 github_orgs:
   - apollosproject
   - differential
+# GitHub user accounts that post AI reviews; they count as automated feedback, not human review.
+automated_reviewers:
+  - mary-pr-poppins
 people:
   michael:
     team: engineering

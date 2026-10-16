@@ -14,6 +14,8 @@ const fields = `id identifier number title url priority createdAt updatedAt comp
  slaType slaStartedAt slaMediumRiskAt slaHighRiskAt slaBreachesAt
  assignee { name displayName } project { id name } state { id name type }
  labels(first: 100) { nodes { name } } attachments(first: 100) { nodes { metadata } }`;
+const shippedFields = `id customerTicketCount needs(first: 1) { nodes { id } }
+ releases(first: 5) { nodes { completedAt pipeline { isProduction } } }`;
 const openTypes = ["triage", "backlog", "unstarted", "started"];
 const historyFields = `edges { node { toAssignee { displayName } updatedAt createdAt
  fromState { id name type } toState { id name type } } } pageInfo { hasNextPage endCursor }`;
@@ -75,9 +77,10 @@ export async function fetchIssues(
   filter: object,
   history = false,
   historyScope = "completed",
+  select = fields,
 ): Promise<Issue[]> {
   const query = `query Issues($filter: IssueFilter, $cursor: String) { issues(first: 250, after: $cursor, filter: $filter) {
-    nodes { ${fields} }
+    nodes { ${select} }
     pageInfo { hasNextPage endCursor }
   } }`;
   const issues: Issue[] = [];
@@ -107,16 +110,34 @@ const team = { team: { key: { eq: config.linear_team_key } } };
 export const openIssues = cache(() =>
   fetchIssues({ ...team, state: { type: { in: openTypes } } }, true, "open"),
 );
-export const completedIssues = cache((after: string, before: string) =>
-  fetchIssues(
-    {
-      ...team,
-      state: { type: { eq: "completed" } },
-      completedAt: { gte: after, lt: before },
-    },
-    true,
-  ),
-);
+const completedFilter = (after: string, before: string) => ({
+  ...team,
+  state: { type: { eq: "completed" } },
+  completedAt: { gte: after, lt: before },
+});
+// Release and customer fields roughly double page time, so a lean parallel query loads them
+// and Redis keeps them for 15 minutes; issues completed since then show no release yet.
+async function shippedDetails(after: string, before: string) {
+  const name = `linear-shipped:${after.slice(0, 10)}:${before.slice(0, 10)}`;
+  const saved = await readSnapshot<Issue[]>(name, 900);
+  if (saved) return saved;
+  const details = await fetchIssues(completedFilter(after, before), false, "completed", shippedFields);
+  if (redis()) await writeSnapshot(name, details, 900).catch(() =>
+    console.warn("Linear release cache write unavailable"),
+  );
+  return details;
+}
+export const completedIssues = cache(async (after: string, before: string) => {
+  const [issues, details] = await Promise.all([
+    fetchIssues(completedFilter(after, before), true),
+    shippedDetails(after, before).catch(() => {
+      console.warn("Linear release and customer details unavailable");
+      return [];
+    }),
+  ]);
+  const byId = new Map(details.map((detail) => [detail.id, detail]));
+  return issues.map((issue) => ({ ...issue, ...byId.get(issue.id) }));
+});
 export const completed = (w: Window) => completedIssues(w.after, w.before);
 export async function issuesByNumber(numbers: number[]) {
   const issues: Issue[] = [];
