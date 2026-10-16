@@ -315,7 +315,8 @@ if (process.argv.includes("start")) {
     const results = await Promise.all(["fleet", "metrics"].map((job) =>
       realFetch(`${origin}/api/cron/${job}`, { headers: { Authorization: "Bearer fixture" } })
         .then((r) => r.ok, () => false)));
-    setTimeout(refresh, results.every(Boolean) ? 60_000 : 2_000).unref();
+    // Retry fast until the server listens: only /dags waits on these snapshots, and the explorer opens / first.
+    setTimeout(refresh, results.every(Boolean) ? 60_000 : 250).unref();
   };
   refresh();
 }
