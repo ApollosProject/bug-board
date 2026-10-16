@@ -673,7 +673,7 @@ test("reports use Redis beyond Next's size limit and retain compact stage totals
   }
 });
 
-test("merged PR delivery timing is fetched once in small batches, cached, and failures stay unknown", async (t) => {
+test("merged PR delivery timing is fetched once in bounded batches, cached, and stops at the first failure", async (t) => {
   const names = ["GITHUB_TOKEN", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "KV_REST_API_URL", "KV_REST_API_TOKEN"];
   const env = Object.fromEntries(names.map((name) => [name, process.env[name]]));
   const original = globalThis.fetch, records = new Map<string, string>(), batches: string[][] = [];
@@ -702,16 +702,21 @@ test("merged PR delivery timing is fetched once in small batches, cached, and fa
       const commits = { nodes: [] };
       return Response.json({ data: { nodes: body.variables.ids.map(() => ({ reviews: { nodes: [] }, opened: commits, head: commits })) } });
     };
-    const prs = Array.from({ length: 12 }, (_, i) => pr(`pr-${i}`));
+    // A refresh fills at most 50 PRs, so cold caches never burst GitHub's compute limit.
+    const prs = Array.from({ length: 62 }, (_, i) => pr(`pr-${i}`));
     await completeDelivery(prs);
-    assert.deepEqual(batches.map((ids) => ids.length), [10, 2]);
-    assert.ok(prs.every((item) => item.delivery));
-    const again = [...Array.from({ length: 12 }, (_, i) => pr(`pr-${i}`)), pr("new")];
+    assert.deepEqual(batches.map((ids) => ids.length), [10, 10, 10, 10, 10]);
+    assert.equal(prs.filter((item) => item.delivery).length, 50);
+    await completeDelivery(prs);
+    assert.deepEqual(batches.slice(5).map((ids) => ids.length), [10, 2]);
+    // The first failure stops the refresh; cached PRs keep their timing.
+    const again = [...prs.map((item) => pr(item.id)), pr("new"), ...Array.from({ length: 15 }, (_, i) => pr(`more-${i}`))];
     fail = true;
+    const before = batches.length;
     await completeDelivery(again);
-    assert.deepEqual(batches.at(-1), ["new"]);
-    assert.ok(again.slice(0, 12).every((item) => item.delivery));
-    assert.equal(again[12].delivery, undefined);
+    assert.equal(batches.length, before + 1);
+    assert.ok(again.slice(0, 62).every((item) => item.delivery));
+    assert.ok(again.slice(62).every((item) => item.delivery === undefined));
   } finally {
     globalThis.fetch = original;
     for (const [name, value] of Object.entries(env))

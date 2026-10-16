@@ -190,7 +190,7 @@ export type DeliveryNode = {
 };
 const runFields = "checkRuns(first: 50) { nodes { startedAt completedAt conclusion } pageInfo { hasNextPage } }";
 // GitHub Actions' app ID: Codecov, Vercel, and other apps report on their own schedules.
-const suiteFields = `checkSuites(first: 30, filterBy: { appId: 15368 }) { nodes { createdAt ${runFields} } pageInfo { hasNextPage } }`;
+const suiteFields = `checkSuites(first: 15, filterBy: { appId: 15368 }) { nodes { createdAt ${runFields} } pageInfo { hasNextPage } }`;
 const deliveryFields = `reviews(first: 50) { nodes { author { login __typename } state submittedAt } }
  opened: commits(first: 1) { nodes { commit { ${suiteFields} } } }
  head: commits(last: 1) { nodes { commit { ${suiteFields} } } }`;
@@ -236,10 +236,10 @@ export async function completeDelivery(prs: PullRequest[]) {
     pr.delivery = saved[pr.id]?.delivery;
     return !pr.delivery;
   });
-  // A cold fill spans a few refreshes: bursts trip GitHub's secondary limit and fail the PR search too.
-  const batches: PullRequest[][] = [];
-  for (let i = 0; i < Math.min(missing.length, 200); i += 10) batches.push(missing.slice(i, i + 10));
-  await mapConcurrent(batches, 2, async (batch) => {
+  // Check-run history costs ~0.35s of GitHub compute per PR, and GraphQL allows ~60s per minute
+  // shared with the PR search, so a cold fill spans many refreshes, one batch at a time.
+  for (let i = 0; i < Math.min(missing.length, 50); i += 10) {
+    const batch = missing.slice(i, i + 10);
     try {
       const { nodes } = await github<{ nodes: (DeliveryNode | null)[] }>(
         `query Delivery($ids: [ID!]!) { nodes(ids: $ids) { ... on PullRequest { ${deliveryFields} } } }`,
@@ -250,11 +250,12 @@ export async function completeDelivery(prs: PullRequest[]) {
         pr.delivery = deliveryFacts(pr, nodes[i]);
         saved[pr.id] = { mergedAt: pr.mergedAt || "", delivery: pr.delivery };
       });
-    } catch {
-      // Delivery timing is supplementary: leave it unknown rather than fail team metrics.
-      console.warn("PR delivery timing unavailable");
+    } catch (error) {
+      // Delivery timing is supplementary: leave the rest unknown rather than fail team metrics.
+      console.warn("PR delivery timing unavailable:", (error as Error).message);
+      break;
     }
-  });
+  }
   if (missing.length && redis()) {
     // shortcut: keeps 120 days of PRs to bound the record; longer custom windows refetch older PRs.
     for (const [id, value] of Object.entries(saved))
