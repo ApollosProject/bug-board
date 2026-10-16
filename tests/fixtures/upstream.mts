@@ -137,16 +137,18 @@ for (let i = 0; i < 20; i++) {
 
 const repos = ["apollosproject/apollos-platforms", "apollosproject/apollos-admin"];
 const review = (who: number, state: string, at: string) => ({ author: { login: login(who), __typename: "User" }, state, submittedAt: at });
+// Authors and approvers skew in opposite directions so every sort order visibly differs.
+const authors = [0, 0, 0, 0, 1, 1, 1, 2, 2, 3], approvers = [3, 3, 3, 2, 2, 3, 2, 0, 1, 0];
 const merged = Array.from({ length: 50 }, (_, i) => {
   const mergedAt = now - (0.3 + i * 1.7) * DAY, createdAt = mergedAt - (0.5 + (i % 4)) * DAY;
   return {
     id: `pr-merged-${i}`, number: 1000 + i, url: `https://github.com/${repos[i % 2]}/pull/${1000 + i}`,
     createdAt: iso(createdAt), mergedAt: iso(mergedAt),
-    author: { login: i % 9 === 8 ? "dependabot[bot]" : login(i) },
+    author: { login: i % 9 === 8 ? "dependabot[bot]" : login(authors[i % 10]) },
     readiness: page([]),
-    reviews: page([review(i + 1, "APPROVED", iso(mergedAt - 2 * 3600_000))]),
-    firstReviews: page([review(i + 2, i % 3 ? "COMMENTED" : "APPROVED", iso(createdAt + ((i % 6) + 1) * 3600_000))]),
-    commits: page([{ commit: { author: { user: { login: login(i) } }, authors: page([]) } }]),
+    reviews: page([review(approvers[i % 10], "APPROVED", iso(mergedAt - 2 * 3600_000))]),
+    firstReviews: page([review(approvers[i % 10], i % 3 ? "COMMENTED" : "APPROVED", iso(createdAt + ((i % 6) + 1) * 3600_000))]),
+    commits: page([{ commit: { author: { user: { login: login(authors[i % 10]) } }, authors: page([]) } }]),
   };
 });
 const openPRs = [

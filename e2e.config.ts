@@ -12,7 +12,7 @@ const agent = {
   context:
     "Bug Board is a read-only engineering dashboard. Navigate and filter only. Never click deploy, confirm deployment, sign in, or log out. Missing integration credentials must show unavailable, not fabricated zero metrics." +
     (process.env.E2E_FIXTURES === "1"
-      ? " This build serves fake fixture people, issues, PRs, projects, PTO, and DAGs. Apps, churches, and regression cards have no fixture and correctly show unavailable or refreshing. Fixture Linear and GitHub links point at fake URLs that do not open."
+      ? " This build serves fake fixture people, issues, PRs, projects, PTO, and DAGs. Apps, churches, and regression cards have no fixture and correctly show unavailable or refreshing. Linear and GitHub links point at fake URLs: do not follow or report external linear.app or github.com links."
       : ""),
 };
 export default {
