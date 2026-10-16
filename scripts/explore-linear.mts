@@ -59,7 +59,15 @@ async function upload(file: string) {
 
 const known = await knownTitles();
 if (mode === "known") {
-  console.log([...known].join("; ") || "none");
+  // shortcut: only the newest 100 titles within 12 KB, to stay under e2e's 16 KB agent context;
+  // an older canceled finding can be refiled. Upgrade when the label passes ~100 issues.
+  let list = "";
+  for (const title of known) {
+    const next = list ? `${list}; ${title}` : title;
+    if (Buffer.byteLength(next) > 12_000) break;
+    list = next;
+  }
+  console.log(list);
   process.exit(0);
 }
 if (mode !== "preview" && mode !== "file") throw new Error("Usage: explore-linear.mts known|preview|file");

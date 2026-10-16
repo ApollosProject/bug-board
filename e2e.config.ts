@@ -52,7 +52,13 @@ export default {
   agents: {
     default: agent,
     // Explore steps need a larger per-step budget than test steps.
-    explore: { ...agent, maxSteps: 40, maxModelCalls: 40 },
+    explore: {
+      ...agent,
+      maxSteps: 40,
+      maxModelCalls: 40,
+      // Earlier Linear findings: the goal is capped at 2,000 characters, the context at 16 KB.
+      context: `${agent.context}${process.env.E2E_KNOWN_FINDINGS ? ` Already filed, do not report again: ${process.env.E2E_KNOWN_FINDINGS}.` : ""}`,
+    },
   },
   workers: 2,
   retries: 0,
