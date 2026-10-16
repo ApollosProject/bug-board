@@ -1,0 +1,65 @@
+name: Nightly explore
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/explore.yml
+      - e2e.config.ts
+      - scripts/explore-linear.mts
+      - tests/fixtures/**
+permissions:
+  contents: read
+concurrency:
+  group: explore-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  explore:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # Only main files issues; pull-request code never sees the write-capable key.
+      LINEAR_API_KEY: ${{ github.ref == 'refs/heads/main' && secrets.LINEAR_API_KEY || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Install Chromium
+        timeout-minutes: 10
+        run: |
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          npx playwright-core install --with-deps chromium
+      - name: Explore fixture data
+        env:
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          E2E_FIXTURES: "1"
+        run: |
+          # Earlier findings, open or closed, so the explorer does not report them again.
+          # Within the run, e2e passes each step the findings so far.
+          E2E_KNOWN_FINDINGS=$(npx tsx scripts/explore-linear.mts known)
+          export E2E_KNOWN_FINDINGS
+          code=0
+          npx e2e explore "Explore /team (window presets, a custom date range, sorting, the engineering/everyone cohort, and each person page), /reviews (author, reviewer, and approved filters with back, reload, and reset), / and /projects (priority bugs, open work, timeline bars, out-of-office blocks, ready projects), and /dags (search and run-state filters); check every count, name, and control against the other pages and the URL." \
+            --agent explore --max-steps 12 --timeout 900000 --output .e2e/explore/nightly < /dev/null || code=$?
+          # 1 means findings; 2+ is a config, environment, or runner failure.
+          [ "$code" -le 1 ]
+      - name: File new findings in Linear
+        if: ${{ !cancelled() }}
+        run: |
+          echo "### Explore findings" >> "$GITHUB_STEP_SUMMARY"
+          npx tsx scripts/explore-linear.mts ${{ github.ref == 'refs/heads/main' && 'file' || 'preview' }} | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: explore-proof
+          path: .e2e/
+          include-hidden-files: true
+          retention-days: 14

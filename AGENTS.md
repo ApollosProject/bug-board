@@ -18,7 +18,7 @@ Use Node 24.8+; `npm ci`, `npm run check`, `npm test`, `npm run build`.
 Then `npx playwright-core install chromium` and `npx e2e run tests/dashboard.e2e.ts --no-cache`.
 Full `npx e2e run --no-cache` requires `AI_GATEWAY_API_KEY`; don't silently replace the provider or skip failed AI steps.
 Local no-secrets pages must render unavailable states, not fabricate successful or zero activity.
-Proof artifacts, .e2e/, .next/, local Workflow state, service doubles, and credentials must not enter Git.
+Proof artifacts, .e2e/, .next/, local Workflow state, ad hoc service doubles, and credentials must not enter Git. The committed fake-data double is `tests/fixtures/`; keep it public-safe and extend it rather than adding another.
 
 ## Conventions
 

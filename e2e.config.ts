@@ -5,6 +5,16 @@ import { gateway } from "ai";
 import nextEnv from "@next/env";
 nextEnv.loadEnvConfig(process.cwd());
 const url = process.env.E2E_BASE_URL || "http://127.0.0.1:3000";
+const agent = {
+  model: gateway(process.env.E2E_MODEL || "openai/gpt-6-luna"),
+  maxSteps: 15,
+  maxModelCalls: 20,
+  context:
+    "Bug Board is a read-only engineering dashboard. Navigate and filter only. Never click deploy, confirm deployment, sign in, or log out. Missing integration credentials must show unavailable, not fabricated zero metrics." +
+    (process.env.E2E_FIXTURES === "1"
+      ? " This build serves fake fixture people, issues, PRs, projects, PTO, and DAGs. Apps, churches, and regression cards have no fixture and correctly show unavailable or refreshing. Linear and GitHub links point at fake URLs: do not follow or report external linear.app or github.com links."
+      : ""),
+};
 export default {
   tests: [
     "tests/dashboard.e2e.ts",
@@ -25,7 +35,7 @@ export default {
                 executable: "npm",
                 args: [
                   "run",
-                  "start",
+                  process.env.E2E_FIXTURES === "1" ? "start:fixtures" : "start",
                   "--",
                   "--hostname",
                   "127.0.0.1",
@@ -40,12 +50,14 @@ export default {
     },
   ],
   agents: {
-    default: {
-      model: gateway(process.env.E2E_MODEL || "openai/gpt-6-luna"),
-      maxSteps: 15,
-      maxModelCalls: 20,
-      context:
-        "Bug Board is a read-only engineering dashboard. Navigate and filter only. Never click deploy, confirm deployment, sign in, or log out. Missing integration credentials must show unavailable, not fabricated zero metrics.",
+    default: agent,
+    // Explore steps need a larger per-step budget than test steps.
+    explore: {
+      ...agent,
+      maxSteps: 40,
+      maxModelCalls: 40,
+      // Earlier Linear findings: the goal is capped at 2,000 characters, the context at 16 KB.
+      context: `${agent.context}${process.env.E2E_KNOWN_FINDINGS ? ` Already filed, do not report again: ${process.env.E2E_KNOWN_FINDINGS}.` : ""}`,
     },
   },
   workers: 2,
