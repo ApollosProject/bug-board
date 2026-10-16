@@ -10,6 +10,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/reviews",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/apps",
       "schedule": "*/3 * * * *"
     },

@@ -1,6 +1,7 @@
 export const refreshJobs = [
   "fleet",
   "metrics",
+  "reviews",
   "apps",
   "regressions",
   "notifications",
@@ -96,6 +97,7 @@ export type PullRequest = {
   readiness?: { nodes: { __typename: string; createdAt: string }[] };
   firstReviews?: Connection<Review>;
   firstHumanReviewAt?: string | null;
+  decisionReviewsComplete?: boolean;
   delivery?: Delivery;
   updatedAt?: string;
   timelineCount?: { totalCount: number };

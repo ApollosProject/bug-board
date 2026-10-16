@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { GET, maxDuration } from "../app/api/cron/[job]/route";
 import { evaluateFleet, fleetHeartbeat, fleetInventory } from "../lib/fleet";
+import { cachedReviewQueue, reviewRows } from "../lib/reviews";
+import type { PullRequest } from "../lib/types";
 
 const request = (job: string, authorization = "Bearer fixture-cron") =>
   GET(new Request(`http://localhost/api/cron/${job}`, { headers: { authorization } }), {
@@ -17,9 +19,86 @@ test("Cron validates job and bearer secret before any integration work", async (
     assert.equal((await request("unknown")).status, 404);
     process.env.CRON_SECRET = "fixture-cron";
     assert.equal((await request("fleet", "Bearer wrong")).status, 401);
+    assert.equal((await request("reviews", "Bearer wrong")).status, 401);
   } finally {
     if (secret === undefined) delete process.env.CRON_SECRET;
     else process.env.CRON_SECRET = secret;
+  }
+});
+
+test("review Cron publishes one complete snapshot for all queue variants; page reads do no integration work", async (t) => {
+  const env = { CRON_SECRET: "fixture-cron", GITHUB_TOKEN: "fixture-key",
+    LINEAR_API_KEY: "fixture-linear", UPSTASH_REDIS_REST_URL: "http://redis.local",
+    UPSTASH_REDIS_REST_TOKEN: "fixture-redis", VERCEL_ENV: "production" };
+  const previous = Object.fromEntries(Object.keys(env).map((k) => [k, process.env[k]]));
+  const records = new Map<string, string>();
+  let clock = Date.parse("2026-10-15T00:00:00Z"), integrationCalls = 0, fail = false;
+  t.mock.method(Date, "now", () => clock);
+  const pr = (id: string, reviewDecision: string): PullRequest => ({
+    id, number: Number(id), title: `PR ${id}`, url: `https://github.com/apollosproject/apollos-platforms/pull/${id}`,
+    createdAt: "2026-10-10T00:00:00Z", updatedAt: "2026-10-11T00:00:00Z",
+    author: { login: "solideo-gloria" }, readiness: { nodes: [] },
+    baseRefName: "main", headRefName: "fix", additions: 1, deletions: 0,
+    mergeable: "MERGEABLE", reviewDecision, statusCheckRollup: null,
+    repository: { nameWithOwner: "apollosproject/apollos-platforms", defaultBranchRef: { name: "main" } },
+    reviewRequests: { nodes: [] }, reviews: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } },
+    timelineItems: { nodes: [] }, timelineCount: { totalCount: 0 },
+  });
+  const prs = [pr("1", "REVIEW_REQUIRED"), pr("2", "APPROVED")];
+  t.mock.method(globalThis, "fetch", async (url: unknown, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body));
+    if (String(url).startsWith(env.UPSTASH_REDIS_REST_URL)) {
+      const command = ([op, key, ...args]: string[]) => {
+        if (op === "get") return records.get(key) ?? null;
+        if (op === "set") {
+          if (args.includes("nx") && records.has(key)) return null;
+          records.set(key, args[0]); return "OK";
+        }
+        if (op === "eval" && records.get(args[1]) === args[2]) return Number(records.delete(args[1]));
+        throw new Error(`Unexpected Redis operation: ${op}`);
+      };
+      return Response.json(Array.isArray(body[0])
+        ? body.map((c: string[]) => ({ result: command(c) })) : { result: command(body) });
+    }
+    integrationCalls++;
+    if (fail) return new Response("unavailable", { status: 502 });
+    if (String(url).includes("api.github.com")) {
+      if (body.query.includes("query Timeline")) return Response.json({ data: { node: { timelineItems: {
+        nodes: [], pageInfo: { hasPreviousPage: false, startCursor: null },
+      } } } });
+      assert.ok(!body.variables.query.includes("-review:approved"));
+      return Response.json({ data: { search: { issueCount: prs.length,
+        nodes: body.variables.query.includes("repo:apollosproject/apollos-platforms ") ? prs : [],
+        pageInfo: { hasNextPage: false, endCursor: null } } } });
+    }
+    return Response.json({ data: { issues: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } } });
+  });
+  try {
+    Object.assign(process.env, env);
+    assert.equal((await request("reviews")).status, 200);
+    assert.ok(integrationCalls > 0);
+    const before = integrationCalls;
+    assert.equal((await cachedReviewQueue(true)).length, 2);
+    assert.deepEqual((await cachedReviewQueue(false)).map((row) => row.pr.id), ["1"]);
+    assert.deepEqual((await cachedReviewQueue("only")).map((row) => row.pr.id), ["2"]);
+    const age = (await cachedReviewQueue(false))[0].seconds;
+    clock += 60000;
+    assert.equal((await cachedReviewQueue(false))[0].seconds, age + 60);
+    assert.equal(integrationCalls, before);
+    const key = [...records.keys()].find((key) => key.endsWith(":reviews"))!;
+    const published = records.get(key);
+    fail = true;
+    assert.equal((await request("reviews")).status, 503);
+    assert.equal(records.get(key), published, "Failed refresh must not overwrite a complete snapshot");
+    clock += 181000;
+    const after = integrationCalls;
+    await assert.rejects(cachedReviewQueue(true), /Review queue is refreshing/);
+    assert.equal(integrationCalls, after, "Missing production snapshots must not start request-time polling");
+    records.set(key, JSON.stringify({ at: clock, data: reviewRows([], new Map()) }));
+    assert.deepEqual(await cachedReviewQueue(true), []);
+  } finally {
+    for (const [key, value] of Object.entries(previous))
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
   }
 });
 

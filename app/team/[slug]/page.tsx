@@ -80,6 +80,10 @@ async function Metrics({ slug, window }: { slug: string; window: Window }) {
               )}
             </small>
             <strong className="metric-value">{metric.display}</strong>
+            {key === "avg_all_time_to_fix" && <small>Assignment → completion · known assignment histories only</small>}
+            {key === "avg_review_decision_time" && (
+              <small>{data.review_decision_samples} reviewed PRs · ready → first approval or changes requested</small>
+            )}
             {metric.vs_team && (
               <span
                 className={`badge ${metric.vs_team.tone || ""}`}

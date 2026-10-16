@@ -304,7 +304,7 @@ globalThis.fetch = async (input, init = {}) => {
   throw new TypeError(`fixture: blocked request to ${url.hostname}${url.pathname}`);
 };
 
-// Stand in for Vercel Cron: fleet and the 30-day metrics snapshot expire after 180 seconds.
+// Stand in for Vercel Cron: fleet, metrics, and review snapshots expire after 180 seconds.
 if (process.argv.includes("start")) {
   const arg = (names: string[], fallback: string) => {
     const i = process.argv.findIndex((a) => names.includes(a));
@@ -312,7 +312,7 @@ if (process.argv.includes("start")) {
   };
   const origin = `http://${arg(["--hostname", "-H"], "127.0.0.1")}:${arg(["--port", "-p"], process.env.PORT || "3000")}`;
   const refresh = async () => {
-    const results = await Promise.all(["fleet", "metrics"].map((job) =>
+    const results = await Promise.all(["fleet", "metrics", "reviews"].map((job) =>
       realFetch(`${origin}/api/cron/${job}`, { headers: { Authorization: "Bearer fixture" } })
         .then((r) => r.ok, () => false)));
     // Retry fast until the server listens: only /dags waits on these snapshots, and the explorer opens / first.

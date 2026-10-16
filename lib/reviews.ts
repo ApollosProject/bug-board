@@ -2,6 +2,7 @@ import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { config, people } from "./config";
 import { openPRs } from "./github";
+import { readSnapshot } from "./cache";
 import { issuesByNumber, issuesLinkedTo } from "./linear";
 import type { Issue, PullRequest } from "./types";
 export function ticketNumber(pr: Pick<PullRequest, "headRefName" | "title">) {
@@ -149,9 +150,24 @@ export function reviewRows(
             b.seconds - a.seconds),
     );
 }
-export const cachedReviewQueue = cache((approved: boolean | "only") => unstable_cache(
-  () => reviewQueue(approved), ["reviews-v1", String(approved)], { revalidate: 60 },
-)());
+const currentReviewQueue = cache(async () => {
+  const snapshot = await readSnapshot<ReviewRow[]>("reviews", 180);
+  if (snapshot) {
+    // Recalculate ages from event timestamps rather than freezing the displayed wait.
+    return reviewRows(snapshot.map((row) => row.pr), new Map(
+      snapshot.flatMap(({ pr, issue }) => issue ? [[pr.url, issue] as const] : []),
+    ));
+  }
+  if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== "preview")
+    throw new Error("Review queue is refreshing. Configure Cron and Upstash Redis.");
+  return unstable_cache(() => reviewQueue(true),
+    ["reviews-v2", process.env.VERCEL_URL || "local"], { revalidate: 60 })();
+});
+export const cachedReviewQueue = cache(async (approved: boolean | "only") => {
+  const rows = await currentReviewQueue();
+  return rows.filter((row) => approved === "only" ? row.section === "approved" :
+    approved || row.section !== "approved");
+});
 export async function reviewQueue(approved: boolean | "only") {
   const prs = await openPRs(approved);
   const [byNumber, linked] = await Promise.all([

@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { notify, priorityMessage, reviewReminders, staleMessage } from "../lib/notifications";
 import { reviewRows } from "../lib/reviews";
 import type { Issue, PullRequest } from "../lib/types";
+import type { Report } from "../lib/reports";
+import { timeWindow } from "../lib/window";
 
 const issue = (index: number, title = `Stale issue ${index}`): Issue => ({
   id: String(index),
@@ -67,6 +69,7 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
   const claimedAt: number[] = [];
   let issues: Issue[] = [];
   let prs: PullRequest[] = [];
+  let report: Report | null = null;
   let failure: "rejected" | "ambiguous" | undefined;
   let failAt = 0;
   t.mock.method(globalThis, "fetch", async (url: unknown, init?: RequestInit) => {
@@ -102,6 +105,7 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
       const records = key.includes(":notification:") ? claims : snapshots;
       if (op === "get") return key.endsWith(":open-issues")
         ? JSON.stringify({ at: Date.now(), data: issues })
+        : key.endsWith(":metrics") ? report && JSON.stringify({ at: Date.now(), data: report })
         : records.get(key) ?? null;
       if (op === "set") {
         if (records.has(key)) return null;
@@ -144,11 +148,37 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
       ];
       const message = (await staleMessage())!;
       assert.match(message, /\*Stale Open Issues\*/);
-      assert.match(message, /<@U0BLNNPAB>:/);
+      assert.match(message, /<@U0BLNNPAB> \(avg completion: n\/a, last 30d\):/);
       for (const title of ["Standalone stale", "Project stale", "Project merged", "Project parked"])
         assert.ok(message.includes(`|${title}>`), title);
       for (const title of ["Project recent", "Project unassigned", "Project outside engineering"])
         assert.ok(!message.includes(title), title);
+    });
+    await t.test("person headings reuse the metrics snapshot for both 30-day averages", async () => {
+      const work = issue(9);
+      const reviewed = row(9, 2).pr;
+      report = { window: timeWindow({ days: "30" }), rows: [], projects: [],
+        completed: [{ ...work, completedAt: "2026-01-05T00:00:00Z",
+          history: { edges: [{ node: { toAssignee: work.assignee, updatedAt: "2026-01-02T00:00:00Z" } }] } }],
+        prs: [{ ...reviewed, author: { login: "other-author" }, readiness: { nodes: [] },
+          decisionReviewsComplete: true, mergedAt: "2026-10-03T00:00:00Z", reviews: {
+            nodes: [{ author: { login: "redreceipt" }, state: "CHANGES_REQUESTED", submittedAt: "2026-10-01T06:00:00Z" }],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          } }],
+      };
+      issues = [{ ...work, priority: 2 }];
+      prs = [{ ...reviewed, timelineItems: { nodes: [{
+        __typename: "ReviewRequestedEvent", createdAt: new Date(Date.now() - 3 * 86400000).toISOString(),
+        requestedReviewer: { login: "redreceipt" },
+      }] } }];
+      const message = (await staleMessage())!;
+      assert.ok(message.includes("<@U01865757S9> (avg review decision: 6.0h, last 30d):"));
+      assert.ok(message.includes("<@U0BLNNPAB> (avg completion: 3d, last 30d):"));
+      report = null;
+      const unavailable = (await staleMessage())!;
+      assert.ok(unavailable.includes("(avg review decision: n/a, last 30d)"));
+      assert.ok(unavailable.includes("(avg completion: n/a, last 30d)"));
+      prs = [];
     });
     await t.test("priority bugs label and mention only reviewers eligible for PR reminders", async () => {
       const old = new Date(Date.now() - 3 * 86_400_000).toISOString();
@@ -285,7 +315,7 @@ test("review reminders keep the old gates with Urgent/High priority instead of s
   assert.equal(message, [
     "*PRs - Checks Passing, Waiting for Review (+24h, Urgent/High priority)*",
     "",
-    "<@U01865757S9>:",
+    "<@U01865757S9> (avg review decision: n/a, last 30d):",
     "- <https://github.com/apollosproject/apollos-platforms/pull/1|PR 1> (+3d)",
     "- <https://github.com/apollosproject/apollos-platforms/pull/2|High &lt;one&gt;> (+3d)",
     "- <https://github.com/apollosproject/apollos-platforms/pull/9|PR 9> (+3d)",

@@ -11,12 +11,18 @@ import { openIssues } from "./linear";
 import { ptoCalendar } from "./pto";
 import { computeReport } from "./reports";
 import { compactOpenIssues } from "./pipeline";
+import { reviewQueue } from "./reviews";
 import type { Job } from "./types";
 import { timeWindow } from "./window";
 
 export async function refreshSnapshot(
   job: Exclude<Job, "regressions" | "notifications">,
 ) {
+  if (job === "reviews") {
+    const rows = await reviewQueue(true);
+    await writeSnapshot("reviews", rows, 900);
+    return { prs: rows.length };
+  }
   if (job === "metrics") {
     const [report, open, pto] = await Promise.all([
       computeReport(timeWindow({ days: "30" })),
