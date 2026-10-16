@@ -72,7 +72,6 @@ for (const dir of fs.existsSync(root) ? fs.readdirSync(root) : []) {
   const artifacts: Artifact[] = result.results.flatMap((r: { attempts: { artifacts: Artifact[] }[] }) => r.attempts.flatMap((a) => a.artifacts));
   for (const finding of (result.explore?.findings || []) as Finding[]) {
     if (finding.kind !== "issue" || known.has(finding.title)) continue;
-    known.add(finding.title);
     if (!target) {
       console.log(`- Would file: ${finding.title}`);
       continue;
@@ -80,7 +79,7 @@ for (const dir of fs.existsSync(root) ? fs.readdirSync(root) : []) {
     const shot = artifacts.find((a) => a.id === finding.artifactId);
     const image = shot && (await upload(path.join(root, dir, "results", shot.path)));
     const description = [
-      `Unverified: reported by the nightly \`e2e explore\` run (charter \`${dir}\`) against fake fixture data at ${process.env.GITHUB_SHA || "a local build"}. Confirm it reproduces before fixing; raise the priority if it matters, or cancel it as a false positive (canceled titles are not reported again).`,
+      `Unverified: reported by the nightly \`e2e explore\` run against fake fixture data at ${process.env.GITHUB_SHA || "a local build"}. Confirm it reproduces before fixing; raise the priority if it matters, or cancel it as a false positive (canceled titles are not reported again).`,
       `**Path:** \`${finding.path || "unknown"}\` · **Severity:** ${finding.severity}/5 · [Run, trace, and video](${run})`,
       `**Expected:** ${finding.expected}`,
       `**Actual:** ${finding.actual}`,

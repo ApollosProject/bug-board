@@ -42,23 +42,13 @@ jobs:
           E2E_FIXTURES: "1"
         run: |
           # Earlier findings, open or closed, so the explorer does not report them again.
+          # Within the run, e2e passes each step the findings so far.
           known=$(npx tsx scripts/explore-linear.mts known)
-          status=0
-          while IFS='|' read -r slug charter; do
-            code=0
-            npx e2e explore "$charter Report each root cause once. Already filed, do not report again: $known." \
-              --agent explore --max-steps 6 --output ".e2e/explore/$slug" < /dev/null || code=$?
-            # 1 means findings; 2+ is a config, environment, or runner failure.
-            [ "$code" -le 1 ] || status=$code
-            # Later charters skip what earlier ones already reported tonight.
-            known="$known; $(jq -r '[.run.explore.findings[]? | select(.kind == "issue") | .title] | join("; ")' ".e2e/explore/$slug/report.json" 2>/dev/null || true)"
-          done <<'CHARTERS'
-          team|Starting at /team, switch the window presets, a custom date range, sorting, and the engineering/everyone cohort, then open each person; check every count, duration, and name against the other tables, the person pages, and the URL.
-          reviews|Starting at /reviews, apply, combine, and reset the author, reviewer, and approved filters, using back and reload after each; check that each PR sits in the right section for its CI, conflicts, stacking, and review state, and that controls and URL agree.
-          home-projects|Starting at /, check the priority bugs and open assigned work, then at /projects check the timeline bars, out-of-office blocks, ready projects, and long names against each other; report overlap, overflow, and dead links.
-          dags|Starting at /dags, search and filter by every run state; check the fleet health, counts, and ratios against the table, and that controls and URL agree.
-          CHARTERS
-          exit "$status"
+          code=0
+          npx e2e explore "Explore /team (window presets, a custom date range, sorting, the engineering/everyone cohort, and each person page), /reviews (author, reviewer, and approved filters with back, reload, and reset), / and /projects (priority bugs, open work, timeline bars, out-of-office blocks, ready projects), and /dags (search and run-state filters); check every count, name, and control against the other pages and the URL. Already filed, do not report again: $known." \
+            --agent explore --max-steps 12 --timeout 900000 --output .e2e/explore/nightly < /dev/null || code=$?
+          # 1 means findings; 2+ is a config, environment, or runner failure.
+          [ "$code" -le 1 ]
       - name: File new findings in Linear
         if: ${{ !cancelled() }}
         run: |
