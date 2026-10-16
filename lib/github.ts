@@ -65,7 +65,7 @@ async function completeReviews(pr: PullRequest, opinionated: boolean) {
   let page = pr.reviews;
   while (page.pageInfo?.hasNextPage) {
     const data = await github<{ node: { reviews: Connection<Review> } }>(
-      `query Reviews($id: ID!, $cursor: String) { node(id: $id) { ... on PullRequest { reviews: ${opinionated ? "latestOpinionatedReviews" : "reviews"}(first: 100, after: $cursor${opinionated ? "" : ", states: [APPROVED]"}) { ${reviewFields} } } } }`,
+      `query Reviews($id: ID!, $cursor: String) { node(id: $id) { ... on PullRequest { reviews: ${opinionated ? "latestOpinionatedReviews" : "reviews"}(first: 100, after: $cursor${opinionated ? "" : ", states: [APPROVED, CHANGES_REQUESTED]"}) { ${reviewFields} } } } }`,
       { id: pr.id, cursor: page.pageInfo.endCursor },
     );
     if (
@@ -83,7 +83,7 @@ const mergedFields = `id url createdAt mergedAt author { login }
  readiness: timelineItems(first: 1, itemTypes: [READY_FOR_REVIEW_EVENT, CONVERT_TO_DRAFT_EVENT]) {
    nodes { __typename ... on ReadyForReviewEvent { createdAt } ... on ConvertToDraftEvent { createdAt } }
  }
- reviews(first: 10, states: [APPROVED]) { ${reviewFields} }
+ reviews(first: 10, states: [APPROVED, CHANGES_REQUESTED]) { ${reviewFields} }
  firstReviews: reviews(first: 5, states: [APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED]) { ${reviewFields} }
  commits(first: 1) { nodes { commit { author { user { login } } authors(first: 10) { nodes { user { login } } } } } }`;
 export function reviewReadyAt(pr: PullRequest) {
@@ -128,7 +128,7 @@ export const mergedPRs = cache(async (after: string, before: string) => {
   const snapshots: [string, PullRequest[]][] = [];
   async function range(start: number, end: number): Promise<PullRequest[]> {
     const historical = end < Date.parse(date(Date.now())),
-      name = `merged-prs-v3:${config.github_orgs.join(",")}:${date(start)}:${date(end)}`;
+      name = `merged-prs-v4:${config.github_orgs.join(",")}:${date(start)}:${date(end)}`;
     const snapshot = historical
       ? await readSnapshot<PullRequest[]>(name, 3600)
       : null;
@@ -161,6 +161,7 @@ export const mergedPRs = cache(async (after: string, before: string) => {
   ).flat();
   await mapConcurrent(prs, 4, async (pr) => {
     await completeReviews(pr, false);
+    pr.decisionReviewsComplete = true;
     await completeFirstReview(pr);
   });
   await Promise.all(snapshots.map(([name, data]) =>
@@ -278,6 +279,21 @@ export function creditedAuthors(pr: PullRequest) {
         .filter((name): name is string => !!name && name !== "cursoragent"),
     ),
   ];
+}
+// One sample per merged PR: ready → this reviewer's first approval or changes requested.
+export function reviewDecisionSeconds(prs: PullRequest[], username: string) {
+  const login = username.toLowerCase();
+  return prs.flatMap((pr) => {
+    if (!pr.decisionReviewsComplete || !pr.readiness) return [];
+    const ready = Date.parse(reviewReadyAt(pr)), merged = Date.parse(pr.mergedAt || ""), created = Date.parse(pr.createdAt);
+    if (![ready, merged, created].every(Number.isFinite) || ready < created || ready > merged) return [];
+    const first = Math.min(...pr.reviews.nodes
+      .filter((review) => review.author?.login?.toLowerCase() === login && humanReview(review, pr) &&
+        ["APPROVED", "CHANGES_REQUESTED"].includes(review.state))
+      .map((review) => Date.parse(review.submittedAt || ""))
+      .filter((at) => at >= ready && at <= merged));
+    return Number.isFinite(first) ? [(first - ready) / 1000] : [];
+  });
 }
 export function prCounts(prs: PullRequest[], username: string) {
   const login = username.toLowerCase();

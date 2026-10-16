@@ -1,3 +1,4 @@
+import { cache } from "react";
 import fs from "node:fs";
 import path from "node:path";
 import YAML from "yaml";
@@ -433,6 +434,6 @@ export async function summarizeRegressions(
     reviewer_metrics,
   };
 }
-export const regressionDashboard = () =>
-  readSnapshot<RegressionSummary>("regressions", 86400);
+export const regressionDashboard = cache(() =>
+  readSnapshot<RegressionSummary>("regressions", 86400));
 export const regressionWindow = () => timeWindow({ days: "30" });

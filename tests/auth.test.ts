@@ -120,7 +120,7 @@ test("OAuth fails closed, protects unknown APIs and resources, and separates coo
           .get("x-middleware-rewrite")
           ?.includes("/signin"),
       );
-    for (const path of ["/api/team/zach", "/api/cron/metrics", "/healthz"])
+    for (const path of ["/api/team/zach", "/api/cron/metrics", "/api/cron/reviews", "/healthz"])
       assert.equal(
         (
           await proxy(new NextRequest(`http://localhost:3000${path}`))

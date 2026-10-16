@@ -9,10 +9,11 @@ import {
 } from "./config";
 import { DAY, inWindow } from "./window";
 import type { Issue, Project, PullRequest, Window } from "./types";
-import { prCounts } from "./github";
+import { prCounts, reviewDecisionSeconds } from "./github";
 export const metricLabels = {
   prs_merged: "PRs Merged",
   prs_reviewed: "PRs Approved",
+  avg_review_decision_time: "Avg Review Decision Time",
   priority_bugs_fixed: "Priority Bugs Fixed",
   priority_bug_avg_time_to_fix: "Priority Bug Time to Fix",
   all_work_done: "All Work Done",
@@ -25,6 +26,7 @@ export const metricLabels = {
 export type MetricKey = keyof typeof metricLabels;
 export type Metrics = Record<MetricKey, number | null>;
 const lowerBetter = new Set<MetricKey>([
+  "avg_review_decision_time",
   "priority_bug_avg_time_to_fix",
   "avg_all_time_to_fix",
   "lead_incomplete_projects",
@@ -116,6 +118,7 @@ export function personMetrics(
   window: Window,
 ): Metrics {
   const person = people[slug];
+  const reviewTime = average(reviewDecisionSeconds(prs, person.github_username));
   const items = issues.filter(
     (issue) =>
       slugFor(issue.assignee?.displayName, issue.assignee?.name) === slug,
@@ -140,6 +143,7 @@ export function personMetrics(
     .filter((n): n is number => n !== null && Number.isFinite(n));
   return {
     ...prCounts(prs, person.github_username),
+    avg_review_decision_time: reviewTime === null ? null : reviewTime / 86400,
     priority_bugs_fixed: bugs.length,
     priority_bug_avg_time_to_fix: bugTimes.length
       ? Math.trunc(average(bugTimes)!)
@@ -209,6 +213,8 @@ export function comparisons(metrics: Metrics, cohort: Metrics[]) {
 }
 export function metricDisplay(key: MetricKey, value: number | null) {
   if (value === null) return "n/a";
+  if (key === "avg_review_decision_time")
+    return value < 1 ? `${(value * 24).toFixed(1)}h` : `${value.toFixed(1)}d`;
   if (key === "lead_completed_projects_avg_early_late")
     return value === 0
       ? "on time"

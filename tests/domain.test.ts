@@ -18,7 +18,8 @@ import {
   teamRows,
 } from "../lib/metrics";
 import { classify, linkIssues, reviewRows, ticketNumber } from "../lib/reviews";
-import { creditedAuthors } from "../lib/github";
+import { creditedAuthors, reviewDecisionSeconds } from "../lib/github";
+import { metricDisplay } from "../lib/metrics";
 import { fleetStats } from "../lib/fleet";
 import { churchActivity, matchChurches, type Church } from "../lib/churches";
 import {
@@ -357,6 +358,48 @@ test("person metrics count approval once per PR and never invent missing assignm
   assert.equal(metrics.prs_reviewed, 1);
   assert.equal(metrics.priority_bug_avg_time_to_fix, null);
   assert.equal(metrics.lead_completed_projects, 1);
+});
+test("review decision averages use each reviewer's first decision per merged PR, not approval alone", () => {
+  const review = (login: string, state: string, submittedAt: string, __typename = "User") =>
+    ({ author: { login, __typename }, state, submittedAt });
+  const work = pr({
+    author: { login: "other-author" }, readiness: { nodes: [
+      { __typename: "ReadyForReviewEvent", createdAt: "2026-09-02T00:00:00Z" },
+    ] }, mergedAt: "2026-09-05T00:00:00Z", decisionReviewsComplete: true,
+    reviews: { pageInfo, nodes: [
+      review("SOLIDEO-GLORIA", "APPROVED", "2026-09-04T00:00:00Z"),
+      review("solideo-gloria", "CHANGES_REQUESTED", "2026-09-02T12:00:00Z"),
+      review("solideo-gloria", "COMMENTED", "2026-09-02T01:00:00Z"),
+      review("solideo-gloria", "DISMISSED", "2026-09-02T02:00:00Z"),
+      review("solideo-gloria", "PENDING", "2026-09-02T03:00:00Z"),
+      review("solideo-gloria", "APPROVED", "2026-09-01T01:00:00Z"),
+      review("solideo-gloria", "APPROVED", "2026-09-06T00:00:00Z"),
+      review("solideo-gloria", "APPROVED", "invalid"),
+      review("bot", "APPROVED", "2026-09-02T00:30:00Z", "Bot"),
+      review("mary-pr-poppins", "APPROVED", "2026-09-02T00:30:00Z"),
+      review("other-author", "APPROVED", "2026-09-02T00:30:00Z"),
+    ] },
+  });
+  const times = reviewDecisionSeconds([work], "Solideo-Gloria");
+  assert.deepEqual(times, [12 * 3600]);
+  for (const login of ["bot", "mary-pr-poppins", "other-author", "absent"])
+    assert.deepEqual(reviewDecisionSeconds([work], login), []);
+  for (const overrides of [
+    { decisionReviewsComplete: undefined }, { readiness: undefined }, { createdAt: "invalid" },
+    { createdAt: "2026-09-03T00:00:00Z" }, { mergedAt: "invalid" },
+    { mergedAt: "2026-09-01T00:00:00Z" },
+  ]) assert.deepEqual(reviewDecisionSeconds([{ ...work, ...overrides }], "solideo-gloria"), []);
+  const second = { ...work, readiness: { nodes: [] }, reviews: { pageInfo, nodes: work.reviews.nodes.slice(0, 2) } };
+  const metrics = personMetrics("zach", [], [work, second], [], window);
+  assert.equal(metrics.avg_review_decision_time, 1);
+  assert.equal(metricDisplay("avg_review_decision_time", metrics.avg_review_decision_time), "1.0d");
+  assert.equal(metricDisplay("avg_review_decision_time", 0.5), "12.0h");
+  assert.equal(metricDisplay("avg_review_decision_time", 0), "0.0h");
+  assert.equal(metricDisplay("avg_review_decision_time", null), "n/a");
+  assert.equal(personMetrics("zach", [], [], [], window).avg_review_decision_time, null);
+  assert.deepEqual(reviewDecisionSeconds([{ ...work, reviews: { pageInfo, nodes: [
+    review("solideo-gloria", "CHANGES_REQUESTED", "2026-09-02T00:00:00Z"),
+  ] } }], "solideo-gloria"), [0]);
 });
 test("project contributors come from completed issues and exclude leads", () => {
   const rows = teamRows(

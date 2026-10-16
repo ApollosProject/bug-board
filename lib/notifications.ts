@@ -5,17 +5,20 @@ import {
   computeReport,
   projectDashboard,
   daysSince,
+  type Report,
 } from "./reports";
 import {
   comparisons,
   inactive,
   isPriorityBug,
   metricLabels,
+  metricDisplay,
   personMetrics,
   platformFor,
   slaText,
   supportSlugs,
   type MetricKey,
+  type Metrics,
 } from "./metrics";
 import { DAY, date, timeWindow } from "./window";
 import { claim, readSnapshot, release, snapshotOnce } from "./cache";
@@ -150,13 +153,13 @@ function waitingReviews(rows: ReviewRow[], now = Date.now()) {
   }
   return waiting;
 }
-export function reviewReminders(rows: ReviewRow[], now = Date.now()) {
+export function reviewReminders(rows: ReviewRow[], now = Date.now(), metrics: Record<string, Metrics> = {}) {
   const waiting = waitingReviews(rows, now);
   const sections = engineers.flatMap((slug) => {
     const prs = waiting.filter((review) => review.slug === slug);
     return prs.length
       ? [
-          `${mention(slug)}:\n${prs
+          `${mention(slug)} (avg review decision: ${metricDisplay("avg_review_decision_time", metrics[slug]?.avg_review_decision_time ?? null)}, last 30d):\n${prs
             .sort((a, b) => b.days - a.days)
             .map(({ pr, days }) => `- ${link(pr.url, pr.title)} (+${days}d)`)
             .join("\n")}`,
@@ -169,8 +172,14 @@ export function reviewReminders(rows: ReviewRow[], now = Date.now()) {
 }
 export async function staleMessage() {
   // GitHub's -review:approved search also drops PRs with one approval and another pending review.
-  const reviews = reviewReminders(await reviewQueue(true));
-  const issues = (await openWork()).filter(
+  const [queue, open, report] = await Promise.all([
+    reviewQueue(true), openWork(), readSnapshot<Report>("metrics", 180),
+  ]);
+  const metrics = report ? Object.fromEntries(engineers.map((slug) => [slug,
+    personMetrics(slug, report.completed, report.prs, report.projects, report.window),
+  ])) : {};
+  const reviews = reviewReminders(queue, Date.now(), metrics);
+  const issues = open.filter(
     (i) =>
       daysSince(i.updatedAt) > 21 &&
       engineers.includes(
@@ -184,7 +193,7 @@ export async function staleMessage() {
       );
       return owned.length
         ? [
-            `${mention(slug)}:\n${owned.map((i) => `- ${link(i.url, i.title)} (${daysSince(i.updatedAt)}d)`).join("\n")}`,
+            `${mention(slug)} (avg completion: ${metricDisplay("avg_all_time_to_fix", metrics[slug]?.avg_all_time_to_fix ?? null)}, last 30d):\n${owned.map((i) => `- ${link(i.url, i.title)} (${daysSince(i.updatedAt)}d)`).join("\n")}`,
           ]
         : [];
     })

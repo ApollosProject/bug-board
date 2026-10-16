@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fetchIssues, projects } from "../lib/linear";
-import { completeDelivery, mergedPRs, openPRs } from "../lib/github";
+import { completeDelivery, mergedPRs, openPRs, prCounts, reviewDecisionSeconds } from "../lib/github";
 import { blameFile } from "../lib/regressions";
 import {
   mapConcurrent,
@@ -297,7 +297,7 @@ test("GitHub partitions over-cap date searches and rejects a single overflowing 
           body.variables.query,
         )!;
       assert.match(body.query, /search\(type: ISSUE,.*first: 25,/);
-      assert.match(body.query, /reviews\(first: 10, states: \[APPROVED\]\)/);
+      assert.match(body.query, /reviews\(first: 10, states: \[APPROVED, CHANGES_REQUESTED\]\)/);
       ranges.push(range[0]);
       const overflow = range[1] !== range[2];
       return Response.json({
@@ -430,27 +430,33 @@ test("historical PR chunks cache complete approvals, expire, and keep today's ch
       if (value === undefined) delete process.env[name]; else process.env[name] = value;
   }
 });
-test("small merged-search review pages still retrieve every approval", async () => {
+test("merged-search decision pages paginate changes requested without inflating approval counts", async () => {
   const fetch = globalThis.fetch,
     token = process.env.GITHUB_TOKEN;
   process.env.GITHUB_TOKEN = "fixture-key";
   try {
     globalThis.fetch = async (_url, init) => {
       const body = JSON.parse(String(init?.body));
+      assert.match(body.query, /states: \[APPROVED, CHANGES_REQUESTED\]/);
       const reviews = {
-        nodes: [{ author: { login: body.variables.id ? "second" : "first" }, state: "APPROVED" }],
+        nodes: [{ author: { login: body.variables.id ? "second" : "first" },
+          state: body.variables.id ? "CHANGES_REQUESTED" : "APPROVED", submittedAt: "2026-08-01T06:00:00Z" }],
         pageInfo: pageInfo(!body.variables.id, body.variables.id ? "final" : "more"),
       };
       return Response.json({ data: body.variables.id
         ? { node: { reviews } }
         : { search: {
             issueCount: 1, pageInfo: pageInfo(),
-            nodes: [{ id: "pr", mergedAt: "2026-08-01T12:00:00Z", reviews }],
+            nodes: [{ id: "pr", createdAt: "2026-08-01T00:00:00Z", readiness: { nodes: [] },
+              mergedAt: "2026-08-01T12:00:00Z", reviews }],
           } },
       });
     };
     const [pr] = await mergedPRs("2026-08-01T00:00:00Z", "2026-08-02T00:00:00Z");
     assert.deepEqual(pr.reviews.nodes.map((r) => r.author?.login), ["first", "second"]);
+    assert.equal(pr.decisionReviewsComplete, true);
+    assert.deepEqual(reviewDecisionSeconds([pr], "second"), [6 * 3600]);
+    assert.equal(prCounts([pr], "second").prs_reviewed, 0);
   } finally {
     globalThis.fetch = fetch;
     if (token === undefined) delete process.env.GITHUB_TOKEN;
@@ -636,7 +642,7 @@ test("reports use Redis beyond Next's size limit and retain compact stage totals
     assert.deepEqual(first.completed[0].history?.edges, [assignment]);
     assert.deepEqual(await reportFor(window), first);
     assert.equal(calls, before);
-    assert.ok([...records].some(([key, value]) => key.includes("report-v3:") && value.length > 2097152));
+    assert.ok([...records].some(([key, value]) => key.includes("report-v4:") && value.length > 2097152));
     clock += 61000;
     await reportFor(window);
     assert.ok(calls > before);
@@ -657,8 +663,37 @@ test("reports use Redis beyond Next's size limit and retain compact stage totals
     assert.ok(calls > warmCalls);
     process.env.VERCEL_URL = "second-preview.vercel.app";
     await reportFor(defaultWindow);
-    assert.ok([...records.keys()].some((key) => key.includes(":preview:first-preview.vercel.app:") && key.includes("report-v3:")));
-    assert.ok([...records.keys()].some((key) => key.includes(":preview:second-preview.vercel.app:") && key.includes("report-v3:")));
+    assert.ok([...records.keys()].some((key) => key.includes(":preview:first-preview.vercel.app:") && key.includes("report-v4:")));
+    assert.ok([...records.keys()].some((key) => key.includes(":preview:second-preview.vercel.app:") && key.includes("report-v4:")));
+    // Short presets reuse the Cron snapshot, including project contributor scoring.
+    const { writeSnapshot } = await import("../lib/cache");
+    const anchor = Date.parse("2026-09-03T12:00:00Z");
+    const project = { id: "project", name: "Current project", url: "", lead: { displayName: "gerry" },
+      startDate: "2026-08-01", targetDate: "2026-10-01", status: { name: "Completed", type: "completed" },
+      completedAt: "2026-09-03T00:00:00Z", members: { nodes: [] }, initiatives: { nodes: [] } };
+    process.env.VERCEL_ENV = "production";
+    await writeSnapshot("metrics", { ...first, window: timeWindow({ days: "30" }, anchor),
+      completed: [
+        { ...issue, labels: { nodes: [{ name: "Bug" }] } },
+        { ...issue, id: "older", completedAt: "2026-08-20T00:00:00Z" },
+      ], prs: [
+        { id: "recent", mergedAt: "2026-09-03T00:00:00Z", author: { login: "solideo-gloria" }, reviews: { nodes: [] } },
+        { id: "old", mergedAt: "2026-08-20T00:00:00Z", author: { login: "solideo-gloria" }, reviews: { nodes: [] } },
+      ], projects: [project], members: { project: ["zach"] },
+    }, 900);
+    const beforePresets = calls;
+    for (const days of ["1", "7"]) {
+      const short = await reportFor(timeWindow({ days }));
+      assert.equal(short.completed.length, 1);
+      assert.equal(short.prs.length, 1);
+      assert.equal(short.window.before, new Date(anchor).toISOString());
+      const zach = short.rows.find((row) => row.slug === "zach")!;
+      assert.equal(zach.prs_merged, 1);
+      assert.equal(zach.high_issues, 1);
+      assert.equal(zach.project_contributor_weeks, 1);
+    }
+    assert.equal(calls, beforePresets, "Preset changes must not query GitHub or Linear");
+    records.delete([...records.keys()].find((key) => key.endsWith(":metrics"))!);
     // Production still requires fresh Cron snapshots and cannot read either preview's cache.
     process.env.VERCEL_ENV = "production";
     const beforeProduction = calls;

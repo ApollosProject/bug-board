@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { completed, contributors, openIssues, projects } from "./linear";
-import { completeDelivery, merged } from "./github";
+import { completeDelivery, merged, reviewDecisionSeconds } from "./github";
 import { readSnapshot, redis, writeSnapshot } from "./cache";
 import {
   comparisons,
@@ -31,6 +31,7 @@ export type Report = {
   projects: Project[];
   rows: TeamRow[];
   window: Window;
+  members?: Record<string, string[]>;
 };
 export async function computeReport(window: Window): Promise<Report> {
   const [issues, prs, projectList] = await Promise.all([
@@ -60,15 +61,24 @@ export async function computeReport(window: Window): Promise<Report> {
     prs,
     projects: projectList,
     rows: teamRows(issues, prs, projectList, members, window),
+    members: Object.fromEntries([...members].map(([id, names]) => [id, [...names]])),
     window,
   };
 }
 export const report = cache(async (query: string): Promise<Report> => {
   const search = Object.fromEntries(new URLSearchParams(query));
   const window = timeWindow(search);
-  if (window.preset_days === 30) {
+  if (window.preset_days !== null && window.preset_days <= 30) {
     const snapshot = await readSnapshot<Report>("metrics", 180);
-    if (snapshot) return snapshot;
+    if (snapshot && window.preset_days === 30) return snapshot;
+    if (snapshot?.members) {
+      const selected = timeWindow(search, Date.parse(snapshot.window.before));
+      const issues = snapshot.completed.filter((issue) => inWindow(issue.completedAt, selected));
+      const prs = snapshot.prs.filter((pr) => inWindow(pr.mergedAt, selected));
+      const members = new Map(Object.entries(snapshot.members).map(([id, names]) => [id, new Set(names)]));
+      return { ...snapshot, completed: issues, prs, window: selected,
+        rows: teamRows(issues, prs, snapshot.projects, members, selected) };
+    }
     if (process.env.VERCEL_ENV && process.env.VERCEL_ENV !== "preview")
       throw new Error(
         "Team metrics are refreshing. Configure Cron and Upstash Redis.",
@@ -77,7 +87,7 @@ export const report = cache(async (query: string): Promise<Report> => {
   const compute = () => computeReport(timeWindow(search, Math.floor(Date.now() / 60_000) * 60_000));
   // Full reports exceed Next's 2 MB cache limit on real team windows.
   if (redis()) {
-    const name = `report-v3:${query}`, saved = await readSnapshot<Report>(name, 60);
+    const name = `report-v4:${query}`, saved = await readSnapshot<Report>(name, 60);
     if (saved) return saved;
     const data = await compute();
     await writeSnapshot(name, data, 60).catch(() => console.warn("Report cache write unavailable"));
@@ -86,7 +96,7 @@ export const report = cache(async (query: string): Promise<Report> => {
   // Only integration data is cached. Session checks stay outside the data cache.
   return unstable_cache(
     compute,
-    ["report-v3", query],
+    ["report-v4", query],
     { revalidate: 60 },
   )();
 });
@@ -202,6 +212,7 @@ export async function personPayload(slug: string, window: Window) {
       preset_days: data.window.preset_days,
       label: data.window.label,
     },
+    review_decision_samples: reviewDecisionSeconds(data.prs, person.github_username).length,
     metrics: Object.fromEntries(
       (Object.keys(metricLabels) as MetricKey[]).map((key) => [
         key,
@@ -229,7 +240,7 @@ export async function personPayload(slug: string, window: Window) {
 }
 export const daysSince = (value: string, now = Date.now()) =>
   Math.max(0, Math.floor((now - Date.parse(value)) / DAY));
-export async function projectDashboard() {
+export const projectDashboard = cache(async () => {
   const snapshot = await readSnapshot<Project[]>("projects", 180);
   if (snapshot) return snapshot;
   if (process.env.VERCEL_ENV === "preview")
@@ -239,4 +250,4 @@ export async function projectDashboard() {
       "Projects are refreshing. Configure Cron and Upstash Redis.",
     );
   return projects();
-}
+});
