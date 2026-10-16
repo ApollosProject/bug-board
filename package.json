@@ -9,6 +9,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "start:fixtures": "node --import ./tests/fixtures/upstream.mts node_modules/next/dist/bin/next start",
     "check": "tsc --noEmit && eslint .",
     "test": "tsx --test tests/*.test.ts",
     "e2e": "e2e run"

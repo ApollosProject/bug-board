@@ -16,7 +16,8 @@ type Config = {
   platforms: Record<string, { lead?: string; developers: string[] }>;
 };
 export const config = YAML.parse(
-  fs.readFileSync(path.join(process.cwd(), "config.yml"), "utf8"),
+  // BUG_BOARD_CONFIG swaps in the public-safe fixture roster for local e2e runs.
+  fs.readFileSync(path.join(process.cwd(), process.env.BUG_BOARD_CONFIG || "config.yml"), "utf8"),
 ) as Config;
 export const people = config.people;
 export const engineers = Object.keys(people).filter(

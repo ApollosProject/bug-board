@@ -150,6 +150,14 @@ The manual `run_ai` input runs the Luna suite with the repository's `AI_GATEWAY_
 
 Manual runs write job summaries because they have no PR event context.
 
+### Fixture data and nightly exploration
+
+`npm run start:fixtures` serves the production build with fake, public-safe data: `tests/fixtures/upstream.mts` is a Node preload that answers Linear, GitHub GraphQL, Airflow, the PTO feed, and Upstash Redis from a fake roster (`tests/fixtures/config.yml`, selected through `BUG_BOARD_CONFIG`) and blocks every other outbound request. It blanks other credentials, refuses to load on Vercel, and stands in for Cron by refreshing the fleet and metrics snapshots every minute. Apps, churches, and regression cards have no fixture and stay unavailable. App code is unchanged; only the network boundary is fake. `E2E_FIXTURES=1` makes e2e start this server.
+
+`.github/workflows/explore.yml` runs `e2e explore` nightly (08:00 UTC) on fixture data, one charter per area, with the `explore` agent's larger per-step budget. On `main`, `scripts/explore-linear.mts` files each reported issue in Linear (team from `config.yml`) as `Bug Board: <title>` in Triage, with the `e2e explore` label (created on first use), no priority, the screenshot, and a link to the run's trace and video. Unprioritized issues without the Bug label stay out of Bug Board metrics and Slack digests. Titles of earlier `e2e explore` issues, in any state, and of findings from earlier charters that night, are passed to the explorer so it does not report them again: cancel false positives rather than deleting them. Findings are model claims; confirm each before fixing. It needs a `LINEAR_API_KEY` repository secret with read and write access. PRs that change the workflow, fixtures, filer, or `e2e.config.ts` run it and list findings in the job summary without filing.
+
+Locally: `npm run build && E2E_FIXTURES=1 npx e2e explore '<goal>' --agent explore`.
+
 ## Deploys and rollback
 
 Vercel's Git integration deploys `main` to Production (`engineering.apollos.app`), and every pull request gets a Preview deployment. Cron runs only on Production. Preview team views can read through their own caches; other snapshot views need an explicit refresh. Preview deployments use their own Redis namespace and never post to Slack.

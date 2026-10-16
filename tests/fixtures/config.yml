@@ -1,0 +1,41 @@
+# Fake roster for fixture e2e runs; nobody here is a real person.
+linear_team_key: FIX
+github_orgs:
+  - fixture-org
+people:
+  avery:
+    team: engineering
+    slack_id: UFIXTURE01
+    linear_username: avery.example
+    github_username: avery-example
+  blake:
+    team: engineering
+    slack_id: UFIXTURE02
+    linear_username: blake.sample
+    github_username: blake-sample
+  casey:
+    team: engineering
+    slack_id: UFIXTURE03
+    linear_username: casey.demo
+    github_username: casey-demo
+  drew:
+    team: engineering
+    slack_id: UFIXTURE04
+    linear_username: drew.placeholder
+    github_username: drew-placeholder
+  emery:
+    team: unassigned
+    slack_id: UFIXTURE05
+    linear_username: emery.fixture
+    github_username: emery-fixture
+platforms:
+  mobile:
+    lead: avery
+    developers:
+      - blake
+  web:
+    lead: casey
+    developers: []
+  roku:
+    lead: emery
+    developers: []

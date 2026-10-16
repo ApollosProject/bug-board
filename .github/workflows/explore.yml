@@ -1,0 +1,73 @@
+name: Nightly explore
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/explore.yml
+      - e2e.config.ts
+      - scripts/explore-linear.mts
+      - tests/fixtures/**
+permissions:
+  contents: read
+concurrency:
+  group: explore-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  explore:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Install Chromium
+        timeout-minutes: 10
+        run: |
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          npx playwright-core install --with-deps chromium
+      - name: Explore fixture data
+        env:
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          E2E_FIXTURES: "1"
+        run: |
+          # Earlier findings, open or closed, so the explorer does not report them again.
+          known=$(npx tsx scripts/explore-linear.mts known)
+          status=0
+          while IFS='|' read -r slug charter; do
+            code=0
+            npx e2e explore "$charter Report each root cause once. Already filed, do not report again: $known." \
+              --agent explore --max-steps 6 --output ".e2e/explore/$slug" < /dev/null || code=$?
+            # 1 means findings; 2+ is a config, environment, or runner failure.
+            [ "$code" -le 1 ] || status=$code
+            # Later charters skip what earlier ones already reported tonight.
+            known="$known; $(jq -r '[.run.explore.findings[]? | select(.kind == "issue") | .title] | join("; ")' ".e2e/explore/$slug/report.json" 2>/dev/null || true)"
+          done <<'CHARTERS'
+          team|Starting at /team, switch the window presets, a custom date range, sorting, and the engineering/everyone cohort, then open each person; check every count, duration, and name against the other tables, the person pages, and the URL.
+          reviews|Starting at /reviews, apply, combine, and reset the author, reviewer, and approved filters, using back and reload after each; check that each PR sits in the right section for its CI, conflicts, stacking, and review state, and that controls and URL agree.
+          home-projects|Starting at /, check the priority bugs and open assigned work, then at /projects check the timeline bars, out-of-office blocks, ready projects, and long names against each other; report overlap, overflow, and dead links.
+          dags|Starting at /dags, search and filter by every run state; check the fleet health, counts, and ratios against the table, and that controls and URL agree.
+          CHARTERS
+          exit "$status"
+      - name: File new findings in Linear
+        if: ${{ !cancelled() }}
+        run: |
+          echo "### Explore findings" >> "$GITHUB_STEP_SUMMARY"
+          npx tsx scripts/explore-linear.mts ${{ github.ref == 'refs/heads/main' && 'file' || 'preview' }} | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: explore-proof
+          path: .e2e/
+          include-hidden-files: true
+          retention-days: 14
