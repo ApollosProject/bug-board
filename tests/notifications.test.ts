@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { notify, reviewReminders, staleMessage } from "../lib/notifications";
-import type { ReviewRow } from "../lib/reviews";
+import { notify, priorityMessage, reviewReminders, staleMessage } from "../lib/notifications";
+import { reviewRows } from "../lib/reviews";
 import type { Issue, PullRequest } from "../lib/types";
 
 const issue = (index: number, title = `Stale issue ${index}`): Issue => ({
@@ -19,6 +19,35 @@ const issue = (index: number, title = `Stale issue ${index}`): Issue => ({
   labels: { nodes: [] },
 });
 
+function row(number: number, priority: number | null, overrides: Partial<PullRequest> = {}) {
+  const pr: PullRequest = {
+    id: `pr-${number}`,
+    number,
+    title: `PR ${number}`,
+    url: `https://github.com/apollosproject/apollos-platforms/pull/${number}`,
+    createdAt: "2026-10-01T00:00:00Z",
+    updatedAt: "2026-10-13T12:00:00Z",
+    timelineCount: { totalCount: 2 },
+    author: { login: "solideo-gloria" },
+    headRefName: `fix/APO-${number}`,
+    additions: 5_000,
+    deletions: 0,
+    baseRefName: "main",
+    repository: { nameWithOwner: "apollosproject/apollos-platforms", defaultBranchRef: { name: "main" } },
+    mergeable: "MERGEABLE",
+    reviewDecision: "REVIEW_REQUIRED",
+    statusCheckRollup: { state: "SUCCESS" },
+    reviewRequests: { nodes: [{ requestedReviewer: { login: "redreceipt" } }, { requestedReviewer: { login: "nlewis84" } }] },
+    reviews: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } },
+    timelineItems: { nodes: [
+      { __typename: "ReviewRequestedEvent", createdAt: "2026-10-10T12:00:00Z", requestedReviewer: { login: "redreceipt" } },
+      { __typename: "ReviewRequestedEvent", createdAt: "2026-10-13T12:00:00Z", requestedReviewer: { login: "nlewis84" } },
+    ] },
+    ...overrides,
+  };
+  return reviewRows([pr], new Map(priority === null ? [] : [[number, { ...issue(number), priority }]]))[0];
+}
+
 test("Slack digests preserve complete lines and claim delivery per part", async (t) => {
   const env = {
     VERCEL_ENV: "preview",
@@ -27,6 +56,7 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
     SLACK_WEBHOOK_URL: "https://slack.example.test",
     APP_URL: "https://board.example.test",
     GITHUB_TOKEN: "fixture-github",
+    LINEAR_API_KEY: "fixture-linear",
   };
   const previous = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
   Object.assign(process.env, env);
@@ -36,12 +66,28 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
   const postedAt: number[] = [];
   const claimedAt: number[] = [];
   let issues: Issue[] = [];
+  let prs: PullRequest[] = [];
   let failure: "rejected" | "ambiguous" | undefined;
   let failAt = 0;
   t.mock.method(globalThis, "fetch", async (url: unknown, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body));
-    if (String(url) === "https://api.github.com/graphql")
-      return Response.json({ data: { search: { issueCount: 0, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] } } });
+    if (String(url) === "https://api.github.com/graphql") {
+      if (body.query.includes("query Timeline"))
+        return Response.json({ data: { node: { timelineItems: {
+          ...prs.find((pr) => pr.id === body.variables.id)!.timelineItems,
+          pageInfo: { hasPreviousPage: false, startCursor: null },
+        } } } });
+      const nodes = prs.filter((pr) => body.variables.query.includes(`repo:${pr.repository.nameWithOwner} `));
+      assert.ok(!body.variables.query.includes("-review:approved"));
+      return Response.json({ data: { search: { issueCount: nodes.length, pageInfo: { hasNextPage: false, endCursor: null }, nodes } } });
+    }
+    if (String(url) === "https://api.linear.app/graphql") {
+      const numbers = body.variables.filter.number?.in || [];
+      return Response.json({ data: { issues: {
+        nodes: issues.filter((i) => numbers.includes(i.number)),
+        pageInfo: { hasNextPage: false, endCursor: null },
+      } } });
+    }
     if (String(url) === env.SLACK_WEBHOOK_URL) {
       posts.push(body.text);
       postedAt.push(Date.now());
@@ -103,6 +149,57 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
         assert.ok(message.includes(`|${title}>`), title);
       for (const title of ["Project recent", "Project unassigned", "Project outside engineering"])
         assert.ok(!message.includes(title), title);
+    });
+    await t.test("priority bugs label and mention only reviewers eligible for PR reminders", async () => {
+      const old = new Date(Date.now() - 3 * 86_400_000).toISOString();
+      const requested = (login: string, createdAt = old) => ({
+        __typename: "ReviewRequestedEvent", createdAt, requestedReviewer: { login },
+      });
+      const cases = [
+        row(20, 1),
+        row(21, 2, { statusCheckRollup: null }),
+        row(22, 1, { baseRefName: "stacked" }),
+        row(23, 1, { mergeable: "CONFLICTING" }),
+        row(24, 1, { statusCheckRollup: { state: "FAILURE" } }),
+        row(25, 1, { statusCheckRollup: { state: "PENDING" } }),
+        row(26, 1, { reviewDecision: "APPROVED" }),
+        row(27, 1, { reviews: { nodes: [{ author: { login: "redreceipt" }, state: "APPROVED", submittedAt: new Date().toISOString() }], pageInfo: { hasNextPage: false, endCursor: null } } }),
+        row(28, 1, { timelineItems: { nodes: [] } }),
+        row(29, 1, { reviewRequests: { nodes: [{ requestedReviewer: { login: "outsider" } }] } }),
+        row(30, 1, { reviewDecision: "CHANGES_REQUESTED", reviews: { nodes: [{ author: { login: "nlewis84" }, state: "CHANGES_REQUESTED", submittedAt: old }], pageInfo: { hasNextPage: false, endCursor: null } } }),
+        row(31, 1),
+        row(32, 1),
+      ];
+      prs = cases.map(({ pr }) => ({
+        ...pr,
+        timelineItems: pr.number === 28 ? pr.timelineItems : { nodes: [
+          requested("redreceipt", pr.number === 32 ? new Date().toISOString() : old),
+          requested("nlewis84", pr.number === 20 ? old : new Date().toISOString()),
+          requested("outsider"),
+        ] },
+      }));
+      // A second PR waiting on the same person must not duplicate their mention.
+      prs.push({ ...prs[0], id: "duplicate-pr", number: 100, url: "https://github.com/apollosproject/apollos-platforms/pull/100" });
+      issues = cases.map(({ issue: i }) => ({
+        ...i!, assignee: { name: "zach", displayName: "zach" },
+        slaBreachesAt: old, labels: { nodes: [{ name: "Bug" }] },
+      }));
+      issues.find((i) => i.number === 31)!.slaHighRiskAt = old;
+      issues.find((i) => i.number === 31)!.slaBreachesAt = new Date(Date.now() + 86_400_000).toISOString();
+      const message = (await priorityMessage())!;
+      assert.match(message, /\*Overdue\*/);
+      assert.match(message, /\*At Risk\*/);
+      for (const i of issues) {
+        const line = message.split("\n").find((line) => line.includes(`<${i.url}|`))!;
+        assert.ok(line.includes("<@U0BLNNPAB>"), "Keep the assignee");
+        assert.equal(line.includes("Review requested:"), [20, 21, 31].includes(i.number), i.identifier);
+        assert.equal((line.match(/<@U01865757S9>/g) || []).length, [20, 21, 31].includes(i.number) ? 1 : 0, "Mention each eligible reviewer once");
+        if (i.number === 20)
+          assert.match(line, /Review requested: <@U01865757S9>, <@U022N4RTD40>/);
+        else if ([21, 31].includes(i.number))
+          assert.match(line, /Review requested: <@U01865757S9>\)$/);
+      }
+      prs = [];
     });
     await t.test("large digests deliver every issue and the footer without breaking links", async () => {
       posts.length = 0;
@@ -172,27 +269,6 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
 
 test("review reminders keep the old gates with Urgent/High priority instead of size", () => {
   const now = Date.parse("2026-10-13T14:00:00Z");
-  const row = (number: number, priority: number | null, pr: Partial<PullRequest> = {}) => ({
-    issue: priority === null ? undefined : { priority },
-    pr: {
-      number,
-      title: `PR ${number}`,
-      url: `https://github.com/apollosproject/apollos-platforms/pull/${number}`,
-      additions: 5_000,
-      baseRefName: "main",
-      repository: { nameWithOwner: "apollosproject/apollos-platforms", defaultBranchRef: { name: "main" } },
-      mergeable: "MERGEABLE",
-      reviewDecision: "REVIEW_REQUIRED",
-      statusCheckRollup: { state: "SUCCESS" },
-      reviewRequests: { nodes: [{ requestedReviewer: { login: "redreceipt" } }, { requestedReviewer: { login: "nlewis84" } }] },
-      reviews: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } },
-      timelineItems: { nodes: [
-        { __typename: "ReviewRequestedEvent", createdAt: "2026-10-10T12:00:00Z", requestedReviewer: { login: "redreceipt" } },
-        { __typename: "ReviewRequestedEvent", createdAt: "2026-10-13T12:00:00Z", requestedReviewer: { login: "nlewis84" } },
-      ] },
-      ...pr,
-    },
-  }) as unknown as ReviewRow;
   const message = reviewReminders([
     row(1, 1),
     row(2, 2, { title: "High <one>" }),
