@@ -33,7 +33,7 @@ async function team() {
   );
   const found = teams.nodes[0];
   if (!found) throw new Error(`Linear team ${config.linear_team_key} not found`);
-  // The key can only read and create issues, so both labels must already exist on the team.
+  // Labels are team configuration, not something a nightly job should create.
   if (found.labels.nodes.length !== labels.length) throw new Error(`Linear team needs the ${labels.join(" and ")} labels`);
   return { teamId: found.id, stateId: found.states.nodes[0]?.id, labelIds: found.labels.nodes.map((l) => l.id) };
 }
