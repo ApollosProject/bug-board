@@ -131,7 +131,8 @@ export default async function Reviews({
         title="Reviews"
         detail="Review priority first, then quick wins and longest waiting. Stacks, conflicts, and failing checks stay out of ready."
       />
-      <form method="get" className="filter-form">
+      {/* Remount on URL change so Reset and Back don't keep stale selections. */}
+      <form key={queryString(query)} method="get" className="filter-form">
         <label>
           Author
           <select name="author" defaultValue={param(search, "author")}>
