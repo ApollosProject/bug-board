@@ -10,6 +10,7 @@ import { session } from "@/lib/auth";
 import { people, personName, priorityLabels } from "@/lib/config";
 import { cachedReviewQueue } from "@/lib/reviews";
 import { param, queryString } from "@/lib/window";
+import { UpstreamError } from "@/lib/http";
 import type { Search } from "@/lib/types";
 export const metadata = { title: "Reviews" };
 export const maxDuration = 300;
@@ -22,18 +23,22 @@ const nameFor = (login = "") => {
   );
   return slug ? personName(slug) : login;
 };
+const queueFailure = (error: unknown) =>
+  error instanceof UpstreamError
+    ? `${error.message}. Partial results are not presented as ready; reload to try again.`
+    : /not configured/.test(String(error))
+      ? "The complete review queue requires GitHub and Linear credentials."
+      : "GitHub or Linear did not return the complete review queue. Partial results are not presented as ready; reload to try again.";
 async function Queue({ search }: { search: Search }) {
   const approved = param(search, "approved") === "1",
     author = loginFor(param(search, "author")).toLowerCase(),
     reviewer = loginFor(param(search, "reviewer")).toLowerCase();
-  const queue = await cachedReviewQueue(approved).catch(() => null);
-  if (!queue)
-    return (
-      <Unavailable
-        name="Review queue"
-        detail="The complete review queue requires GitHub and Linear credentials. Partial results are not presented as ready."
-      />
-    );
+  let queue;
+  try {
+    queue = await cachedReviewQueue(approved);
+  } catch (error) {
+    return <Unavailable name="Review queue" detail={queueFailure(error)} />;
+  }
   const rows = queue.filter(
     (row) =>
       (!author || row.pr.author?.login?.toLowerCase() === author) &&
