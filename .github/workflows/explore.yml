@@ -29,6 +29,18 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: TEMP probe Linear file upload
+        run: |
+          printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' | base64 -d > /tmp/probe.png
+          size=$(wc -c < /tmp/probe.png | tr -d ' ')
+          res=$(curl -s https://api.linear.app/graphql -H "Authorization: $LINEAR_API_KEY" -H "Content-Type: application/json" \
+            -d "{\"query\":\"mutation { fileUpload(contentType: \\\"image/png\\\", filename: \\\"probe.png\\\", size: $size) { success uploadFile { uploadUrl headers { key value } } } }\"}")
+          echo "$res" | jq -c '{errors: [.errors[]?.message], extensions: [.errors[]?.extensions.userPresentableMessage], success: .data.fileUpload.success}'
+          url=$(echo "$res" | jq -r '.data.fileUpload.uploadFile.uploadUrl // empty')
+          if [ -n "$url" ]; then
+            mapfile -t args < <(echo "$res" | jq -r '.data.fileUpload.uploadFile.headers[] | "-H", "\(.key): \(.value)"')
+            curl -s -o /dev/null -w 'PUT status %{http_code}\n' -X PUT --data-binary @/tmp/probe.png -H "Content-Type: image/png" -H "Cache-Control: public, max-age=31536000" "${args[@]}" "$url"
+          fi
       - run: npm run build
       - name: Install Chromium
         timeout-minutes: 10
