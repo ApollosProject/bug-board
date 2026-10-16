@@ -1,8 +1,8 @@
 // Nightly `e2e explore` findings to Linear Triage. Modes:
 //   known    print earlier finding titles for the explorer to skip
 //   preview  list what would be filed, without writing
-//   file     create one unprioritized Triage issue per new finding
-// Findings stay out of Bug Board metrics until someone adds the Bug label and a priority.
+//   file     create one unassigned, Low-priority Bug in Triage per new finding
+// Low priority keeps findings out of priority-bug metrics and Slack digests until someone raises it.
 import fs from "node:fs";
 import path from "node:path";
 import { config } from "../lib/config";
@@ -24,19 +24,18 @@ async function knownTitles() {
   return new Set(issues.nodes.map((issue) => issue.title.replace(prefix, "")));
 }
 async function team() {
+  const labels = [label, "Bug"];
   const { teams } = await linear<{ teams: { nodes: { id: string; labels: { nodes: { id: string }[] }; states: { nodes: { id: string }[] } }[] } }>(
-    `query Team($key: String!, $label: String!) { teams(filter: { key: { eq: $key } }) { nodes { id
-      labels(filter: { name: { eq: $label } }) { nodes { id } }
+    `query Team($key: String!, $labels: [String!]!) { teams(filter: { key: { eq: $key } }) { nodes { id
+      labels(filter: { name: { in: $labels } }) { nodes { id } }
       states(filter: { type: { eq: "triage" } }) { nodes { id } } } } }`,
-    { key: config.linear_team_key, label },
+    { key: config.linear_team_key, labels },
   );
   const found = teams.nodes[0];
   if (!found) throw new Error(`Linear team ${config.linear_team_key} not found`);
-  const labelId = found.labels.nodes[0]?.id || (await linear<{ issueLabelCreate: { issueLabel: { id: string } } }>(
-    `mutation Label($input: IssueLabelCreateInput!) { issueLabelCreate(input: $input) { issueLabel { id } } }`,
-    { input: { teamId: found.id, name: label, color: "#FBCA04", description: "Unverified finding from the nightly Bug Board e2e explore run" } },
-  )).issueLabelCreate.issueLabel.id;
-  return { teamId: found.id, stateId: found.states.nodes[0]?.id, labelIds: [labelId] };
+  // The key can only read and create issues, so both labels must already exist on the team.
+  if (found.labels.nodes.length !== labels.length) throw new Error(`Linear team needs the ${labels.join(" and ")} labels`);
+  return { teamId: found.id, stateId: found.states.nodes[0]?.id, labelIds: found.labels.nodes.map((l) => l.id) };
 }
 // Screenshots are of fixture data. A failed upload files the issue without one.
 async function upload(file: string) {
@@ -81,7 +80,7 @@ for (const dir of fs.existsSync(root) ? fs.readdirSync(root) : []) {
     const shot = artifacts.find((a) => a.id === finding.artifactId);
     const image = shot && (await upload(path.join(root, dir, "results", shot.path)));
     const description = [
-      `Unverified: reported by the nightly \`e2e explore\` run (charter \`${dir}\`) against fake fixture data at ${process.env.GITHUB_SHA || "a local build"}. Confirm it reproduces before fixing; then add the Bug label and a priority, or cancel it as a false positive (canceled titles are not reported again).`,
+      `Unverified: reported by the nightly \`e2e explore\` run (charter \`${dir}\`) against fake fixture data at ${process.env.GITHUB_SHA || "a local build"}. Confirm it reproduces before fixing; raise the priority if it matters, or cancel it as a false positive (canceled titles are not reported again).`,
       `**Path:** \`${finding.path || "unknown"}\` · **Severity:** ${finding.severity}/5 · [Run, trace, and video](${run})`,
       `**Expected:** ${finding.expected}`,
       `**Actual:** ${finding.actual}`,
@@ -90,7 +89,7 @@ for (const dir of fs.existsSync(root) ? fs.readdirSync(root) : []) {
     ].join("\n\n");
     const { issueCreate } = await linear<{ issueCreate: { issue: { url: string } } }>(
       `mutation File($input: IssueCreateInput!) { issueCreate(input: $input) { issue { url } } }`,
-      { input: { ...target, title: `${prefix}${finding.title}`, description, priority: 0 } },
+      { input: { ...target, title: `${prefix}${finding.title}`, description, priority: 4, assigneeId: null } },
     );
     console.log(`- ${issueCreate.issue.url}`);
   }
