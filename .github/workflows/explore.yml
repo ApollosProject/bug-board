@@ -53,7 +53,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           echo "### Explore findings" >> "$GITHUB_STEP_SUMMARY"
-          npx tsx scripts/explore-linear.mts ${{ github.ref == 'refs/heads/main' && 'file' || 'preview' }} | tee -a "$GITHUB_STEP_SUMMARY"
+          npx tsx scripts/explore-linear.mts file | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
