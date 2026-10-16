@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { completed, contributors, openIssues, projects } from "./linear";
-import { merged } from "./github";
+import { completeDelivery, merged } from "./github";
 import { readSnapshot, redis, writeSnapshot } from "./cache";
 import {
   comparisons,
@@ -24,7 +24,7 @@ import { engineers, people, personName, slugFor, normalize } from "./config";
 import { DAY, inWindow, param, timeWindow } from "./window";
 import type { Issue, Project, PullRequest, Search, Window } from "./types";
 import { regressionDashboard } from "./regressions";
-import { compactOpenIssues, issueStageTimes } from "./pipeline";
+import { compactOpenIssues, issueStageTimes, teamPR } from "./pipeline";
 export type Report = {
   completed: Issue[];
   prs: PullRequest[];
@@ -41,7 +41,10 @@ export async function computeReport(window: Window): Promise<Report> {
   const scoring = projectList
     .filter((p) => projectScoringWeeks(p, window))
     .map((p) => p.id);
-  const members = await contributors(scoring);
+  const [members] = await Promise.all([
+    contributors(scoring),
+    completeDelivery(prs.filter((pr) => teamPR(pr, true))),
+  ]);
   return {
     completed: issues.map((issue) => {
       const totals = issueStageTimes(issue)?.totals;
