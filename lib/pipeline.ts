@@ -1,6 +1,8 @@
 import { creditedAuthors, reviewReadyAt } from "./github";
 import { engineers, people, slugFor } from "./config";
 import { ciState } from "./reviews";
+import { isPriorityBug } from "./metrics";
+import { fixingURLs } from "./regressions";
 import type { Issue, IssueState, PullRequest } from "./types";
 
 const stageKey = (state: IssueState) => `${state.type}:${state.name}`;
@@ -113,6 +115,34 @@ export function firstReviewSeconds(pr: PullRequest) {
   if (!Number.isFinite(ready) || !Number.isFinite(created) || ready < created || ready > merged) return null;
   const first = Date.parse(pr.firstHumanReviewAt || "");
   return Number.isFinite(first) && first >= ready && first <= merged ? (first - ready) / 1000 : null;
+}
+const between = (from: number, to: number) =>
+  Number.isFinite(from) && Number.isFinite(to) && to >= from ? (to - from) / 1000 : null;
+export function feedbackSeconds(pr: PullRequest) {
+  const ready = pr.readiness && pr.delivery ? Date.parse(reviewReadyAt(pr)) : NaN;
+  return {
+    automated: between(ready, Date.parse(pr.delivery?.automatedAt || "")),
+    decision: between(ready, Date.parse(pr.delivery?.decisionAt || "")),
+  };
+}
+// Linear completes production releases only after the deploy workflow verifies the runtime.
+export const productionAt = (issue: Issue) => Math.min(...(issue.releases?.nodes || [])
+  .filter((release) => release.pipeline?.isProduction)
+  .map((release) => Date.parse(release.completedAt || "")).filter(Number.isFinite));
+export function mergeToProduction(issue: Issue, prs: PullRequest[]) {
+  const merged = new Map(prs.map((pr) => [pr.url.toLowerCase(), Date.parse(pr.mergedAt || "")]));
+  const merges = fixingURLs(issue).map((url) => merged.get(url.toLowerCase()) ?? NaN);
+  return merges.length ? between(Math.max(...merges), productionAt(issue)) : null;
+}
+export const customerImpact = (issue: Issue) =>
+  (issue.customerTicketCount || 0) > 0 || !!issue.needs?.nodes.length;
+export function recovery(issues: Issue[]) {
+  const bugs = issues.filter(isPriorityBug);
+  return {
+    bugs,
+    fixed: bugs.map((i) => between(Date.parse(i.createdAt), Date.parse(i.completedAt || ""))),
+    production: bugs.map((i) => between(Date.parse(i.createdAt), productionAt(i))),
+  };
 }
 export function approvalAge(pr: PullRequest, now = Date.now()) {
   const approvals = pr.reviews.nodes.filter((r) => r.state === "APPROVED")

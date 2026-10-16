@@ -36,6 +36,9 @@ export type Issue = {
   attachments?: {
     nodes: { metadata: { url?: string; status?: string; linkKind?: string } }[];
   };
+  customerTicketCount?: number;
+  needs?: { nodes: { id: string }[] };
+  releases?: { nodes: { completedAt: string | null; pipeline: { isProduction: boolean } | null }[] };
   stageDurations?: { state: IssueState; seconds: number }[] | null;
   stageEnteredAt?: string | null;
   history?: {
@@ -75,6 +78,14 @@ export type Review = {
   state: string;
   submittedAt?: string;
 };
+// Seconds are measured on the merged head commit's GitHub Actions runs.
+export type Delivery = {
+  automatedAt: string | null;
+  decisionAt: string | null;
+  queue: number | null;
+  job: number | null;
+  ci: number | null;
+};
 export type PullRequest = {
   id: string;
   number: number;
@@ -85,6 +96,7 @@ export type PullRequest = {
   readiness?: { nodes: { __typename: string; createdAt: string }[] };
   firstReviews?: Connection<Review>;
   firstHumanReviewAt?: string | null;
+  delivery?: Delivery;
   updatedAt?: string;
   timelineCount?: { totalCount: number };
   author: Identity | null;

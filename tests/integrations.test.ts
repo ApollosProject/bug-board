@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fetchIssues, projects } from "../lib/linear";
-import { mergedPRs, openPRs } from "../lib/github";
+import { completeDelivery, mergedPRs, openPRs } from "../lib/github";
 import { blameFile } from "../lib/regressions";
 import {
   mapConcurrent,
@@ -9,6 +9,7 @@ import {
   requestJson,
   UpstreamError,
 } from "../lib/http";
+import type { PullRequest } from "../lib/types";
 const pageInfo = (more = false, cursor: string | null = null) => ({
   hasNextPage: more,
   endCursor: cursor,
@@ -595,7 +596,7 @@ test("reports use Redis beyond Next's size limit and retain compact stage totals
   const names = ["LINEAR_API_KEY", "GITHUB_TOKEN", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "KV_REST_API_URL", "KV_REST_API_TOKEN", "VERCEL_ENV", "VERCEL_URL"];
   const env = Object.fromEntries(names.map((name) => [name, process.env[name]]));
   const original = globalThis.fetch, records = new Map<string, string>();
-  let calls = 0, clock = Date.parse("2026-10-07T12:00:00Z");
+  let calls = 0, shipped = 0, clock = Date.parse("2026-10-07T12:00:00Z");
   t.mock.method(Date, "now", () => clock);
   const todo = { id: "todo", name: "Todo", type: "unstarted" }, done = { id: "done", name: "Done", type: "completed" };
   const assignment = { node: { toAssignee: { displayName: "zach" }, updatedAt: "2026-09-02T00:00:00Z" } };
@@ -618,6 +619,7 @@ test("reports use Redis beyond Next's size limit and retain compact stage totals
         return Response.json(single ? results[0] : results);
       }
       calls++;
+      if (body.query.includes("customerTicketCount")) shipped++;
       if (String(url).includes("api.github.com")) return Response.json({ data: { search: { nodes: [], issueCount: 0, pageInfo: pageInfo() } } });
       if (body.query.includes("query Projects")) return Response.json({ data: { teams: { nodes: [{ projects: { nodes: [], pageInfo: pageInfo() } }] } } });
       if (body.query.includes("query Histories")) return Response.json({ data: { issues: { nodes: [{ ...issue, history: {
@@ -638,6 +640,8 @@ test("reports use Redis beyond Next's size limit and retain compact stage totals
     clock += 61000;
     await reportFor(window);
     assert.ok(calls > before);
+    // Release and customer details keep their own 15-minute cache across report refreshes.
+    assert.equal(shipped, 1);
 
     // Previews have no Cron: the default window must read through, including after expiry.
     clock = Date.parse("2026-09-03T12:00:00Z");
@@ -662,6 +666,57 @@ test("reports use Redis beyond Next's size limit and retain compact stage totals
     await assert.rejects(openWork(), /Open work is refreshing/);
     await assert.rejects(projectDashboard(), /Projects are refreshing/);
     assert.equal(calls, beforeProduction);
+  } finally {
+    globalThis.fetch = original;
+    for (const [name, value] of Object.entries(env))
+      if (value === undefined) delete process.env[name]; else process.env[name] = value;
+  }
+});
+
+test("merged PR delivery timing is fetched once in bounded batches, cached, and stops at the first failure", async (t) => {
+  const names = ["GITHUB_TOKEN", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "KV_REST_API_URL", "KV_REST_API_TOKEN"];
+  const env = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  const original = globalThis.fetch, records = new Map<string, string>(), batches: string[][] = [];
+  let fail = false;
+  t.mock.method(console, "warn", () => {});
+  const pr = (id: string) => ({ id, url: `https://github.com/a/b/pull/${id}`, createdAt: "2026-10-01T00:00:00Z",
+    mergedAt: new Date().toISOString(), readiness: { nodes: [] }, author: { login: "solideo-gloria" } }) as unknown as PullRequest;
+  try {
+    for (const name of names) delete process.env[name];
+    process.env.GITHUB_TOKEN = "fixture-key";
+    process.env.KV_REST_API_URL = "https://cache.example.test";
+    process.env.KV_REST_API_TOKEN = "fixture-cache";
+    globalThis.fetch = async (url, init) => {
+      const body = JSON.parse(String(init?.body));
+      if (String(url).startsWith("https://cache.example.test")) {
+        const single = typeof body[0] === "string";
+        const results = (single ? [body] : body).map(([command, key, value]: string[]) => {
+          if (command === "get") return { result: records.get(key) ?? null };
+          records.set(key, value); return { result: "OK" };
+        });
+        return Response.json(single ? results[0] : results);
+      }
+      assert.match(body.query, /query Delivery/);
+      batches.push(body.variables.ids);
+      if (fail) return new Response("unavailable", { status: 502 });
+      const commits = { nodes: [] };
+      return Response.json({ data: { nodes: body.variables.ids.map(() => ({ reviews: { nodes: [] }, opened: commits, head: commits })) } });
+    };
+    // A refresh fills at most 50 PRs, so cold caches never burst GitHub's compute limit.
+    const prs = Array.from({ length: 62 }, (_, i) => pr(`pr-${i}`));
+    await completeDelivery(prs);
+    assert.deepEqual(batches.map((ids) => ids.length), [10, 10, 10, 10, 10]);
+    assert.equal(prs.filter((item) => item.delivery).length, 50);
+    await completeDelivery(prs);
+    assert.deepEqual(batches.slice(5).map((ids) => ids.length), [10, 2]);
+    // The first failure stops the refresh; cached PRs keep their timing.
+    const again = [...prs.map((item) => pr(item.id)), pr("new"), ...Array.from({ length: 15 }, (_, i) => pr(`more-${i}`))];
+    fail = true;
+    const before = batches.length;
+    await completeDelivery(again);
+    assert.equal(batches.length, before + 1);
+    assert.ok(again.slice(0, 62).every((item) => item.delivery));
+    assert.ok(again.slice(62).every((item) => item.delivery === undefined));
   } finally {
     globalThis.fetch = original;
     for (const [name, value] of Object.entries(env))

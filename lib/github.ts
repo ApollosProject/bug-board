@@ -3,7 +3,7 @@ import { config, people } from "./config";
 import { readSnapshot, redis, writeSnapshot } from "./cache";
 import { graphql, mapConcurrent, requestJson } from "./http";
 import { DAY, date } from "./window";
-import type { Connection, PullRequest, Review, Window } from "./types";
+import type { Connection, Delivery, PullRequest, Review, Window } from "./types";
 export const repositories = [
   "apollosproject/apollos-platforms",
   "apollosproject/apollos-plugin",
@@ -90,9 +90,11 @@ export function reviewReadyAt(pr: PullRequest) {
   const event = pr.readiness?.nodes[0];
   return event?.__typename === "ReadyForReviewEvent" ? event.createdAt : pr.createdAt;
 }
+const automatedReviewer = (review: Review) =>
+  review.author?.__typename === "Bot" || !!review.author?.login?.endsWith("[bot]") ||
+  (config.automated_reviewers || []).includes(review.author?.login?.toLowerCase() || "");
 export function humanReview(review: Review, pr: PullRequest) {
-  return !!review.author?.login && review.author.__typename !== "Bot" &&
-    !review.author.login.endsWith("[bot]") &&
+  return !!review.author?.login && !automatedReviewer(review) &&
     review.author.login.toLowerCase() !== pr.author?.login?.toLowerCase() &&
     ["APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED"].includes(review.state);
 }
@@ -174,6 +176,93 @@ export const mergedPRs = cache(async (after: string, before: string) => {
   );
 });
 export const merged = (w: Window) => mergedPRs(w.after, w.before);
+type CheckSuites = { nodes: { commit: { checkSuites: {
+  nodes: { createdAt: string; checkRuns: {
+    nodes: { startedAt: string | null; completedAt: string | null; conclusion: string | null }[];
+    pageInfo: { hasNextPage: boolean };
+  } }[];
+  pageInfo: { hasNextPage: boolean };
+} } }[] };
+export type DeliveryNode = {
+  reviews: { nodes: Review[] };
+  opened: CheckSuites;
+  head: CheckSuites;
+};
+const runFields = "checkRuns(first: 50) { nodes { startedAt completedAt conclusion } pageInfo { hasNextPage } }";
+// GitHub Actions' app ID: Codecov, Vercel, and other apps report on their own schedules.
+const suiteFields = `checkSuites(first: 15, filterBy: { appId: 15368 }) { nodes { createdAt ${runFields} } pageInfo { hasNextPage } }`;
+const deliveryFields = `reviews(first: 50) { nodes { author { login __typename } state submittedAt } }
+ opened: commits(first: 1) { nodes { commit { ${suiteFields} } } }
+ head: commits(last: 1) { nodes { commit { ${suiteFields} } } }`;
+// One push creates its workflows within seconds; later suites (label/edit triggers) are separate runs.
+function firstBurst(suites: CheckSuites) {
+  const page = suites.nodes[0]?.commit.checkSuites;
+  // Truncated check pages would understate waits, so they stay unknown.
+  if (!page || page.pageInfo.hasNextPage || page.nodes.some((s) => s.checkRuns.pageInfo.hasNextPage)) return [];
+  const ran = page.nodes.map((suite) => ({
+    created: Date.parse(suite.createdAt),
+    runs: suite.checkRuns.nodes.filter((r) => r.conclusion !== "SKIPPED")
+      .map((r) => ({ started: Date.parse(r.startedAt || ""), completed: Date.parse(r.completedAt || "") }))
+      .filter((r) => Number.isFinite(r.started) && Number.isFinite(r.completed)),
+  })).filter((suite) => suite.runs.length && Number.isFinite(suite.created));
+  const start = Math.min(...ran.map((suite) => suite.created));
+  return ran.filter((suite) => suite.created - start <= 60_000);
+}
+export function deliveryFacts(pr: PullRequest, node: DeliveryNode): Delivery {
+  const ready = Date.parse(reviewReadyAt(pr)), merged = Date.parse(pr.mergedAt || "");
+  const at = (n: number) => (Number.isFinite(n) ? new Date(n).toISOString() : null);
+  const opened = firstBurst(node.opened).flatMap((suite) => suite.runs);
+  // A CI verdict or AI review already waiting at ready-for-review counts from ready.
+  const automated = Math.min(
+    opened.length ? Math.max(...opened.map((r) => r.completed)) : Infinity,
+    ...node.reviews.nodes.filter(automatedReviewer).map((r) => Date.parse(r.submittedAt || "")).filter(Number.isFinite),
+  );
+  const decision = node.reviews.nodes.filter((r) => humanReview(r, pr) && ["APPROVED", "CHANGES_REQUESTED"].includes(r.state))
+    .map((r) => Date.parse(r.submittedAt || "")).filter((n) => n >= ready && n <= merged);
+  const suites = firstBurst(node.head), runs = suites.flatMap((suite) => suite.runs);
+  return {
+    automatedAt: automated <= merged ? at(Math.max(automated, ready)) : null,
+    decisionAt: at(Math.min(...decision)),
+    queue: runs.length ? Math.max(...suites.map((s) => Math.min(...s.runs.map((r) => r.started)) - s.created)) / 1000 : null,
+    job: runs.length ? Math.max(...runs.map((r) => r.completed - r.started)) / 1000 : null,
+    ci: runs.length ? (Math.max(...runs.map((r) => r.completed)) - Math.min(...suites.map((s) => s.created))) / 1000 : null,
+  };
+}
+// Merged PRs rarely change, so each one is fetched once and reused across refreshes.
+export async function completeDelivery(prs: PullRequest[]) {
+  const name = "pr-delivery-v1", ttl = 30 * 86400;
+  const saved = (await readSnapshot<Record<string, { mergedAt: string; delivery: Delivery }>>(name, ttl)) || {};
+  const missing = prs.filter((pr) => {
+    pr.delivery = saved[pr.id]?.delivery;
+    return !pr.delivery;
+  });
+  // Check-run history costs ~0.35s of GitHub compute per PR, and GraphQL allows ~60s per minute
+  // shared with the PR search, so a cold fill spans many refreshes, one batch at a time.
+  for (let i = 0; i < Math.min(missing.length, 50); i += 10) {
+    const batch = missing.slice(i, i + 10);
+    try {
+      const { nodes } = await github<{ nodes: (DeliveryNode | null)[] }>(
+        `query Delivery($ids: [ID!]!) { nodes(ids: $ids) { ... on PullRequest { ${deliveryFields} } } }`,
+        { ids: batch.map((pr) => pr.id) },
+      );
+      batch.forEach((pr, i) => {
+        if (!nodes[i]) return;
+        pr.delivery = deliveryFacts(pr, nodes[i]);
+        saved[pr.id] = { mergedAt: pr.mergedAt || "", delivery: pr.delivery };
+      });
+    } catch (error) {
+      // Delivery timing is supplementary: leave the rest unknown rather than fail team metrics.
+      console.warn("PR delivery timing unavailable:", (error as Error).message);
+      break;
+    }
+  }
+  if (missing.length && redis()) {
+    // shortcut: keeps 120 days of PRs to bound the record; longer custom windows refetch older PRs.
+    for (const [id, value] of Object.entries(saved))
+      if (!(Date.now() - Date.parse(value.mergedAt) < 120 * DAY)) delete saved[id];
+    await writeSnapshot(name, saved, ttl).catch(() => console.warn("PR delivery cache write unavailable"));
+  }
+}
 export function creditedAuthors(pr: PullRequest) {
   const author = pr.author?.login || "";
   const commit = pr.commits?.nodes[0]?.commit;

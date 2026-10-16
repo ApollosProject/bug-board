@@ -1,10 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  approvalAge, compactOpenIssues, duration, durationStats, firstReviewSeconds, issueStageTimes,
-  mergeBlocker, stageSummary, teamIssue, teamPR,
+  approvalAge, compactOpenIssues, customerImpact, duration, durationStats, feedbackSeconds,
+  firstReviewSeconds, issueStageTimes, mergeBlocker, mergeToProduction, recovery, stageSummary,
+  teamIssue, teamPR,
 } from "../lib/pipeline";
-import { humanReview, prCounts } from "../lib/github";
+import { deliveryFacts, humanReview, prCounts, type DeliveryNode } from "../lib/github";
 import type { Issue, IssueState, PullRequest } from "../lib/types";
 
 const day = 86400, now = Date.parse("2026-09-08T00:00:00Z");
@@ -164,4 +165,66 @@ test("pipeline respects team cohort and richer review history does not inflate a
   assert.equal(prCounts([work], "reviewer").prs_reviewed, 0);
   work.reviews.nodes.push({ author: { login: "reviewer" }, state: "APPROVED" });
   assert.equal(prCounts([work], "reviewer").prs_reviewed, 1);
+});
+
+test("delivery separates automated feedback from human decisions and times head-commit CI", () => {
+  const ready = "2026-09-01T10:00:00Z";
+  const work = pr({ createdAt: "2026-09-01T09:00:00Z", mergedAt: "2026-09-02T00:00:00Z",
+    readiness: { nodes: [{ __typename: "ReadyForReviewEvent", createdAt: ready }] } });
+  const run = (startedAt: string, completedAt: string, conclusion = "SUCCESS") => ({ startedAt, completedAt, conclusion });
+  const suites = (nodes: { createdAt: string; runs: ReturnType<typeof run>[] }[], more = false) => ({ nodes: [{ commit: { checkSuites: {
+    nodes: nodes.map(({ createdAt, runs }) => ({ createdAt, checkRuns: { nodes: runs, pageInfo: { hasNextPage: false } } })),
+    pageInfo: { hasNextPage: more },
+  } } }] });
+  const review = (login: string, state: string, submittedAt: string, __typename = "User") => ({ author: { login, __typename }, state, submittedAt });
+  const node: DeliveryNode = {
+    reviews: { nodes: [
+      review("mary-pr-poppins", "APPROVED", "2026-09-01T10:20:00Z"),
+      review("hellogerard", "COMMENTED", "2026-09-01T10:30:00Z"),
+      review("solideo-gloria", "APPROVED", "2026-09-01T10:40:00Z"),
+      review("vinnyjth", "CHANGES_REQUESTED", "2026-09-01T11:00:00Z"),
+    ] },
+    // The draft's CI verdict landed before ready, so feedback was already waiting; skipped runs never count.
+    opened: suites([{ createdAt: "2026-09-01T09:00:00Z", runs: [
+      run("2026-09-01T09:00:00Z", "2026-09-01T09:00:00Z", "SKIPPED"),
+      run("2026-09-01T09:01:00Z", "2026-09-01T09:02:00Z"),
+      run("2026-09-01T09:01:00Z", "2026-09-01T09:05:00Z"),
+    ] }]),
+    head: suites([
+      { createdAt: "2026-09-01T20:00:00Z", runs: [run("2026-09-01T20:02:00Z", "2026-09-01T20:10:00Z"), run("2026-09-01T20:03:00Z", "2026-09-01T20:30:00Z")] },
+      { createdAt: "2026-09-01T20:00:30Z", runs: [run("2026-09-01T20:05:30Z", "2026-09-01T20:06:00Z")] },
+      // A later label/edit-triggered workflow is a separate run, not CI waiting.
+      { createdAt: "2026-09-01T23:00:00Z", runs: [run("2026-09-01T23:00:00Z", "2026-09-01T23:59:00Z")] },
+    ]),
+  };
+  const delivery = deliveryFacts(work, node);
+  assert.deepEqual(delivery, {
+    automatedAt: "2026-09-01T10:00:00.000Z", decisionAt: "2026-09-01T11:00:00.000Z",
+    queue: 300, job: 27 * 60, ci: 30 * 60,
+  });
+  assert.deepEqual(feedbackSeconds({ ...work, delivery }), { automated: 0, decision: 3600 });
+  assert.equal(humanReview(node.reviews.nodes[0], work), false);
+  // Without a CI verdict by then, an AI review is the first automated feedback.
+  const reviewed = deliveryFacts(work, { ...node, opened: suites([{ createdAt: ready, runs: [run(ready, "2026-09-01T10:45:00Z")] }]) });
+  assert.equal(reviewed.automatedAt, "2026-09-01T10:20:00.000Z");
+  assert.equal(deliveryFacts(work, { ...node, reviews: { nodes: [] }, opened: suites([{ createdAt: ready, runs: [run(ready, "2026-09-01T10:45:00Z")] }]) }).automatedAt,
+    "2026-09-01T10:45:00.000Z");
+  // Truncated check pages stay unknown instead of understating waits.
+  assert.deepEqual(deliveryFacts(work, { ...node, head: suites([], true) }).ci, null);
+  assert.deepEqual(feedbackSeconds(work), { automated: null, decision: null });
+});
+test("merge-to-production uses verified Linear production releases and never invents samples", () => {
+  const release = (completedAt: string | null, isProduction = true) => ({ completedAt, pipeline: { isProduction } });
+  const attachment = (url: string) => ({ metadata: { url, status: "merged", linkKind: "closes" } });
+  const merged = pr({ url: "https://github.com/ApollosProject/apollos-cluster/pull/1", mergedAt: "2026-09-02T00:00:00Z" });
+  const bug = issue({ priority: 1, labels: { nodes: [{ name: "Bug" }] }, createdAt: "2026-09-01T00:00:00Z", completedAt: "2026-09-02T00:00:00Z",
+    attachments: { nodes: [attachment("https://github.com/apollosproject/apollos-cluster/pull/1")] },
+    releases: { nodes: [release("2026-09-02T12:00:00Z", false), release("2026-09-03T00:00:00Z"), release(null)] } });
+  assert.equal(mergeToProduction(bug, [merged]), day);
+  assert.equal(mergeToProduction({ ...bug, releases: { nodes: [release(null)] } }, [merged]), null);
+  assert.equal(mergeToProduction(bug, []), null);
+  assert.deepEqual(recovery([bug, issue()]), { bugs: [bug], fixed: [day], production: [2 * day] });
+  assert.equal(customerImpact(bug), false);
+  assert.equal(customerImpact({ ...bug, customerTicketCount: 1 }), true);
+  assert.equal(customerImpact({ ...bug, needs: { nodes: [{ id: "need" }] } }), true);
 });
