@@ -4,6 +4,7 @@ import { readSnapshot, unknownCount } from "./cache";
 type Run = { state?: string; dag_run_id?: string };
 type Evaluation = {
   latest: string;
+  latestId?: string;
   terminal: string;
   id: string;
   hasRuns: boolean;
@@ -33,6 +34,7 @@ function beforeDeadline(deadline: number) {
 }
 async function lastRun(id: string, deadline: number): Promise<Evaluation> {
   let latest = "",
+    latestId = "",
     hasRuns = false;
   for (let offset = 0; ; offset += 10) {
     beforeDeadline(deadline);
@@ -46,12 +48,14 @@ async function lastRun(id: string, deadline: number): Promise<Evaluation> {
     const runs = payload.dag_runs || payload.dagRuns || [];
     if (!hasRuns && runs.length) {
       latest = (runs[0].state || "").toLowerCase();
+      latestId = runs[0].dag_run_id || "";
       hasRuns = true;
     }
     const last = runs.find((run) => terminal(run.state));
     if (last)
       return {
         latest,
+        latestId,
         hasRuns,
         terminal: last.state!.toLowerCase(),
         id: last.dag_run_id || "",
@@ -62,7 +66,7 @@ async function lastRun(id: string, deadline: number): Promise<Evaluation> {
         ? offset + runs.length >= payload.total_entries
         : runs.length < 10)
     )
-      return { latest, hasRuns, terminal: "", id: "" };
+      return { latest, latestId, hasRuns, terminal: "", id: "" };
   }
 }
 export function fleetStats(
@@ -101,7 +105,7 @@ export function fleetStats(
     dags: ids.map((id, i) => ({
       dag_id: id,
       state: !runs[i] ? "unknown" : runs[i]!.latest || "no_runs",
-      dag_run_id: runs[i] && terminal(runs[i]!.latest) ? runs[i]!.id : "",
+      dag_run_id: runs[i]?.latestId || "",
     })),
     failed_dags: failed,
     top_failed_dags: failed.slice(0, 10),

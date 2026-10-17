@@ -566,6 +566,7 @@ test("fleet failure thresholds use terminal runs while inventory shows latest st
   const ids = Array.from({ length: 20 }, (_, i) => `dag-${i}`);
   const runs = ids.map((_, i) => ({
     latest: i < 2 ? "running" : "success",
+    latestId: i < 2 ? "active" : "run",
     terminal: i < 2 ? "failed" : "success",
     id: "run",
     hasRuns: true,
@@ -574,7 +575,8 @@ test("fleet failure thresholds use terminal runs while inventory shows latest st
   assert.equal(stats.status, "degraded");
   assert.equal(stats.failure_ratio, 0.1);
   assert.equal(stats.dags[0].state, "running");
-  assert.equal(stats.dags[0].dag_run_id, "");
+  // A running DAG lists its running run, not "No run" or the older terminal one.
+  assert.equal(stats.dags[0].dag_run_id, "active");
   assert.equal(
     fleetStats(ids.slice(0, 19), runs.slice(0, 19)).status,
     "healthy",
