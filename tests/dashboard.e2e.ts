@@ -50,6 +50,19 @@ test("review and DAG filters use URL state", async ({
     .selectOption({ value: "michael" });
   await screen.getByRole("button", "Filter reviews").tap();
   await expect(browser).toHaveURL(/author=zach.*reviewer=michael/);
+  const reviewer = screen.getByLabel("Reviewer", { exact: true });
+  const approved = screen.getByLabel("Include approved", { exact: true });
+  await approved.tap();
+  await screen.getByRole("button", "Filter reviews").tap();
+  await expect(browser).toHaveURL(/approved=1/);
+  await screen.getByRole("link", "Reset", { exact: true }).tap();
+  await expect(browser).toHaveURL(/\/reviews$/);
+  await expect(reviewer).toHaveValue("");
+  await expect(approved).toBeChecked({ checked: false });
+  await browser.back();
+  await expect(browser).toHaveURL(/approved=1/);
+  await expect(reviewer).toHaveValue("michael");
+  await expect(approved).toBeChecked();
   await app.open("/dags");
   await screen.getByLabel("Search DAGs", { exact: true }).fill("church");
   await screen
