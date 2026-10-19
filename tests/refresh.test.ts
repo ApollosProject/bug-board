@@ -181,6 +181,7 @@ test("ordinary fleet Cron completes without a Workflow, preserves evidence, conc
     assert.equal(snapshot.data.non_terminal_dags, 125);
     assert.equal(snapshot.data.failure_ratio, 0.2);
     assert.equal(snapshot.data.dags.length, 125);
+    assert.equal(snapshot.data.dags[0].dag_run_id, "active-0");
     assert.ok(![...records.keys()].some((k) => k.endsWith(":refresh:fleet")));
 
     // A lease that expires during work must not let the old request delete its new owner.
