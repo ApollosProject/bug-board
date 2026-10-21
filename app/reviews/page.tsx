@@ -131,8 +131,14 @@ export default async function Reviews({
         title="Reviews"
         detail="Review priority first, then quick wins and longest waiting. Stacks, conflicts, and failing checks stay out of ready."
       />
-      {/* Remount on URL change so Reset and Back don't keep stale selections. */}
-      <form key={queryString(query)} method="get" className="filter-form">
+      {/* Remount on URL change so Reset and Back don't keep stale selections;
+          autoComplete off stops reload restoring them. */}
+      <form
+        key={queryString(query)}
+        method="get"
+        className="filter-form"
+        autoComplete="off"
+      >
         <label>
           Author
           <select name="author" defaultValue={param(search, "author")}>

@@ -160,3 +160,22 @@ test("legacy dashboard URLs still resolve", async ({ app, screen }) => {
     screen.getByRole("heading", "Apps", { exact: true }),
   ).toBeVisible();
 });
+test("review filters stay in sync after Back and reload", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  await app.open("/reviews?author=&reviewer=&approved=1");
+  const reviewer = screen.getByLabel("Reviewer", { exact: true });
+  await screen
+    .getByLabel("Author", { exact: true })
+    .selectOption({ value: "zach" });
+  await reviewer.selectOption({ value: "michael" });
+  await screen.getByRole("button", "Filter reviews").tap();
+  await expect(browser).toHaveURL(/author=zach/);
+  await browser.back();
+  await expect(browser).toHaveURL(/author=&reviewer=&approved=1/);
+  await expect(reviewer).toHaveValue("");
+  await browser.reload();
+  await expect(screen.getByLabel("Author", { exact: true })).toHaveValue("");
+});
