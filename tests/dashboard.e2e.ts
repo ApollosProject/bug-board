@@ -70,6 +70,13 @@ test("review and DAG filters use URL state", async ({
     .selectOption({ value: "failed" });
   await screen.getByRole("button", "Filter DAGs").tap();
   await expect(browser).toHaveURL(/q=church.*state=failed/);
+  const runState = screen.getByLabel("Run state", { exact: true });
+  await runState.selectOption({ value: "no_runs" });
+  await screen.getByRole("button", "Filter DAGs").tap();
+  await expect(browser).toHaveURL(/state=no_runs/);
+  await browser.back();
+  await expect(browser).toHaveURL(/state=failed/);
+  await expect(runState).toHaveValue("failed");
 });
 test("mobile navigation stays usable", async ({ app, browser, screen }) => {
   await browser.setViewport({ width: 390, height: 844 });
