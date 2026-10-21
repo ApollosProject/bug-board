@@ -78,7 +78,8 @@ export default async function DAGs({
           detail="Fresh fleet data requires Airflow credentials, Upstash Redis, and the scheduled refresh. Page requests never scan the production fleet."
         />
       )}
-      <form method="get" className="filter-form">
+      {/* Remount on URL change so Back doesn't keep stale selections. */}
+      <form key={`${query}|${state}`} method="get" className="filter-form">
         <label>
           Search DAGs
           <input
