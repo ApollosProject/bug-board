@@ -78,8 +78,8 @@ export default async function DAGs({
           detail="Fresh fleet data requires Airflow credentials, Upstash Redis, and the scheduled refresh. Page requests never scan the production fleet."
         />
       )}
-      {/* Remount on URL change so Back doesn't keep stale selections. */}
-      <form key={`${query}|${state}`} method="get" className="filter-form">
+      {/* Stops the browser restoring an unsubmitted selection on Back. */}
+      <form method="get" className="filter-form" autoComplete="off">
         <label>
           Search DAGs
           <input
