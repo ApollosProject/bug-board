@@ -37,8 +37,11 @@ const mention = (slug: string | undefined) =>
     : "No Assignee";
 function bugLine(issue: Issue, reviewers: string[]) {
   const platform = platformFor(issue),
-    assignee = slugFor(issue.assignee?.name, issue.assignee?.displayName);
-  return `- ${issue.priority === 1 ? "🚨 " : ""}${link(issue.url, issue.title)} (${slaText(issue) || `+${daysSince(issue.createdAt)}d`}${platform ? `, ${platform}` : ""}${assignee ? `, ${mention(assignee)}` : ""}${reviewers.length ? `, Review requested: ${reviewers.map(mention).join(", ")}` : ""})`;
+    slug = slugFor(issue.assignee?.name, issue.assignee?.displayName),
+    assignee = slug && people[slug].slack_id
+      ? mention(slug)
+      : escape(issue.assignee?.displayName || issue.assignee?.name || "");
+  return `- ${issue.priority === 1 ? "🚨 " : ""}${link(issue.url, issue.title)} (${slaText(issue) || `+${daysSince(issue.createdAt)}d`}${platform ? `, ${platform}` : ""}${assignee ? `, ${assignee}` : ""}${reviewers.length ? `, Review requested: ${reviewers.map(mention).join(", ")}` : ""})`;
 }
 export async function priorityMessage() {
   const bugs = (await openWork()).filter(

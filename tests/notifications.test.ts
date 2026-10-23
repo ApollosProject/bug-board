@@ -5,6 +5,7 @@ import { reviewRows } from "../lib/reviews";
 import type { Issue, PullRequest } from "../lib/types";
 import type { Report } from "../lib/reports";
 import { timeWindow } from "../lib/window";
+import { people } from "../lib/config";
 
 const issue = (index: number, title = `Stale issue ${index}`): Issue => ({
   id: String(index),
@@ -105,6 +106,7 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
       const records = key.includes(":notification:") ? claims : snapshots;
       if (op === "get") return key.endsWith(":open-issues")
         ? JSON.stringify({ at: Date.now(), data: issues })
+        : key.endsWith(":projects") ? JSON.stringify({ at: Date.now(), data: [] })
         : key.endsWith(":metrics") ? report && JSON.stringify({ at: Date.now(), data: report })
         : records.get(key) ?? null;
       if (op === "set") {
@@ -230,6 +232,33 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
           assert.match(line, /Review requested: <@U01865757S9>\)$/);
       }
       prs = [];
+    });
+    await t.test("priority bugs retain assignees without a configured Slack mention", async () => {
+      const overdue = new Date(Date.now() - 86_400_000).toISOString();
+      issues = [
+        { ...issue(40), assignee: { name: "Medic", displayName: "medic" } },
+        { ...issue(41), assignee: { name: "Metametic" } },
+        { ...issue(42), assignee: { displayName: "Outside <@U123> & team | `name`" } },
+        { ...issue(43), assignee: { name: "zach", displayName: "zach" } },
+        { ...issue(44), assignee: null },
+      ].map((i) => ({ ...i, priority: 2, slaBreachesAt: overdue, labels: { nodes: [{ name: "Bug" }] } }));
+      const slackId = people.zach.slack_id;
+      people.zach.slack_id = "";
+      try {
+        const message = (await priorityMessage())!;
+        const lines = issues.map((i) => message.split("\n").find((line) => line.includes(`<${i.url}|`))!);
+        assert.ok(lines[0].endsWith(", medic)"));
+        assert.ok(lines[1].endsWith(", Metametic)"));
+        assert.ok(lines[2].endsWith(", Outside &lt;@U123&gt; &amp; team - -name-)"));
+        assert.ok(lines[3].endsWith(", zach)"));
+        assert.ok(!lines[4].includes("Assignee"));
+        assert.ok(!message.includes("No Assignee"));
+        const unassigned = message.split("*Unassigned Priority Bugs*\n\n")[1].split("\n\n")[0];
+        assert.ok(unassigned.includes(issues[4].url));
+        for (const i of issues.slice(0, 4)) assert.ok(!unassigned.includes(i.url));
+      } finally {
+        people.zach.slack_id = slackId;
+      }
     });
     await t.test("large digests deliver every issue and the footer without breaking links", async () => {
       posts.length = 0;
