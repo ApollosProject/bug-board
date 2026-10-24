@@ -893,3 +893,33 @@ test("GitHub rate-limit errors keep the wait the service asked for", async () =>
     globalThis.fetch = original;
   }
 });
+test("GraphQL reads retry GitHub gateway errors before failing", async () => {
+  const original = globalThis.fetch;
+  try {
+    let calls = 0;
+    globalThis.fetch = async () =>
+      ++calls < 3
+        ? Response.json({}, { status: 502 })
+        : Response.json({ data: { ok: true } });
+    assert.deepEqual(
+      await graphql("https://api.github.com/graphql", "token", "query { ok }"),
+      { ok: true },
+    );
+    assert.equal(calls, 3);
+    calls = 0;
+    globalThis.fetch = async () => (calls++, Response.json({}, { status: 502 }));
+    await assert.rejects(
+      graphql("https://api.github.com/graphql", "token", "query { ok }"),
+      (error: unknown) => error instanceof UpstreamError && error.status === 502,
+    );
+    assert.equal(calls, 3);
+    calls = 0;
+    globalThis.fetch = async () => (calls++, Response.json({}, { status: 401 }));
+    await assert.rejects(
+      graphql("https://api.github.com/graphql", "token", "query { ok }"),
+    );
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
