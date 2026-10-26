@@ -161,6 +161,7 @@ const openPRs = [
   { title: "Feed query speedup", decision: "APPROVED", ci: "SUCCESS" },
   { title: "Login link expiry", decision: "APPROVED", ci: null, mergeable: "CONFLICTING" },
   { title: "Bump the lint toolchain", decision: "REVIEW_REQUIRED", ci: "SUCCESS", author: "dependabot[bot]", size: 2400 },
+  { title: "Remove obsolete settings", decision: "REVIEW_REQUIRED", ci: "SUCCESS", size: 199 },
 ].map((o, i) => {
   const linked = issues[45 + i], createdAt = ago(1 + i * 2.5), url = `https://github.com/${repos[i % 2]}/pull/${2000 + i}`;
   if (i % 2) linked.attachments.nodes.push({ metadata: { url } });
