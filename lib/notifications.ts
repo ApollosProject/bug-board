@@ -157,12 +157,12 @@ function waitingReviews(rows: ReviewRow[], now = Date.now()) {
 export function reviewReminders(rows: ReviewRow[], now = Date.now(), metrics: Record<string, Metrics> = {}) {
   const waiting = waitingReviews(rows, now);
   const priority = waiting.filter(({ issue }) => [1, 2].includes(issue?.priority || 0));
-  const other = waiting.filter(({ issue, pr, days }) =>
-    ![1, 2].includes(issue?.priority || 0) && days >= 7 && pr.additions < 200,
+  const other = waiting.filter(({ issue, days }) =>
+    ![1, 2].includes(issue?.priority || 0) && days >= 7,
   );
   const sections = [
     ["PRs - Checks Passing, Waiting for Review (+24h, Urgent/High priority)", priority],
-    ["Other PRs - Checks Passing, Waiting for Review (7+ days, <200 lines added)", other],
+    ["Other PRs - Checks Passing, Waiting for Review (7+ days)", other],
   ] as const;
   const text = sections.flatMap(([title, reviews]) => {
     const reviewers = engineers.flatMap((slug) => {
