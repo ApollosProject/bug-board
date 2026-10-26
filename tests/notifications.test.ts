@@ -184,7 +184,7 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
       assert.ok(unavailable.includes("(avg completion: n/a, last 30d)"));
       prs = [];
     });
-    await t.test("the daily digest puts other week-old small PRs between priority reviews and stale issues", async () => {
+    await t.test("the daily digest puts other week-old PRs between priority reviews and stale issues", async () => {
       const requestedAt = new Date(Date.now() - 8 * 86_400_000).toISOString();
       const timelineItems = { nodes: [{ __typename: "ReviewRequestedEvent", createdAt: requestedAt, requestedReviewer: { login: "redreceipt" } }] };
       issues = [{ ...issue(10, "Priority work"), priority: 2 }, issue(11)];
@@ -366,42 +366,42 @@ test("review reminders keep the old gates with Urgent/High priority instead of s
   assert.equal(reviewReminders([row(3, 3)], now), null);
 });
 
-test("other review reminders require a week per reviewer and fewer than 200 added lines", () => {
+test("other review reminders require a week per reviewer regardless of PR size", () => {
   const now = Date.parse("2026-10-13T14:00:00Z"), weekAgo = now - 7 * 86_400_000;
   const requested = (login: string, at: number) => ({
     __typename: "ReviewRequestedEvent", createdAt: new Date(at).toISOString(), requestedReviewer: { login },
   });
-  const small = (number: number, priority: number | null = 3, overrides: Partial<PullRequest> = {}) => row(number, priority, {
+  const candidate = (number: number, priority: number | null = 3, overrides: Partial<PullRequest> = {}) => row(number, priority, {
     additions: 150, deletions: 49,
     timelineItems: { nodes: [requested("redreceipt", weekAgo), requested("nlewis84", now - 2 * 86_400_000)] },
     ...overrides,
   });
   const eligible = [
-    small(101), small(102, 4), small(103, 0), small(104, null),
-    small(107, 3, { additions: 199, deletions: 10_000 }),
-    small(108, 3, { additions: 0, deletions: 50_000 }),
-    small(105, 3, { statusCheckRollup: null }),
-    small(106, 3, { timelineItems: { nodes: [requested("redreceipt", weekAgo - 2 * 86_400_000)] } }),
+    candidate(110, 3, { additions: 200, deletions: 0 }),
+    candidate(111, 3, { additions: 50_000, deletions: 50_000 }),
+    candidate(101), candidate(102, 4), candidate(103, 0), candidate(104, null),
+    candidate(107, 3, { additions: 199, deletions: 10_000 }),
+    candidate(108, 3, { additions: 0, deletions: 50_000 }),
+    candidate(105, 3, { statusCheckRollup: null }),
+    candidate(106, 3, { timelineItems: { nodes: [requested("redreceipt", weekAgo - 2 * 86_400_000)] } }),
   ];
   const excluded = [
-    small(110, 3, { additions: 200, deletions: 0 }),
-    small(111, 3, { additions: 201, deletions: 0 }),
-    small(112, 3, { timelineItems: { nodes: [requested("redreceipt", weekAgo + 1)] } }),
-    small(113, 3, { timelineItems: { nodes: [] } }),
-    small(114, 3, { timelineItems: { nodes: [requested("redreceipt", weekAgo), requested("redreceipt", now - 1)] } }),
-    small(115, 3, { baseRefName: "stacked" }),
-    small(116, 3, { mergeable: "CONFLICTING" }),
-    small(117, 3, { statusCheckRollup: { state: "PENDING" } }),
-    small(118, 3, { statusCheckRollup: { state: "FAILURE" } }),
-    small(119, 3, { reviewDecision: "APPROVED" }),
-    small(120, 3, { reviews: { nodes: [{ author: { login: "redreceipt" }, state: "APPROVED", submittedAt: new Date(weekAgo + 1).toISOString() }], pageInfo: { hasNextPage: false, endCursor: null } } }),
-    small(121, 3, { reviewRequests: { nodes: [] } }),
-    small(122, 3, { reviewRequests: { nodes: [{ requestedReviewer: { login: "outsider" } }] }, timelineItems: { nodes: [requested("outsider", weekAgo)] } }),
-    small(123, 3, { reviewDecision: "CHANGES_REQUESTED", reviews: { nodes: [{ author: { login: "nlewis84" }, state: "CHANGES_REQUESTED", submittedAt: new Date(weekAgo).toISOString() }], pageInfo: { hasNextPage: false, endCursor: null } } }),
+    candidate(112, 3, { timelineItems: { nodes: [requested("redreceipt", weekAgo + 1)] } }),
+    candidate(113, 3, { timelineItems: { nodes: [] } }),
+    candidate(114, 3, { timelineItems: { nodes: [requested("redreceipt", weekAgo), requested("redreceipt", now - 1)] } }),
+    candidate(115, 3, { baseRefName: "stacked" }),
+    candidate(116, 3, { mergeable: "CONFLICTING" }),
+    candidate(117, 3, { statusCheckRollup: { state: "PENDING" } }),
+    candidate(118, 3, { statusCheckRollup: { state: "FAILURE" } }),
+    candidate(119, 3, { reviewDecision: "APPROVED" }),
+    candidate(120, 3, { reviews: { nodes: [{ author: { login: "redreceipt" }, state: "APPROVED", submittedAt: new Date(weekAgo + 1).toISOString() }], pageInfo: { hasNextPage: false, endCursor: null } } }),
+    candidate(121, 3, { reviewRequests: { nodes: [] } }),
+    candidate(122, 3, { reviewRequests: { nodes: [{ requestedReviewer: { login: "outsider" } }] }, timelineItems: { nodes: [requested("outsider", weekAgo)] } }),
+    candidate(123, 3, { reviewDecision: "CHANGES_REQUESTED", reviews: { nodes: [{ author: { login: "nlewis84" }, state: "CHANGES_REQUESTED", submittedAt: new Date(weekAgo).toISOString() }], pageInfo: { hasNextPage: false, endCursor: null } } }),
   ];
-  const priority = [small(130, 1), small(131, 2)];
+  const priority = [candidate(130, 1), candidate(131, 2)];
   const message = reviewReminders([...eligible, ...excluded, ...priority], now)!;
-  const [high, other] = message.split("*Other PRs - Checks Passing, Waiting for Review (7+ days, <200 lines added)*");
+  const [high, other] = message.split("*Other PRs - Checks Passing, Waiting for Review (7+ days)*");
   assert.ok(other);
   for (const { pr } of eligible) {
     assert.ok(other.includes(pr.url), pr.title);
