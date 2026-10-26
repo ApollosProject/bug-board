@@ -59,6 +59,7 @@ export async function priorityMessage() {
   const waiting = new Map<string, Set<string>>();
   if (bugs.length) {
     for (const { issue, slug } of waitingReviews(await reviewQueue(true))) {
+      if (!issue || ![1, 2].includes(issue.priority)) continue;
       if (!waiting.has(issue.id)) waiting.set(issue.id, new Set());
       waiting.get(issue.id)!.add(slug);
     }
@@ -107,13 +108,10 @@ export async function priorityMessage() {
     ? `${text.join("\n\n")}\n\n${link(process.env.APP_URL || "", "View Bug Board")}`
     : null;
 }
-// The old review reminder's gates, with Urgent/High Linear priority replacing its 200-line cap.
 function waitingReviews(rows: ReviewRow[], now = Date.now()) {
-  const waiting: { pr: PullRequest; issue: Issue; slug: string; days: number }[] = [];
+  const waiting: { pr: PullRequest; issue: Issue | undefined; slug: string; days: number }[] = [];
   for (const { pr, issue } of rows) {
     if (
-      !issue ||
-      ![1, 2].includes(issue.priority) ||
       !pr.baseRefName ||
       pr.baseRefName !== pr.repository.defaultBranchRef?.name ||
       pr.mergeable === "CONFLICTING" ||
@@ -158,20 +156,29 @@ function waitingReviews(rows: ReviewRow[], now = Date.now()) {
 }
 export function reviewReminders(rows: ReviewRow[], now = Date.now(), metrics: Record<string, Metrics> = {}) {
   const waiting = waitingReviews(rows, now);
-  const sections = engineers.flatMap((slug) => {
-    const prs = waiting.filter((review) => review.slug === slug);
-    return prs.length
-      ? [
-          `${mention(slug)} (avg review decision: ${metricDisplay("avg_review_decision_time", metrics[slug]?.avg_review_decision_time ?? null)}, last 30d):\n${prs
-            .sort((a, b) => b.days - a.days)
-            .map(({ pr, days }) => `- ${link(pr.url, pr.title)} (+${days}d)`)
-            .join("\n")}`,
-        ]
-      : [];
+  const priority = waiting.filter(({ issue }) => [1, 2].includes(issue?.priority || 0));
+  const other = waiting.filter(({ issue, pr, days }) =>
+    ![1, 2].includes(issue?.priority || 0) && days >= 7 && pr.additions < 200,
+  );
+  const sections = [
+    ["PRs - Checks Passing, Waiting for Review (+24h, Urgent/High priority)", priority],
+    ["Other PRs - Checks Passing, Waiting for Review (7+ days, <200 lines added)", other],
+  ] as const;
+  const text = sections.flatMap(([title, reviews]) => {
+    const reviewers = engineers.flatMap((slug) => {
+      const prs = reviews.filter((review) => review.slug === slug);
+      return prs.length
+        ? [
+            `${mention(slug)} (avg review decision: ${metricDisplay("avg_review_decision_time", metrics[slug]?.avg_review_decision_time ?? null)}, last 30d):\n${prs
+              .sort((a, b) => b.days - a.days)
+              .map(({ pr, days }) => `- ${link(pr.url, pr.title)} (+${days}d)`)
+              .join("\n")}`,
+          ]
+        : [];
+    });
+    return reviewers.length ? [`*${title}*\n\n${reviewers.join("\n\n")}`] : [];
   });
-  return sections.length
-    ? `*PRs - Checks Passing, Waiting for Review (+24h, Urgent/High priority)*\n\n${sections.join("\n\n")}`
-    : null;
+  return text.length ? text.join("\n\n") : null;
 }
 export async function staleMessage() {
   // GitHub's -review:approved search also drops PRs with one approval and another pending review.

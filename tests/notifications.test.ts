@@ -184,6 +184,18 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
       assert.ok(unavailable.includes("(avg completion: n/a, last 30d)"));
       prs = [];
     });
+    await t.test("the daily digest puts other week-old small PRs between priority reviews and stale issues", async () => {
+      const requestedAt = new Date(Date.now() - 8 * 86_400_000).toISOString();
+      const timelineItems = { nodes: [{ __typename: "ReviewRequestedEvent", createdAt: requestedAt, requestedReviewer: { login: "redreceipt" } }] };
+      issues = [{ ...issue(10, "Priority work"), priority: 2 }, issue(11)];
+      prs = [row(10, 2, { timelineItems }).pr, row(12, null, { additions: 150, deletions: 49, timelineItems }).pr];
+      const message = (await staleMessage())!;
+      assert.ok(message.indexOf("Urgent/High priority") < message.indexOf("Other PRs"));
+      assert.ok(message.indexOf("Other PRs") < message.indexOf("Stale Open Issues"));
+      for (const pr of prs) assert.equal(message.split(pr.url).length - 1, 1);
+      assert.ok(message.includes("<@U01865757S9> (avg review decision: n/a, last 30d):"));
+      prs = [];
+    });
     await t.test("priority bugs label and mention only reviewers eligible for PR reminders", async () => {
       const old = new Date(Date.now() - 3 * 86_400_000).toISOString();
       const requested = (login: string, createdAt = old) => ({
@@ -352,4 +364,56 @@ test("review reminders keep the old gates with Urgent/High priority instead of s
     "- <https://github.com/apollosproject/apollos-platforms/pull/9|PR 9> (+3d)",
   ].join("\n"));
   assert.equal(reviewReminders([row(3, 3)], now), null);
+});
+
+test("other review reminders require a week per reviewer and fewer than 200 added lines", () => {
+  const now = Date.parse("2026-10-13T14:00:00Z"), weekAgo = now - 7 * 86_400_000;
+  const requested = (login: string, at: number) => ({
+    __typename: "ReviewRequestedEvent", createdAt: new Date(at).toISOString(), requestedReviewer: { login },
+  });
+  const small = (number: number, priority: number | null = 3, overrides: Partial<PullRequest> = {}) => row(number, priority, {
+    additions: 150, deletions: 49,
+    timelineItems: { nodes: [requested("redreceipt", weekAgo), requested("nlewis84", now - 2 * 86_400_000)] },
+    ...overrides,
+  });
+  const eligible = [
+    small(101), small(102, 4), small(103, 0), small(104, null),
+    small(107, 3, { additions: 199, deletions: 10_000 }),
+    small(108, 3, { additions: 0, deletions: 50_000 }),
+    small(105, 3, { statusCheckRollup: null }),
+    small(106, 3, { timelineItems: { nodes: [requested("redreceipt", weekAgo - 2 * 86_400_000)] } }),
+  ];
+  const excluded = [
+    small(110, 3, { additions: 200, deletions: 0 }),
+    small(111, 3, { additions: 201, deletions: 0 }),
+    small(112, 3, { timelineItems: { nodes: [requested("redreceipt", weekAgo + 1)] } }),
+    small(113, 3, { timelineItems: { nodes: [] } }),
+    small(114, 3, { timelineItems: { nodes: [requested("redreceipt", weekAgo), requested("redreceipt", now - 1)] } }),
+    small(115, 3, { baseRefName: "stacked" }),
+    small(116, 3, { mergeable: "CONFLICTING" }),
+    small(117, 3, { statusCheckRollup: { state: "PENDING" } }),
+    small(118, 3, { statusCheckRollup: { state: "FAILURE" } }),
+    small(119, 3, { reviewDecision: "APPROVED" }),
+    small(120, 3, { reviews: { nodes: [{ author: { login: "redreceipt" }, state: "APPROVED", submittedAt: new Date(weekAgo + 1).toISOString() }], pageInfo: { hasNextPage: false, endCursor: null } } }),
+    small(121, 3, { reviewRequests: { nodes: [] } }),
+    small(122, 3, { reviewRequests: { nodes: [{ requestedReviewer: { login: "outsider" } }] }, timelineItems: { nodes: [requested("outsider", weekAgo)] } }),
+    small(123, 3, { reviewDecision: "CHANGES_REQUESTED", reviews: { nodes: [{ author: { login: "nlewis84" }, state: "CHANGES_REQUESTED", submittedAt: new Date(weekAgo).toISOString() }], pageInfo: { hasNextPage: false, endCursor: null } } }),
+  ];
+  const priority = [small(130, 1), small(131, 2)];
+  const message = reviewReminders([...eligible, ...excluded, ...priority], now)!;
+  const [high, other] = message.split("*Other PRs - Checks Passing, Waiting for Review (7+ days, <200 lines added)*");
+  assert.ok(other);
+  for (const { pr } of eligible) {
+    assert.ok(other.includes(pr.url), pr.title);
+    assert.ok(!high.includes(pr.url), pr.title);
+  }
+  for (const { pr } of excluded) assert.ok(!message.includes(pr.url), pr.title);
+  for (const { pr } of priority) {
+    assert.ok(high.includes(pr.url), pr.title);
+    assert.ok(!other.includes(pr.url), pr.title);
+  }
+  assert.ok(!other.includes("<@U022N4RTD40>"), "Recent requests stay out even on old PRs");
+  assert.ok(other.indexOf("|PR 106>") < other.indexOf("|PR 101>"), "Oldest requests first");
+  assert.equal(reviewReminders(excluded, now), null);
+  assert.ok(reviewReminders(eligible, now)!.startsWith("*Other PRs"));
 });
