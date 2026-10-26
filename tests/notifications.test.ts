@@ -137,7 +137,7 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
       assert.deepEqual(await notify("stale", "short"), { status: "already-claimed" });
       assert.equal(posts.length, 1);
     });
-    await t.test("stale issues include projects without changing age or assignee gates", async () => {
+    await t.test("stale issues include projects, skip sub-issues, and keep age or assignee gates", async () => {
       const project = { id: "project", name: "Backlog cleanup" };
       issues = [
         issue(2, "Standalone stale"),
@@ -147,13 +147,15 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
         { ...issue(6, "Project recent"), project, updatedAt: new Date(Date.now() - 21 * 86_400_000).toISOString() },
         { ...issue(7, "Project unassigned"), project, assignee: null },
         { ...issue(8, "Project outside engineering"), project, assignee: { name: "vincent", displayName: "vincent" } },
+        { ...issue(10, "Stale sub-issue"), parent: { id: "2" } },
+        { ...issue(11, "Top-level null parent"), parent: null },
       ];
       const message = (await staleMessage())!;
       assert.match(message, /\*Stale Open Issues\*/);
       assert.match(message, /<@U0BLNNPAB> \(avg completion: n\/a, last 30d\):/);
-      for (const title of ["Standalone stale", "Project stale", "Project merged", "Project parked"])
+      for (const title of ["Standalone stale", "Project stale", "Project merged", "Project parked", "Top-level null parent"])
         assert.ok(message.includes(`|${title}>`), title);
-      for (const title of ["Project recent", "Project unassigned", "Project outside engineering"])
+      for (const title of ["Project recent", "Project unassigned", "Project outside engineering", "Stale sub-issue"])
         assert.ok(!message.includes(title), title);
     });
     await t.test("person headings reuse the metrics snapshot for both 30-day averages", async () => {

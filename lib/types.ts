@@ -32,6 +32,7 @@ export type Issue = {
   slaStartedAt?: string;
   assignee: Identity | null;
   project: { id: string; name: string } | null;
+  parent?: { id: string } | null;
   state: IssueState;
   labels: { nodes: { name: string }[] };
   attachments?: {

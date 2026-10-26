@@ -112,7 +112,7 @@ export const openWork = cache(async () => {
       );
   }
   return unstable_cache(async () => compactOpenIssues(await openIssues()),
-    ["open-work-v4", process.env.VERCEL_URL || "local"], { revalidate: 60 })();
+    ["open-work-v5", process.env.VERCEL_URL || "local"], { revalidate: 60 })();
 });
 export function sortedTeam(rows: TeamRow[], search: Search) {
   const everyone = param(search, "everyone") === "1";
