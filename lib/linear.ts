@@ -107,8 +107,9 @@ export async function fetchIssues(
   return issues;
 }
 const team = { team: { key: { eq: config.linear_team_key } } };
+// parent lets the Slack stale digest list only top-level issues.
 export const openIssues = cache(() =>
-  fetchIssues({ ...team, state: { type: { in: openTypes } } }, true, "open"),
+  fetchIssues({ ...team, state: { type: { in: openTypes } } }, true, "open", `${fields} parent { id }`),
 );
 const completedFilter = (after: string, before: string) => ({
   ...team,
