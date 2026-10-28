@@ -15,7 +15,7 @@
     "e2e": "e2e run"
   },
   "dependencies": {
-    "@google-cloud/bigquery": "^9.2.0",
+    "@google-cloud/bigquery": "^9.5.0",
     "@upstash/redis": "^1.39.0",
     "@vercel/analytics": "^2.0.1",
     "google-auth-library": "^11.3.1",
