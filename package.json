@@ -34,7 +34,7 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
-    "@e2e-dev/github": "^0.4.0",
+    "@e2e-dev/github": "^0.4.3",
     "@e2e-dev/web": "^0.15.2",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
