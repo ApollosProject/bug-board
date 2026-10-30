@@ -69,6 +69,11 @@ people:
     slack_id: U02GM64LC
     linear_username: david
     github_username: davidwoody
+  marcelo:
+    team: unassigned
+    slack_id: U0EF8U196
+    linear_username: marcelo
+    github_username: Lepozepo
 
 platforms:
   crossroads:
