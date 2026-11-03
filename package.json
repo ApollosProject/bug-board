@@ -31,7 +31,19 @@
     "devalue": "^5.9.4",
     "nanoid": "^5.1.16",
     "undici": "7.30.1",
-    "zod": "4.6.7"
+    "zod": "4.6.7",
+    "@oclif/core": {
+      "minimatch": "11.0.4"
+    },
+    "@swc/cli": {
+      "minimatch": "11.0.4"
+    },
+    "@vercel/queue": {
+      "minimatch": "11.0.4"
+    },
+    "filelist": {
+      "minimatch": "11.0.4"
+    }
   },
   "devDependencies": {
     "@e2e-dev/github": "^0.4.3",
