@@ -6,7 +6,7 @@ import { github, githubRest, merged, prCounts } from "./github";
 import { completed } from "./linear";
 import { engineers, people } from "./config";
 import { isPriorityBug } from "./metrics";
-import { DAY, inWindow, timeWindow } from "./window";
+import { DAY, inWindow } from "./window";
 import { readSnapshot } from "./cache";
 import { mapConcurrent } from "./http";
 import type { Issue, Review, Window } from "./types";
@@ -436,4 +436,3 @@ export async function summarizeRegressions(
 }
 export const regressionDashboard = cache(() =>
   readSnapshot<RegressionSummary>("regressions", 86400));
-export const regressionWindow = () => timeWindow({ days: "30" });
