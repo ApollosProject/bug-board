@@ -57,15 +57,32 @@ export async function graphql<T>(
   variables: object = {},
 ) {
   if (!token) throw new Error("Integration not configured");
-  const payload = await requestJson<{ data: T; errors?: unknown[] }>(
-    url,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: token },
-      body: JSON.stringify({ query, variables }),
-    },
-    url.includes("linear") ? "Linear" : "GitHub",
-  );
+  const request = () =>
+    requestJson<{ data: T; errors?: unknown[] }>(
+      url,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: token },
+        body: JSON.stringify({ query, variables }),
+      },
+      url.includes("linear") ? "Linear" : "GitHub",
+    );
+  // GitHub search intermittently 502s on large pages; every query here is a read.
+  let payload;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      payload = await request();
+      break;
+    } catch (error) {
+      if (
+        attempt === 3 ||
+        !(error instanceof UpstreamError) ||
+        ![502, 503, 504].includes(error.status)
+      )
+        throw error;
+      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+    }
+  }
   if (payload.errors?.length || !payload.data)
     throw new Error("GraphQL query unavailable");
   return payload.data;
