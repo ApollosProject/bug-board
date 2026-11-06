@@ -292,12 +292,12 @@ export async function performanceMessage() {
     coach: string[] = [];
   engineers.forEach((slug, i) => {
     const compare = comparisons(values[i], values);
-    for (const [tone, target] of [
-      ["high", praise],
-      ["low", coach],
+    for (const [sign, target] of [
+      [1, praise],
+      [-1, coach],
     ] as const) {
       const metrics = (Object.keys(metricLabels) as MetricKey[])
-        .filter((key) => compare[key]?.tone === tone)
+        .filter((key) => (compare[key]?.z ?? 0) * sign >= 1.5)
         .map((key) => `${metricLabels[key]} ${compare[key]?.label}`);
       if (metrics.length)
         target.push(
@@ -307,7 +307,7 @@ export async function performanceMessage() {
   });
   return praise.length || coach.length
     ? [
-        `*Who to praise and coach (±1σ, last 7 days)*`,
+        `*Who to praise and coach (±1.5σ, last 7 days)*`,
         ...(praise.length ? [`*Praise*\n\n${praise.join("\n")}`] : []),
         ...(coach.length ? [`*Coach*\n\n${coach.join("\n")}`] : []),
       ].join("\n\n")
