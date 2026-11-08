@@ -35,13 +35,13 @@ const mention = (slug: string | undefined) =>
   slug && people[slug]?.slack_id
     ? `<@${people[slug].slack_id}>`
     : "No Assignee";
-function bugLine(issue: Issue, reviewers: string[]) {
+function bugLine(issue: Issue) {
   const platform = platformFor(issue),
     slug = slugFor(issue.assignee?.name, issue.assignee?.displayName),
     assignee = slug && people[slug].slack_id
       ? mention(slug)
       : escape(issue.assignee?.displayName || issue.assignee?.name || "");
-  return `- ${issue.priority === 1 ? "🚨 " : ""}${link(issue.url, issue.title)} (${slaText(issue) || `+${daysSince(issue.createdAt)}d`}${platform ? `, ${platform}` : ""}${assignee ? `, ${assignee}` : ""}${reviewers.length ? `, Review requested: ${reviewers.map(mention).join(", ")}` : ""})`;
+  return `- ${issue.priority === 1 ? "🚨 " : ""}${link(issue.url, issue.title)} (${slaText(issue) || `+${daysSince(issue.createdAt)}d`}${platform ? `, ${platform}` : ""}${assignee ? `, ${assignee}` : ""})`;
 }
 export async function priorityMessage() {
   const bugs = (await openWork()).filter(
@@ -56,14 +56,6 @@ export async function priorityMessage() {
         i.slaBreachesAt,
       ].some(Boolean),
   );
-  const waiting = new Map<string, Set<string>>();
-  if (bugs.length) {
-    for (const { issue, slug } of waitingReviews(await reviewQueue(true))) {
-      if (!issue || ![1, 2].includes(issue.priority)) continue;
-      if (!waiting.has(issue.id)) waiting.set(issue.id, new Set());
-      waiting.get(issue.id)!.add(slug);
-    }
-  }
   const unassigned = bugs.filter((b) => !b.assignee),
     overdue = bugs.filter(
       (b) => Date.parse(b.slaBreachesAt || "") <= Date.now(),
@@ -84,7 +76,7 @@ export async function priorityMessage() {
         `*${title}*\n\n${items
           .slice()
           .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-          .map((issue) => bugLine(issue, [...(waiting.get(issue.id) || [])]))
+          .map(bugLine)
           .join("\n")}`,
     );
   if (unassigned.length) {

@@ -196,57 +196,6 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
       assert.ok(message.includes("<@U01865757S9> (avg review decision: n/a, last 30d):"));
       prs = [];
     });
-    await t.test("priority bugs label and mention only reviewers eligible for PR reminders", async () => {
-      const old = new Date(Date.now() - 3 * 86_400_000).toISOString();
-      const requested = (login: string, createdAt = old) => ({
-        __typename: "ReviewRequestedEvent", createdAt, requestedReviewer: { login },
-      });
-      const cases = [
-        row(20, 1),
-        row(21, 2, { statusCheckRollup: null }),
-        row(22, 1, { baseRefName: "stacked" }),
-        row(23, 1, { mergeable: "CONFLICTING" }),
-        row(24, 1, { statusCheckRollup: { state: "FAILURE" } }),
-        row(25, 1, { statusCheckRollup: { state: "PENDING" } }),
-        row(26, 1, { reviewDecision: "APPROVED" }),
-        row(27, 1, { reviews: { nodes: [{ author: { login: "redreceipt" }, state: "APPROVED", submittedAt: new Date().toISOString() }], pageInfo: { hasNextPage: false, endCursor: null } } }),
-        row(28, 1, { timelineItems: { nodes: [] } }),
-        row(29, 1, { reviewRequests: { nodes: [{ requestedReviewer: { login: "outsider" } }] } }),
-        row(30, 1, { reviewDecision: "CHANGES_REQUESTED", reviews: { nodes: [{ author: { login: "nlewis84" }, state: "CHANGES_REQUESTED", submittedAt: old }], pageInfo: { hasNextPage: false, endCursor: null } } }),
-        row(31, 1),
-        row(32, 1),
-      ];
-      prs = cases.map(({ pr }) => ({
-        ...pr,
-        timelineItems: pr.number === 28 ? pr.timelineItems : { nodes: [
-          requested("redreceipt", pr.number === 32 ? new Date().toISOString() : old),
-          requested("nlewis84", pr.number === 20 ? old : new Date().toISOString()),
-          requested("outsider"),
-        ] },
-      }));
-      // A second PR waiting on the same person must not duplicate their mention.
-      prs.push({ ...prs[0], id: "duplicate-pr", number: 100, url: "https://github.com/apollosproject/apollos-platforms/pull/100" });
-      issues = cases.map(({ issue: i }) => ({
-        ...i!, assignee: { name: "zach", displayName: "zach" },
-        slaBreachesAt: old, labels: { nodes: [{ name: "Bug" }] },
-      }));
-      issues.find((i) => i.number === 31)!.slaHighRiskAt = old;
-      issues.find((i) => i.number === 31)!.slaBreachesAt = new Date(Date.now() + 86_400_000).toISOString();
-      const message = (await priorityMessage())!;
-      assert.match(message, /\*Overdue\*/);
-      assert.match(message, /\*At Risk\*/);
-      for (const i of issues) {
-        const line = message.split("\n").find((line) => line.includes(`<${i.url}|`))!;
-        assert.ok(line.includes("<@U0BLNNPAB>"), "Keep the assignee");
-        assert.equal(line.includes("Review requested:"), [20, 21, 31].includes(i.number), i.identifier);
-        assert.equal((line.match(/<@U01865757S9>/g) || []).length, [20, 21, 31].includes(i.number) ? 1 : 0, "Mention each eligible reviewer once");
-        if (i.number === 20)
-          assert.match(line, /Review requested: <@U01865757S9>, <@U022N4RTD40>/);
-        else if ([21, 31].includes(i.number))
-          assert.match(line, /Review requested: <@U01865757S9>\)$/);
-      }
-      prs = [];
-    });
     await t.test("priority bugs retain assignees without a configured Slack mention", async () => {
       const overdue = new Date(Date.now() - 86_400_000).toISOString();
       issues = [
