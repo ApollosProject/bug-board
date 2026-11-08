@@ -259,6 +259,7 @@ test("fleet heartbeat retains unknown threshold, recovery, failure path and Prev
   const previous = Object.fromEntries(Object.keys(env).map((k) => [k, process.env[k]]));
   const original = globalThis.fetch;
   const deliveries: string[] = [];
+  const bodies: string[] = [];
   let count = 0;
   try {
     Object.assign(process.env, env);
@@ -266,6 +267,7 @@ test("fleet heartbeat retains unknown threshold, recovery, failure path and Prev
       const target = new URL(String(url));
       if (target.hostname === "heartbeat.local") {
         deliveries.push(target.pathname);
+        bodies.push(init?.body ? `${init.method} ${init.body}` : "");
         assert.equal(init?.redirect, "error");
         return new Response("ok");
       }
@@ -281,10 +283,12 @@ test("fleet heartbeat retains unknown threshold, recovery, failure path and Prev
     await fleetHeartbeat("unknown");
     assert.deepEqual(deliveries, []);
     await fleetHeartbeat("unknown");
-    await fleetHeartbeat("healthy");
+    await fleetHeartbeat("healthy", "all good");
     assert.equal(count, 0);
-    await fleetHeartbeat("degraded");
+    await fleetHeartbeat("degraded", "planning_center_dag");
     assert.deepEqual(deliveries, ["/monitor/fail", "/monitor", "/monitor/fail"]);
+    // Only failures carry the summary Better Stack shows on the incident.
+    assert.deepEqual(bodies, ["", "", "POST planning_center_dag"]);
     process.env.VERCEL_ENV = "preview";
     await fleetHeartbeat("healthy");
     assert.equal(deliveries.length, 3);

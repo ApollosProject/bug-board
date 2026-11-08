@@ -20,7 +20,7 @@ import {
 import { classify, linkIssues, reviewRows, ticketNumber } from "../lib/reviews";
 import { creditedAuthors, reviewDecisionSeconds } from "../lib/github";
 import { metricDisplay } from "../lib/metrics";
-import { fleetStats } from "../lib/fleet";
+import { fleetStats, fleetSummary } from "../lib/fleet";
 import { churchActivity, matchChurches, type Church } from "../lib/churches";
 import {
   appIdentity,
@@ -594,6 +594,17 @@ test("fleet failure thresholds use terminal runs while inventory shows latest st
     run && i < 45 ? { ...run, terminal: "failed" } : run,
   );
   assert.equal(fleetStats(many, outage).status, "degraded");
+  const summary = fleetSummary(fleetStats(many, outage)).split("\n");
+  assert.equal(
+    summary[0],
+    "degraded: 15 of 70 evaluated DAGs failed (21.4%), 30 of 100 not checked.",
+  );
+  assert.deepEqual(summary.slice(1, 16), many.slice(30, 45));
+  const failed = { ...ok, terminal: "failed" };
+  assert.equal(
+    fleetSummary(fleetStats(many, many.map(() => failed))).split("\n")[51],
+    "...and 50 more",
+  );
 });
 test("mobile runtime requires every published build to have one consistent native-ID match", () => {
   assert.equal(

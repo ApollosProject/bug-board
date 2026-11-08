@@ -173,7 +173,19 @@ export async function evaluateFleet(
   }
   return fleetStats(ids, runs);
 }
-export async function fleetHeartbeat(status: Fleet["status"]) {
+// Better Stack attaches the failure body to the incident, so say what failed.
+export function fleetSummary(fleet: Fleet) {
+  const lines = [
+    `${fleet.status}: ${fleet.failed_runs} of ${fleet.evaluated_dags} evaluated DAGs failed (${(fleet.failure_ratio * 100).toFixed(1)}%), ${fleet.failed_fetches} of ${fleet.active_dags_total} not checked.`,
+    ...fleet.failed_dags.slice(0, 50).map((dag) => dag.dag_id),
+  ];
+  if (fleet.failed_dags.length > 50)
+    lines.push(`...and ${fleet.failed_dags.length - 50} more`);
+  if (process.env.APP_URL)
+    lines.push(`${process.env.APP_URL.replace(/\/$/, "")}/dags?state=failed`);
+  return lines.join("\n");
+}
+export async function fleetHeartbeat(status: Fleet["status"], detail = "") {
   const count = await unknownCount(status !== "unknown");
   if (
     (status === "unknown" && count < 3) ||
@@ -185,6 +197,7 @@ export async function fleetHeartbeat(status: Fleet["status"]) {
   if (status !== "healthy")
     url.pathname = `${url.pathname.replace(/\/$/, "")}/fail`;
   const response = await fetch(url, {
+    ...(status !== "healthy" && detail && { method: "POST", body: detail }),
     redirect: "error",
     signal: AbortSignal.timeout(10_000),
   });

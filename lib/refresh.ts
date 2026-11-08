@@ -6,6 +6,7 @@ import {
   fleetDeadline,
   fleetInventory,
   fleetHeartbeat,
+  fleetSummary,
 } from "./fleet";
 import { openIssues } from "./linear";
 import { ptoCalendar } from "./pto";
@@ -48,10 +49,13 @@ export async function refreshSnapshot(
         deadline,
       );
       await writeSnapshot("fleet", fleet, 900);
-      await fleetHeartbeat(fleet.status);
+      await fleetHeartbeat(fleet.status, fleetSummary(fleet));
       return { status: fleet.status, dags: fleet.active_dags_total };
     } catch (error) {
-      await fleetHeartbeat("unknown");
+      await fleetHeartbeat(
+        "unknown",
+        `Fleet check failed: ${error instanceof Error ? error.message : "unknown error"}`,
+      );
       throw error;
     }
   }
