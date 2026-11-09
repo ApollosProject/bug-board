@@ -177,7 +177,7 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
       }] } }];
       const message = (await staleMessage())!;
       assert.ok(message.includes("<@U01865757S9> (avg review decision: 6.0h, last 30d):"));
-      assert.ok(message.includes("<@U0BLNNPAB> (avg completion: 3d, last 30d):"));
+      assert.ok(message.includes("<@U0BLNNPAB> (avg completion: 3.0d, last 30d):"));
       report = null;
       const unavailable = (await staleMessage())!;
       assert.ok(unavailable.includes("(avg review decision: n/a, last 30d)"));

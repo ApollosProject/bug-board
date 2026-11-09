@@ -104,9 +104,11 @@ export function assignmentDays(issue: Issue) {
         Date.parse(node.updatedAt) <= completedAt,
     )
     .map((node) => Date.parse(node.updatedAt));
-  return assignments.length
-    ? Math.max(0, Math.floor((completedAt - Math.max(...assignments)) / DAY))
-    : null;
+  // Linear records no assign step for a ticket made with its assignee.
+  const start = assignments.length
+    ? Math.max(...assignments)
+    : issue.history ? Date.parse(issue.createdAt) : NaN;
+  return Number.isFinite(start) ? Math.max(0, (completedAt - start) / DAY) : null;
 }
 const average = (values: number[]) =>
   values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
@@ -145,11 +147,9 @@ export function personMetrics(
     ...prCounts(prs, person.github_username),
     avg_review_decision_time: reviewTime === null ? null : reviewTime / 86400,
     priority_bugs_fixed: bugs.length,
-    priority_bug_avg_time_to_fix: bugTimes.length
-      ? Math.trunc(average(bugTimes)!)
-      : null,
+    priority_bug_avg_time_to_fix: average(bugTimes),
     all_work_done: items.length,
-    avg_all_time_to_fix: times.length ? Math.trunc(average(times)!) : null,
+    avg_all_time_to_fix: average(times),
     lead_current_projects: led.filter((p) => !inactive(p)).length,
     lead_completed_projects: completed.reduce(
       (sum, p) => sum + plannedWeeks(p),
@@ -219,7 +219,9 @@ export function metricDisplay(key: MetricKey, value: number | null) {
     return value === 0
       ? "on time"
       : `${Math.abs(value).toFixed(1)}d ${value < 0 ? "early" : "late"}`;
-  return `${value}${key === "priority_bug_avg_time_to_fix" || key === "avg_all_time_to_fix" ? "d" : ""}`;
+  if (key === "priority_bug_avg_time_to_fix" || key === "avg_all_time_to_fix")
+    return `${value.toFixed(1)}d`;
+  return `${value}`;
 }
 export function projectScoringWeeks(p: Project, w: Window) {
   if (p.status.type !== "completed" || !p.lead?.displayName || !p.targetDate)
