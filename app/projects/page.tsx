@@ -87,6 +87,8 @@ export async function Timeline() {
         )
         .flatMap((p) => {
           const lead = slugFor(p.lead?.displayName) === slug;
+          // Linear's status type, not its custom name, says whether work has started.
+          const idle = !done(p) && p.status.type !== "started";
           const undated = !p.startDate && !p.targetDate && !p.completedAt;
           if (undated && inactive(p)) return [];
           const a = Date.parse(p.startDate || date(start)),
@@ -107,8 +109,8 @@ export async function Timeline() {
               priorityLabel: p.priorityLabel,
               start: Math.max(a, start),
               end: Math.min(b, end - DAY),
-              className: `${done(p) ? "completed" : overdue ? "overdue" : p.health || "neutral"}${lead ? " lead" : ""}`,
-              title: `${p.name}${lead ? " · Lead" : ""} · Priority: ${p.priorityLabel || "No priority"} · ${undated ? "Dates not set" : `${p.startDate || "Earlier"} – ${hint?.slice(0, 10) || "Ongoing"}`} · Opens in a new tab`,
+              className: `${done(p) ? "completed" : overdue ? "overdue" : p.health || "neutral"}${idle ? " idle" : ""}${lead ? " lead" : ""}`,
+              title: `${p.name}${lead ? " · Lead" : ""} · ${p.status.name} · Priority: ${p.priorityLabel || "No priority"} · ${undated ? "Dates not set" : `${p.startDate || "Earlier"} – ${hint?.slice(0, 10) || "Ongoing"}`} · Opens in a new tab`,
               lane: 1,
             },
           ];
@@ -172,6 +174,7 @@ export async function Timeline() {
           ["atRisk", "At risk"],
           ["offTrack", "Off track or overdue"],
           ["completed", "Completed"],
+          ["neutral idle", "Not started or paused"],
           ["ooo", "Out of office"],
           ["ooo partial", "Partial day out"],
           ["neutral lead", "Project lead"],

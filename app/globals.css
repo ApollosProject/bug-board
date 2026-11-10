@@ -817,6 +817,17 @@ meter::-moz-meter-bar {
 .timeline-bar.ooo {
   background: #8a5a1f;
 }
+/* Projects not in development recede so started work stands out. */
+.timeline-bar.idle {
+  background: var(--pico-card-background-color);
+  color: var(--pico-muted-color);
+  border: 1px dashed;
+  box-shadow: none;
+  font-weight: normal;
+}
+.timeline-bar.idle.lead {
+  border-style: solid;
+}
 .timeline-bar.partial {
   background: repeating-linear-gradient(
     45deg,

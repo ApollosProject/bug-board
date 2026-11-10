@@ -41,6 +41,8 @@ test("timeline includes undated active ownership, preserves dated bounds, and ke
     project("canceled", { status: { name: "Canceled", type: "canceled" } }),
     project("undated-completed", { status: { name: "Completed", type: "completed" } }),
     project("unassigned", { lead: null, priorityLabel: "Urgent" }),
+    project("started", { status: { name: "In Progress", type: "started" }, health: "onTrack" }),
+    project("paused", { status: { name: "Paused", type: "paused" }, health: "atRisk" }),
   ];
   t.mock.method(globalThis, "fetch", async (_url: unknown, init?: RequestInit) => {
     const commands = JSON.parse(String(init?.body));
@@ -84,7 +86,9 @@ test("timeline includes undated active ownership, preserves dated bounds, and ke
   assert.doesNotMatch(anchor("start-only"), /opacity="0.35"/);
   assert.match(html, /aria-label="Priority key"[^]*Very Low[^]*No priority/);
   assert.match(anchor("unassigned"), /aria-label="Priority: Urgent"[^]*fill-rule="evenodd"/);
-  assert.match(anchor("undated-lead"), /class="timeline-bar neutral lead"[^>]*title="undated-lead · Lead · /);
+  assert.match(anchor("undated-lead"), /class="timeline-bar neutral idle lead"[^>]*title="undated-lead · Lead · Ready · /);
+  assert.match(anchor("started"), /class="timeline-bar onTrack lead"[^>]*title="started · Lead · In Progress · /);
+  assert.match(anchor("paused"), /class="timeline-bar atRisk idle lead"/);
   assert.doesNotMatch(anchor("undated-member"), / lead"|· Lead/);
   assert.ok(html.includes("No projects in this window"));
 });

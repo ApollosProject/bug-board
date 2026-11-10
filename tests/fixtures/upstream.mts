@@ -79,6 +79,9 @@ const projects = [
   project("p5", "Accessibility audit", ["Ready", "planned"], {
     inverseRelations: page([{ type: "dependency", project: { status: { name: "In Progress", type: "started" } }, projectMilestone: null }]),
   }),
+  project("p8", "Follower clustering", ["Backlog", "backlog"], {
+    health: null, lead: { displayName: people[2][1] },
+  }),
   project("p6", "Release tooling", ["Completed", "completed"], {
     startDate: day(50), targetDate: day(12), completedAt: ago(10),
     lead: { displayName: people[2][1] }, members: page([{ displayName: people[3][1] }]),
