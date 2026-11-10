@@ -189,9 +189,10 @@ export async function staleMessage() {
     personMetrics(slug, report.completed, report.prs, report.projects, report.window),
   ])) : {};
   const reviews = reviewReminders(queue, Date.now(), metrics);
-  // Sub-issues roll up to their parent, so the digest lists only top-level issues.
+  // Project work is tracked by project updates; sub-issues roll up to their parent.
   const issues = open.filter(
     (i) =>
+      !i.project &&
       !i.parent &&
       daysSince(i.updatedAt) > 21 &&
       engineers.includes(

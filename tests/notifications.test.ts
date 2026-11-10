@@ -137,25 +137,25 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
       assert.deepEqual(await notify("stale", "short"), { status: "already-claimed" });
       assert.equal(posts.length, 1);
     });
-    await t.test("stale issues include projects, skip sub-issues, and keep age or assignee gates", async () => {
+    await t.test("stale issues skip project and sub-issues and keep age or assignee gates", async () => {
       const project = { id: "project", name: "Backlog cleanup" };
       issues = [
         issue(2, "Standalone stale"),
         { ...issue(3, "Project stale"), project },
-        { ...issue(4, "Project merged"), project, state: { name: "Merged", type: "started" } },
-        { ...issue(5, "Project parked"), project, state: { name: "Not Now", type: "backlog" } },
-        { ...issue(6, "Project recent"), project, updatedAt: new Date(Date.now() - 21 * 86_400_000).toISOString() },
-        { ...issue(7, "Project unassigned"), project, assignee: null },
-        { ...issue(8, "Project outside engineering"), project, assignee: { name: "vincent", displayName: "vincent" } },
+        { ...issue(4, "Standalone merged"), state: { name: "Merged", type: "started" } },
+        { ...issue(5, "Standalone parked"), state: { name: "Not Now", type: "backlog" } },
+        { ...issue(6, "Standalone recent"), updatedAt: new Date(Date.now() - 21 * 86_400_000).toISOString() },
+        { ...issue(7, "Standalone unassigned"), assignee: null },
+        { ...issue(8, "Standalone outside engineering"), assignee: { name: "vincent", displayName: "vincent" } },
         { ...issue(10, "Stale sub-issue"), parent: { id: "2" } },
         { ...issue(11, "Top-level null parent"), parent: null },
       ];
       const message = (await staleMessage())!;
       assert.match(message, /\*Stale Open Issues\*/);
       assert.match(message, /<@U0BLNNPAB> \(avg completion: n\/a, last 30d\):/);
-      for (const title of ["Standalone stale", "Project stale", "Project merged", "Project parked", "Top-level null parent"])
+      for (const title of ["Standalone stale", "Standalone merged", "Standalone parked", "Top-level null parent"])
         assert.ok(message.includes(`|${title}>`), title);
-      for (const title of ["Project recent", "Project unassigned", "Project outside engineering", "Stale sub-issue"])
+      for (const title of ["Project stale", "Standalone recent", "Standalone unassigned", "Standalone outside engineering", "Stale sub-issue"])
         assert.ok(!message.includes(title), title);
     });
     await t.test("person headings reuse the metrics snapshot for both 30-day averages", async () => {
