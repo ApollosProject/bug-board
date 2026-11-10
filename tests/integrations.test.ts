@@ -733,7 +733,8 @@ test("merged PR delivery timing is fetched once in bounded batches, cached, and 
       }
       assert.match(body.query, /query Delivery/);
       batches.push(body.variables.ids);
-      if (fail) return new Response("unavailable", { status: 502 });
+      // 500, not a retried gateway error, so one request is one batch.
+      if (fail) return new Response("unavailable", { status: 500 });
       const commits = { nodes: [] };
       return Response.json({ data: { nodes: body.variables.ids.map(() => ({ reviews: { nodes: [] }, opened: commits, head: commits })) } });
     };
