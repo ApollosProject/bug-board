@@ -18,7 +18,7 @@
     "@google-cloud/bigquery": "^9.5.0",
     "@upstash/redis": "^1.39.0",
     "@vercel/analytics": "^2.0.1",
-    "google-auth-library": "^11.3.2",
+    "google-auth-library": "^11.3.3",
     "jose": "^6.2.14",
     "next": "^16.4.3",
     "node-ical": "^0.27.3",
