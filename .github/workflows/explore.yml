@@ -12,6 +12,8 @@ on:
       - tests/fixtures/**
 permissions:
   contents: read
+  # e2e's GitHub reporter comments its findings on pull requests.
+  pull-requests: write
 concurrency:
   group: explore-${{ github.ref }}
   cancel-in-progress: true
