@@ -53,7 +53,7 @@
     "@types/react-dom": "^19.3.0",
     "@typescript/native": "npm:typescript@^7.0.2",
     "ai": "^7.0.159",
-    "e2e": "^0.21.2",
+    "e2e": "^0.23.0",
     "eslint": "^10.14.0",
     "eslint-config-next": "^16.4.3",
     "tsx": "^4.23.15",
