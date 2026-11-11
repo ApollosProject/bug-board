@@ -56,9 +56,11 @@ export type Issue = {
 export type Project = {
   id: string;
   name: string;
+  description?: string;
   url: string;
   health?: string;
   priorityLabel?: string;
+  progress?: number;
   status: { name: string; type: string };
   completedAt?: string;
   startDate?: string;

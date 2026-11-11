@@ -64,7 +64,8 @@ const project = (id: string, name: string, status: [string, string], extra: Json
 });
 const projects = [
   project("p1", "Checkout redesign", ["In Progress", "started"], {
-    priorityLabel: "High", startDate: day(20), targetDate: day(-15),
+    priorityLabel: "High", startDate: day(20), targetDate: day(-15), progress: 0.42,
+    description: "Rebuild checkout so giving takes fewer taps.",
     lead: { displayName: people[0][1] }, members: page([{ displayName: people[1][1] }]),
   }),
   project("p2", "Offline sync", ["In Progress", "started"], {
