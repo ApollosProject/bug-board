@@ -1,6 +1,7 @@
-import { Suspense, type CSSProperties } from "react";
+import { Fragment, Suspense, type CSSProperties } from "react";
 import Link from "next/link";
 import { Heading, Loading, Unavailable } from "@/components/dashboard";
+import { LongPressCards } from "@/components/long-press";
 import { engineers, personName, slugFor, normalize, priorityLabels } from "@/lib/config";
 import { inactive, done, blocked } from "@/lib/metrics";
 import { projectDashboard } from "@/lib/reports";
@@ -8,6 +9,7 @@ import { ptoCalendar } from "@/lib/pto";
 import { readSnapshot } from "@/lib/cache";
 import { DAY, date, timeWindow } from "@/lib/window";
 export const metadata = { title: "Projects" };
+const health: Record<string, string> = { onTrack: "On track", atRisk: "At risk", offTrack: "Off track" };
 // Linear's priority icons: signal bars for High to Very Low, a badge for Urgent, dashes for none.
 function ProjectPriority({ label = "No priority" }: { label?: string }) {
   const filled = { High: 3, Medium: 2, Low: 1, "Very Low": 0 }[label];
@@ -101,6 +103,9 @@ export async function Timeline() {
             a,
           );
           if (b < start || a >= end) return [];
+          const members = p.members.nodes
+            .map((m) => m.displayName)
+            .filter((name) => name && name !== p.lead?.displayName);
           return [
             {
               id: p.id,
@@ -110,7 +115,22 @@ export async function Timeline() {
               start: Math.max(a, start),
               end: Math.min(b, end - DAY),
               className: `${done(p) ? "completed" : overdue ? "overdue" : p.health || "neutral"}${idle ? " idle" : ""}${lead ? " lead" : ""}`,
-              title: `${p.name}${lead ? " · Lead" : ""} · ${p.status.name} · Priority: ${p.priorityLabel || "No priority"} · ${undated ? "Dates not set" : `${p.startDate || "Earlier"} – ${hint?.slice(0, 10) || "Ongoing"}`} · Opens in a new tab`,
+              summary: p.description,
+              progress: p.progress,
+              details: [
+                [
+                  "Status",
+                  [p.status.name, health[p.health || ""], overdue && "Overdue", blocked(p) && "Blocked"]
+                    .filter(Boolean)
+                    .join(" · "),
+                ],
+                ["Priority", p.priorityLabel || "No priority"],
+                ["Dates", undated ? "Not set" : `${p.startDate || "Earlier"} – ${hint?.slice(0, 10) || "Ongoing"}`],
+                ["Lead", p.lead?.displayName || "None"],
+                ["Members", members.join(", ")],
+                ["Initiatives", p.initiatives.nodes.map((i) => i.name).join(", ")],
+                ["Updated", p.lastUpdate?.createdAt.slice(0, 10)],
+              ].filter((row): row is [string, string] => !!row[1]),
               lane: 1,
             },
           ];
@@ -141,7 +161,9 @@ export async function Timeline() {
             start: Math.max(a, start),
             end: Math.min(b, end - DAY),
             className: event.allDay ? "ooo" : "ooo partial",
-            title: `${event.allDay ? "OOO" : "Partial-day OOO"} · ${event.start} – ${event.end}`,
+            summary: `${event.allDay ? "All day" : "Partial day"} · ${event.start} – ${event.end}`,
+            progress: undefined,
+            details: [],
             lane: 1,
           },
         ];
@@ -215,7 +237,7 @@ export async function Timeline() {
           </div>
         </article>
       )}
-      <div
+      <LongPressCards
         className="timeline-scroll"
         tabIndex={0}
         role="region"
@@ -233,7 +255,7 @@ export async function Timeline() {
               ))}
             </div>
           </div>
-          {rows.map((row) => (
+          {rows.map((row, r) => (
             <div className="timeline-row" key={row.slug}>
               <Link href={`/team/${row.slug}`}>
                 {personName(row.slug).split(" ")[0]}
@@ -248,34 +270,65 @@ export async function Timeline() {
                 }
               >
                 <i className="today" aria-hidden="true" />
-                {row.bars.map((bar) => {
+                {row.bars.map((bar, b) => {
+                  // Projects can appear in several rows, so ids come from position.
+                  const card = `card-${r}-${b}`;
                   const style = {
                     gridColumn: `${Math.floor((bar.start - start) / DAY) + 1} / span ${Math.floor((bar.end - bar.start) / DAY) + 1}`,
                     gridRow: bar.lane,
+                    anchorName: `--${card}`,
                   };
-                  return bar.href ? (
-                    <a
-                      key={bar.id}
-                      href={bar.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`timeline-bar ${bar.className}`}
-                      title={bar.title}
-                      style={style}
-                    >
-                      <ProjectPriority label={bar.priorityLabel} />
-                      <span className="timeline-label">{bar.name}</span>
-                    </a>
-                  ) : (
-                    <span
-                      key={bar.id}
-                      className={`timeline-bar ${bar.className}`}
-                      title={bar.title}
-                      aria-label={bar.title}
-                      style={style}
-                    >
-                      {bar.name}
-                    </span>
+                  return (
+                    <Fragment key={bar.id}>
+                      {bar.href ? (
+                        <a
+                          href={bar.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`timeline-bar ${bar.className}`}
+                          aria-describedby={card}
+                          style={style}
+                        >
+                          <ProjectPriority label={bar.priorityLabel} />
+                          <span className="timeline-label">{bar.name}</span>
+                        </a>
+                      ) : (
+                        <span
+                          className={`timeline-bar ${bar.className}`}
+                          aria-label={`${bar.name} · ${bar.summary}`}
+                          style={style}
+                        >
+                          {bar.name}
+                        </span>
+                      )}
+                      <div
+                        className="project-card"
+                        id={card}
+                        role="tooltip"
+                        popover="manual"
+                        style={{ positionAnchor: `--${card}` }}
+                      >
+                        <strong>{bar.name}</strong>
+                        {bar.summary && <p>{bar.summary}</p>}
+                        {bar.progress !== undefined && (
+                          <p>
+                            <meter value={bar.progress} />
+                            {Math.round(bar.progress * 100)}%
+                          </p>
+                        )}
+                        {!!bar.details.length && (
+                          <dl>
+                            {bar.details.map(([name, value]) => (
+                              <div key={name}>
+                                <dt>{name}</dt>
+                                <dd>{value}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        )}
+                        {bar.href && <small>Opens in Linear in a new tab</small>}
+                      </div>
+                    </Fragment>
                   );
                 })}
                 {!row.bars.length && (
@@ -285,7 +338,7 @@ export async function Timeline() {
             </div>
           ))}
         </div>
-      </div>
+      </LongPressCards>
     </>
   );
 }
