@@ -222,7 +222,10 @@ test("TV apps compare with the first release of today's TV code; Roku with its o
     throw new Error(`unexpected ${input}`);
   });
   const tv = await tvReleases(Object.keys(trees));
-  assert.deepEqual(tv, { tvos: "v2026.11.02.00", androidtv: "v2026.11.02.04" });
+  assert.deepEqual(tv, {
+    tvos: { tag: "v2026.11.02.00", complete: true },
+    androidtv: { tag: "v2026.11.02.04", complete: true },
+  });
   assert.deepEqual(refs, Object.keys(trees).slice(0, 4), "stops once both templates changed");
   const observed = (apollos_platform: string, church: string, extra: Partial<AppRow>) =>
     ({ ...app, apollos_platform, church, bundle_id: apollos_platform === "roku" ? "roku" : `com.${church}`, ...extra });
@@ -255,6 +258,20 @@ test("TV apps compare with the first release of today's TV code; Roku with its o
     ],
   );
   assert.equal(result.rows.find((r) => r.church === "branch")?.live_status_detail, "Not a release build");
+  // Unchanged across the whole 20-tag walk: older tags may share the code, so they stay unknown.
+  const many = Array.from({ length: 21 }, (_, i) => `v2026.01.01.${String(20 - i).padStart(2, "0")}`);
+  for (const tag of many) trees[tag] = { tvos: "same", androidtv: "same" };
+  const capped = await tvReleases(many);
+  assert.deepEqual(capped.tvos, { tag: many[19], complete: false });
+  const old = await buildApps(
+    [observed("tvos", "walked", { source_version: many[19] }), observed("tvos", "older", { source_version: many[20] })],
+    { mobile: null, tv: capped, roku: null, roku_tag: null, revisions: {} },
+    new Map(),
+  );
+  assert.deepEqual(
+    old.rows.map((r) => [r.church, r.version_status_label, r.live_status_detail]),
+    [["older", "Unknown", "Older than the releases checked"], ["walked", "Up to date", undefined]],
+  );
 });
 test("Ready projects honor prerequisite projects and milestone dependencies", () => {
   const dependency = (prerequisite: NonNullable<Project["inverseRelations"]>["nodes"][number]["project"], milestone: string | null = null, type = "dependency") =>

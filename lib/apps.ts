@@ -176,8 +176,9 @@ export const lookbackDays = () =>
 export type Source = {
   revisions: Record<string, string>;
   mobile: string | null;
-  // Template → oldest stable tag that already has the newest tag's code.
-  tv: Record<string, string>;
+  // Template → oldest stable tag that already has the newest tag's code;
+  // `complete` is false when that code predates the tags checked.
+  tv: Record<string, { tag: string; complete: boolean }>;
   roku: string | null;
   roku_tag: string | null;
 };
@@ -194,7 +195,8 @@ async function mobileRuntime(ref: string) {
 }
 // Releases without TV changes (most hotfixes) carry the same TV code, so an app
 // on any tag from the first one with today's code onward is up to date.
-// shortcut: walks the newest 20 tags; code unchanged for longer reports the 20th.
+// shortcut: walks the newest 20 tags; while TV code is older than that, apps on
+// older tags stay unknown. Cache per-tag trees if that becomes common.
 export async function tvReleases(tags: string[]) {
   const newest: Record<string, string | undefined> = {},
     first: Record<string, string> = {};
@@ -212,7 +214,12 @@ export async function tvReleases(tags: string[]) {
       return true;
     });
   }
-  return first;
+  return Object.fromEntries(
+    Object.entries(first).map(([name, tag]) => [
+      name,
+      { tag, complete: tags.length <= 20 || !open.includes(name) },
+    ]),
+  );
 }
 export async function appSource(): Promise<Source> {
   const tags = await releaseTags().catch(() => []);
@@ -375,14 +382,21 @@ export async function annotateApps(rows: AppRow[], source: Source) {
             : null;
       }
     } else {
-      latest = source.tv[tvTemplates[platform]];
+      const release = source.tv[tvTemplates[platform]];
+      latest = release?.tag;
       live = row.canonical_source_version || row.source_version || null;
       if (!row.canonical_source_version) detail = "Not a release build";
-      else if (latest)
+      else if (release) {
         cmp = Math.min(
-          compareVersions(row.canonical_source_version, latest),
+          compareVersions(row.canonical_source_version, release.tag),
           0,
         );
+        // Tags past the walk may still have today's code.
+        if (cmp < 0 && !release.complete) {
+          cmp = null;
+          detail = "Older than the releases checked";
+        }
+      }
     }
     return {
       ...row,
