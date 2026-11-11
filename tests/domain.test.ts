@@ -29,6 +29,7 @@ import {
   revisionsMatch,
   selectMobile,
   selectObserved,
+  tvReleases,
 } from "../lib/apps";
 import { publishedAndroid, publishedApple } from "../lib/stores";
 import {
@@ -175,7 +176,7 @@ test("SLA countdowns retain hours below one day, including overdue and boundary 
   assert.equal(slaText(issue(), now), null);
   assert.equal(slaText(issue({ slaBreachesAt: "invalid" }), now), null);
 });
-test("app evidence sorts behind, unverified, then current before platform and church", async () => {
+test("app evidence sorts behind, unknown, then current before platform and church", async () => {
   const rows = ["ios", "android"].flatMap((platform) =>
     ["current", "gap", "behind"].map((status) => ({
       ...app,
@@ -191,15 +192,69 @@ test("app evidence sorts behind, unverified, then current before platform and ch
       { builds: [{ native_build: "20", native_version: "1.0" }] },
     ]),
   );
-  const result = await buildApps(rows, { mobile: "102", tv: "102", roku: null, revisions: {} }, releases);
-  assert.deepEqual(result.rows.map((r) => [r.version_status_label, r.apollos_platform]), [
-    ["Behind release", "android"],
-    ["Behind release", "ios"],
-    ["Unverified", "android"],
-    ["Unverified", "ios"],
-    ["At release", "android"],
-    ["At release", "ios"],
+  const result = await buildApps(rows, { mobile: "102", tv: {}, roku: null, roku_tag: null, revisions: {} }, releases);
+  assert.deepEqual(result.rows.map((r) => [r.version_status_label, r.apollos_platform, r.live_status_detail]), [
+    ["Behind", "android", undefined],
+    ["Behind", "ios", undefined],
+    ["Unknown", "android", "Store release could not be verified"],
+    ["Unknown", "ios", "Store release could not be verified"],
+    ["Up to date", "android", undefined],
+    ["Up to date", "ios", undefined],
   ]);
+});
+test("TV apps compare with the first release of today's TV code; Roku with its own release", async (t) => {
+  const trees: Record<string, Record<string, string>> = {
+    "v2026.11.09.00": { tvos: "tv2", androidtv: "atv2" },
+    "v2026.11.02.04": { tvos: "tv2", androidtv: "atv2" },
+    "v2026.11.02.00": { tvos: "tv2", androidtv: "atv1" },
+    "v2026.10.26.00": { tvos: "tv1", androidtv: "atv1" },
+    "v2026.10.19.00": {},
+  };
+  const refs: string[] = [];
+  t.mock.method(globalThis, "fetch", async (input: string) => {
+    const url = new URL(input);
+    if (url.pathname.endsWith("/contents/templates")) {
+      refs.push(url.searchParams.get("ref")!);
+      return Response.json(Object.entries(trees[url.searchParams.get("ref")!]).map(([name, sha]) => ({ name, sha })));
+    }
+    const compare = /\/compare\/release1\.\.\.(\w+)$/.exec(url.pathname);
+    if (compare) return Response.json({ status: { aaaaaaa1: "behind", bbbbbbb2: "ahead", ccccccc3: "diverged" }[compare[1]] });
+    throw new Error(`unexpected ${input}`);
+  });
+  const tv = await tvReleases(Object.keys(trees));
+  assert.deepEqual(tv, { tvos: "v2026.11.02.00", androidtv: "v2026.11.02.04" });
+  assert.deepEqual(refs, Object.keys(trees).slice(0, 4), "stops once both templates changed");
+  const observed = (apollos_platform: string, church: string, extra: Partial<AppRow>) =>
+    ({ ...app, apollos_platform, church, bundle_id: apollos_platform === "roku" ? "roku" : `com.${church}`, ...extra });
+  const result = await buildApps(
+    [
+      observed("tvos", "hotfix", { source_version: "v2026.11.02.04" }),
+      observed("tvos", "old", { source_version: "v2026.10.26.00" }),
+      observed("tvos", "branch", { source_version: "deploy/v2026.08.31.00-rejected" }),
+      observed("amazon", "first", { source_version: "v2026.11.02.00" }),
+      observed("androidtv", "latest", { source_version: "v2026.11.09.00" }),
+      observed("roku", "old", { source_revision: "aaaaaaa1", source_version: "2.4.1" }),
+      observed("roku", "master", { source_revision: "bbbbbbb2", source_version: "2.4.1" }),
+      observed("roku", "hotfix", { source_revision: "ccccccc3", source_version: "2.4.1" }),
+      observed("unknown", "legacy", { source_version: "v2026.11.09.00" }),
+    ],
+    { mobile: "102", tv, roku: "release1", roku_tag: "roku-v2026.11.10.00", revisions: {} },
+    new Map(),
+  );
+  assert.deepEqual(
+    result.rows.map((r) => [r.apollos_platform, r.church, r.version_status_label, r.freshness_display, r.comparison_display]),
+    [
+      ["amazon", "first", "Behind", "v2026.11.02.00", "v2026.11.02.04"],
+      ["roku", "hotfix", "Behind", "ccccccc", "roku-v2026.11.10.00"],
+      ["roku", "old", "Behind", "aaaaaaa", "roku-v2026.11.10.00"],
+      ["tvos", "old", "Behind", "v2026.10.26.00", "v2026.11.02.00"],
+      ["tvos", "branch", "Unknown", "deploy/v2026.08.31.00-rejected", "v2026.11.02.00"],
+      ["androidtv", "latest", "Up to date", "v2026.11.09.00", "v2026.11.02.04"],
+      ["roku", "master", "Up to date", "bbbbbbb", "roku-v2026.11.10.00"],
+      ["tvos", "hotfix", "Up to date", "v2026.11.02.04", "v2026.11.02.00"],
+    ],
+  );
+  assert.equal(result.rows.find((r) => r.church === "branch")?.live_status_detail, "Not a release build");
 });
 test("Ready projects honor prerequisite projects and milestone dependencies", () => {
   const dependency = (prerequisite: NonNullable<Project["inverseRelations"]>["nodes"][number]["project"], milestone: string | null = null, type = "dependency") =>
@@ -704,8 +759,9 @@ test("observed release selection excludes internal, master, and unmatched alpha 
   const source = {
     revisions: { "v2026.09.01.01": "abcdef123456" },
     mobile: null,
-    tv: null,
+    tv: {},
     roku: null,
+    roku_tag: null,
   };
   const rows = selectObserved(
     [

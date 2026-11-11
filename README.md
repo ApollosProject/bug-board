@@ -73,13 +73,13 @@ Only Production sends Slack posts. Preview deployments never do. Long digests sp
 
 ### App release evidence
 
-Mobile and Android TV runtime claims require published store build IDs matched uniquely against Segment native build observations. iOS also requires the exact native version. Queued events with conflicting app/native versions are excluded. Multiple published runtimes remain explicit. Absent credentials, conflicting matches, incomplete store responses, or missing source targets remain unverified. Android uses the read-only release-lifecycle API, **not** `edits.tracks` or a store edit.
+iOS and Android runtime claims require published store build IDs matched uniquely against Segment native build observations. iOS also requires the exact native version. Queued events with conflicting app/native versions are excluded. Multiple published runtimes remain explicit. Absent credentials, conflicting matches, incomplete store responses, or missing source targets remain unknown. Android uses the read-only release-lifecycle API, **not** `edits.tracks` or a store edit.
 
 Analytics reads retain the event-time lookback and additionally prune `_PARTITIONTIME` only on ingestion-partitioned tables, using the discovered schema (main PR #577). `APP_VERSIONS_PARTITION_BUFFER_DAYS` defaults to 3 extra days to cover device-clock skew. It is bound only when a branch can prune. Mixed unions and non-ingestion-partitioned tables remain supported.
 
-Non-mobile platforms show neutral **Observed** comparisons, never verified store publication. Cluster's directory resolves deployment identity by platform/bundle. Ambiguous identities are not deployable.
+Each app is **Up to date**, **Behind**, or **Unknown** against its platform's latest release. Mobile compares the published store runtime with the latest stable tag's runtime. Native tvOS, Android TV, and Amazon apps compare the newest release tag seen in analytics with the oldest stable tag carrying the newest tag's TV template (`templates/tvos` or `templates/androidtv`), so hotfixes without TV changes don't mark them behind. Roku compares the build commit with the latest `roku-v` tag's last `templates/roku/src` change. TV and Roku have no store verification; non-release builds are unknown. Other platforms are not listed. Cluster's directory resolves deployment identity by platform/bundle. Ambiguous identities are not deployable.
 
-Deployment POSTs require a verified GitHub session, same-origin request, a fresh uniquely identified app row, and `GITHUB_ACTIONS_TOKEN`. They dispatch the latest stable Platforms tag. The existing workflow still checks production readiness. A dispatch is not evidence of a published build.
+Deployment POSTs require a verified GitHub session, same-origin request, a fresh uniquely identified app row, and `GITHUB_ACTIONS_TOKEN`. They dispatch the latest stable Platforms tag (Roku: the latest `roku-v` tag). The existing workflow still checks production readiness. A dispatch is not evidence of a published build.
 
 ### Regression evidence
 

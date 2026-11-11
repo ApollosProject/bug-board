@@ -3,7 +3,7 @@ import { GoogleAuth } from "google-auth-library";
 import { readSnapshot, redis, writeSnapshot } from "./cache";
 import { mapConcurrent, requestJson, UpstreamError } from "./http";
 import type { AppRow } from "./types";
-export const storePlatforms = new Set(["ios", "android", "androidtv"]);
+export const storePlatforms = new Set(["ios", "android"]);
 export type StoreBuild = { native_build: string; native_version?: string };
 export type StoreRelease = {
   builds?: StoreBuild[];
@@ -127,7 +127,7 @@ async function apple(church: string, bundle: string) {
   );
   return publishedApple(payload);
 }
-async function android(church: string, bundle: string, platform: string) {
+async function android(church: string, bundle: string) {
   const info = JSON.parse(
     Buffer.from(
       String(await config(church, "APP.GOOGLE_API_KEY_B64")),
@@ -139,7 +139,7 @@ async function android(church: string, bundle: string, platform: string) {
     scopes: ["https://www.googleapis.com/auth/androidpublisher"],
   });
   const token = await auth.getAccessToken();
-  const track = platform === "androidtv" ? "tv:production" : "production";
+  const track = "production";
   const response = await fetch(
     `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(bundle)}/tracks/${encodeURIComponent(track)}/releases`,
     {
@@ -218,7 +218,7 @@ export async function lookupRelease(
       const release =
         platform === "ios"
           ? { builds: await apple(church, configured) }
-          : await android(church, configured, platform);
+          : await android(church, configured);
       if (redis())
         await writeSnapshot(name, release, release.builds ? 1800 : 3600);
       return release;

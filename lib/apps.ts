@@ -1,7 +1,12 @@
 import { BigQuery } from "@google-cloud/bigquery";
 import fs from "node:fs";
 import path from "node:path";
-import { githubRest, stableTags, stableTagPattern } from "./github";
+import {
+  githubRest,
+  releaseTags,
+  rokuTagPattern,
+  stableTagPattern,
+} from "./github";
 import { mapConcurrent } from "./http";
 import {
   compareVersions,
@@ -31,7 +36,12 @@ const fieldCandidates: Record<string, string[]> = {
   source_version: ["source_version", "sourceVersion"],
   deployment_track: ["deployment_track", "deploymentTrack"],
 };
-const releasePlatforms = new Set(["amazon", "tv", "tvos"]);
+// Native TV apps ship from stable tags; Amazon builds from the Android TV template.
+const tvTemplates: Record<string, string> = {
+  tvos: "tvos",
+  androidtv: "androidtv",
+  amazon: "androidtv",
+};
 const runtimePattern = /^\d+(?:\.\d+)*$/;
 const internalTracks = new Set([
   "beta",
@@ -166,39 +176,68 @@ export const lookbackDays = () =>
 export type Source = {
   revisions: Record<string, string>;
   mobile: string | null;
-  tv: string | null;
+  // Template → oldest stable tag that already has the newest tag's code.
+  tv: Record<string, string>;
   roku: string | null;
+  roku_tag: string | null;
 };
-export async function appSource(): Promise<Source> {
-  const tags = await stableTags().catch(() => []);
-  const ref = tags[0]?.name;
-  const runtimes = await Promise.all(
-    ["mobile", "tv"].map(async (template) => {
-      if (!ref) return null;
-      try {
-        const file = await githubRest<{ encoding: string; content: string }>(
-          `/repos/ApollosProject/apollos-platforms/contents/templates/${template}/app.config.ts?ref=${ref}`,
-        );
-        return file.encoding === "base64"
-          ? /^\s*runtimeVersion:\s*['"](\d+)['"]/m.exec(
-              Buffer.from(file.content, "base64").toString(),
-            )?.[1] || null
-          : null;
-      } catch {
-        return null;
-      }
-    }),
+const platformsRepo = "/repos/ApollosProject/apollos-platforms";
+async function mobileRuntime(ref: string) {
+  const file = await githubRest<{ encoding: string; content: string }>(
+    `${platformsRepo}/contents/templates/mobile/app.config.ts?ref=${ref}`,
   );
-  const commits = await githubRest<{ sha: string }[]>(
-    "/repos/ApollosProject/apollos-platforms/commits?sha=master&path=templates/roku&per_page=1",
-  ).catch(() => []);
+  return file.encoding === "base64"
+    ? /^\s*runtimeVersion:\s*['"](\d+)['"]/m.exec(
+        Buffer.from(file.content, "base64").toString(),
+      )?.[1] || null
+    : null;
+}
+// Releases without TV changes (most hotfixes) carry the same TV code, so an app
+// on any tag from the first one with today's code onward is up to date.
+// shortcut: walks the newest 20 tags; code unchanged for longer reports the 20th.
+export async function tvReleases(tags: string[]) {
+  const newest: Record<string, string | undefined> = {},
+    first: Record<string, string> = {};
+  let open = ["tvos", "androidtv"];
+  for (const tag of tags.slice(0, 20)) {
+    if (!open.length) break;
+    const entries = await githubRest<{ name: string; sha: string }[]>(
+      `${platformsRepo}/contents/templates?ref=${tag}`,
+    );
+    open = open.filter((name) => {
+      const tree = entries.find((entry) => entry.name === name)?.sha;
+      if (!(name in newest)) newest[name] = tree;
+      if (!tree || tree !== newest[name]) return false;
+      first[name] = tag;
+      return true;
+    });
+  }
+  return first;
+}
+export async function appSource(): Promise<Source> {
+  const tags = await releaseTags().catch(() => []);
+  const stable = tags
+      .filter((tag) => stableTagPattern.test(tag.name))
+      .map((tag) => tag.name),
+    rokuTag = tags.find((tag) => rokuTagPattern.test(tag.name))?.name || null;
+  const [mobile, tv, commits] = await Promise.all([
+    stable[0] ? mobileRuntime(stable[0]).catch(() => null) : null,
+    tvReleases(stable).catch(() => ({})),
+    // The Roku release's last app-code change; builds containing it are current.
+    rokuTag
+      ? githubRest<{ sha: string }[]>(
+          `${platformsRepo}/commits?sha=${rokuTag}&path=templates/roku/src&per_page=1`,
+        ).catch(() => [])
+      : [],
+  ]);
   return {
     revisions: Object.fromEntries(
       tags.map((tag) => [tag.name, tag.commit.sha]),
     ),
-    mobile: runtimes[0],
-    tv: runtimes[1],
+    mobile,
+    tv,
     roku: commits[0]?.sha || null,
+    roku_tag: rokuTag,
   };
 }
 export function selectMobile(
@@ -254,8 +293,11 @@ export function selectMobile(
 }
 export function selectObserved(rows: AppRow[], source: Source) {
   const selected = new Map<string, AppRow>();
+  // Other platforms (unknown, legacy `tv`, web) have no release to compare.
   for (const row of rows.filter(
-    (r) => !storePlatforms.has(r.apollos_platform),
+    (r) =>
+      Object.hasOwn(tvTemplates, r.apollos_platform) ||
+      r.apollos_platform === "roku",
   )) {
     const version = row.source_version || "",
       alpha = /^(v\d{4}\.\d{2}\.\d{2}\.\d{2})-alpha\.\d+$/.exec(version);
@@ -277,11 +319,10 @@ export function selectObserved(rows: AppRow[], source: Source) {
     const candidate = {
       ...row,
       canonical_source_version: canonical,
-      apollos_version: releasePlatforms.has(row.apollos_platform)
-        ? canonical
-        : row.apollos_platform === "roku"
+      apollos_version:
+        row.apollos_platform === "roku"
           ? row.source_version || null
-          : row.apollos_version,
+          : canonical,
     };
     const key = appIdentity(candidate),
       current = selected.get(key);
@@ -303,89 +344,65 @@ export function selectObserved(rows: AppRow[], source: Source) {
   return [...selected.values()];
 }
 export async function annotateApps(rows: AppRow[], source: Source) {
-  const latest = new Map<string, string>();
-  for (const row of rows)
-    if (
-      releasePlatforms.has(row.apollos_platform) &&
-      row.canonical_source_version &&
-      compareVersions(
-        row.canonical_source_version,
-        latest.get(row.apollos_platform) || "",
-      ) > 0
-    )
-      latest.set(row.apollos_platform, row.canonical_source_version);
   return mapConcurrent(rows, 8, async (row) => {
-    const platform = row.apollos_platform,
-      store = storePlatforms.has(platform);
-    let label = "Unverified",
-      display = row.live_runtime_display || row.apollos_version || "Unknown",
-      target = store
-        ? platform === "androidtv"
-          ? source.tv
-          : source.mobile
-        : latest.get(platform);
-    let outdated = false;
-    if (
-      store &&
-      row.apollos_version &&
-      runtimePattern.test(row.apollos_version) &&
-      target
-    ) {
-      const cmp = compareVersions(row.apollos_version, target);
-      outdated = cmp < 0;
-      label =
-        cmp < 0
-          ? "Behind release"
-          : cmp > 0
-            ? "Ahead of release"
-            : "At release";
-    } else if (store && row.live_runtime_display && !row.apollos_version)
-      label = "Multiple live runtimes";
-    else if (releasePlatforms.has(platform)) {
-      display = row.canonical_source_version || row.source_version || "TBD";
-      if (row.canonical_source_version && target) {
-        outdated = compareVersions(row.canonical_source_version, target) < 0;
-        label = outdated ? "Observed: Behind top seen" : "Observed: Top seen";
-      }
+    const platform = row.apollos_platform;
+    let live = row.apollos_version,
+      latest: string | null | undefined,
+      cmp: number | null = null,
+      detail = row.live_status_detail;
+    if (storePlatforms.has(platform)) {
+      latest = source.mobile;
+      live = row.live_runtime_display || live;
+      if (row.apollos_version && runtimePattern.test(row.apollos_version))
+        cmp = latest ? compareVersions(row.apollos_version, latest) : null;
+      else if (row.live_runtime_display) detail = "Multiple live runtimes";
     } else if (platform === "roku") {
-      display = row.source_revision?.slice(0, 7) || "TBD";
-      target = source.roku;
-      if (
-        source.roku &&
-        row.source_revision &&
-        sha.test(source.roku) &&
-        sha.test(row.source_revision)
-      ) {
+      latest = source.roku_tag;
+      live = row.source_revision?.slice(0, 7) || null;
+      if (source.roku && row.source_revision && sha.test(row.source_revision)) {
         const status = revisionsMatch(source.roku, row.source_revision)
           ? "identical"
           : (
               await githubRest<{ status: string }>(
-                `/repos/ApollosProject/apollos-platforms/compare/${source.roku}...${row.source_revision}`,
+                `${platformsRepo}/compare/${source.roku}...${row.source_revision}`,
               ).catch(() => null)
             )?.status;
-        outdated = status === "behind";
-        label =
-          (
-            {
-              behind: "Observed: Behind source",
-              identical: "Observed: At source",
-              ahead: "Observed: Ahead of source",
-            } as Record<string, string>
-          )[status || ""] || "Unverified";
+        // Diverged builds also lack the release's last Roku change.
+        cmp = ["behind", "diverged"].includes(status || "")
+          ? -1
+          : ["identical", "ahead"].includes(status || "")
+            ? 0
+            : null;
       }
+    } else {
+      latest = source.tv[tvTemplates[platform]];
+      live = row.canonical_source_version || row.source_version || null;
+      if (!row.canonical_source_version) detail = "Not a release build";
+      else if (latest)
+        cmp = Math.min(
+          compareVersions(row.canonical_source_version, latest),
+          0,
+        );
     }
     return {
       ...row,
-      version_status_label: label,
-      freshness_display: display,
-      comparison_display:
-        platform === "roku"
-          ? target?.slice(0, 7) || "unknown"
-          : target || "unknown",
-      is_outdated: outdated,
-      live_status_detail: store
-        ? row.live_status_detail
-        : "Store publication not verified; analytics observation only.",
+      version_status_label:
+        cmp === null
+          ? "Unknown"
+          : cmp < 0
+            ? "Behind"
+            : cmp > 0
+              ? "Ahead"
+              : "Up to date",
+      freshness_display: live || "Unknown",
+      comparison_display: latest || "Unknown",
+      is_outdated: cmp !== null && cmp < 0,
+      live_status_detail:
+        cmp !== null
+          ? undefined
+          : !latest
+            ? "Latest release unavailable"
+            : detail || "Comparison unavailable",
     };
   });
 }
@@ -414,8 +431,8 @@ export async function buildApps(
   const annotated = (await annotateApps(selected, source)).sort(
     (a, b) =>
       Number(b.is_outdated) - Number(a.is_outdated) ||
-      Number(b.version_status_label === "Unverified") -
-        Number(a.version_status_label === "Unverified") ||
+      Number(b.version_status_label === "Unknown") -
+        Number(a.version_status_label === "Unknown") ||
       a.apollos_platform.localeCompare(b.apollos_platform) ||
       a.church.localeCompare(b.church),
   );
@@ -462,8 +479,12 @@ export function deployTarget(
 export async function dispatchDeploy(church: string, platform: string) {
   const token = process.env.GITHUB_ACTIONS_TOKEN;
   if (!token) throw new Error("Deployment token not configured");
-  const tag = (await stableTags(token))[0]?.name;
-  if (!tag) throw new Error("No stable release tag found");
+  // The same release the Apps page compares against.
+  const pattern = platform === "roku" ? rokuTagPattern : stableTagPattern;
+  const tag = (await releaseTags(token)).find((t) =>
+    pattern.test(t.name),
+  )?.name;
+  if (!tag) throw new Error("No release tag found");
   const { githubHeaders } = await import("./github");
   // requestJson cannot consume GitHub's successful empty 204 body.
   const response = await fetch(
