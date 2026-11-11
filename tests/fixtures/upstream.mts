@@ -1,6 +1,7 @@
 // Public-safe service double for `npm run start:fixtures`: answers Linear, GitHub,
-// Airflow, the PTO feed, and Upstash Redis with fake data relative to now, and
-// blocks every other outbound request. Production code runs unchanged.
+// Airflow, the PTO feed, and Upstash Redis with fake data relative to now, seeds
+// the church directory snapshot, and blocks every other outbound request.
+// Production code runs unchanged.
 if (process.env.VERCEL || process.env.VERCEL_ENV) throw new Error("Fixtures never run on Vercel");
 // Set before Next loads .env files, which never override existing values.
 Object.assign(process.env, {
@@ -138,6 +139,9 @@ for (let i = 0; i < 20; i++) {
     project: i >= 6 && i % 3 === 0 ? i % 3 : undefined,
   });
 }
+// One open issue names a fixture church so the church page can show real work.
+issues.find((item) => item.state.type === "triage")!.title =
+  "Giving page shows a blank state after refresh at Cedar Creek";
 
 const repos = ["apollosproject/apollos-platforms", "apollosproject/apollos-admin"];
 const review = (who: number, state: string, at: string) => ({ author: { login: login(who), __typename: "User" }, state, submittedAt: at });
@@ -258,6 +262,24 @@ const pto = ["BEGIN:VCALENDAR", "VERSION:2.0",
   ]), "END:VCALENDAR"].join("\r\n");
 
 const store = new Map<string, { value: string | number; expires: number }>();
+// Pages read the snapshot the apps refresh writes. Cluster stays unconfigured.
+const churches = [
+  {
+    slug: "fixture_church_01", name: "Cedar Creek", altSlugs: ["cedarcreek"],
+    universalLinkHost: "https://links.cedarcreek.example", apollosWebUrl: "https://cedarcreek.example",
+    mobileAppStoreUrl: "https://apps.apple.example/cedarcreek", appleBundleId: "com.cedarcreek.app",
+    givingEnabled: true, givingInMaintenance: false, givingWebProvider: "stripe", givingMobileProvider: "stripe",
+    timezone: "America/Chicago",
+  },
+  {
+    slug: "harbor_chapel", name: "Harbor Chapel", altSlugs: [],
+    universalLinkHost: "https://links.harbor.example", givingEnabled: false, givingInMaintenance: true,
+    timezone: "America/New_York",
+  },
+];
+store.set("bug-board:local:shared:v1:churches", {
+  value: JSON.stringify({ at: now, data: churches }), expires: 0,
+});
 const live = (key: string) => {
   const entry = store.get(key);
   if (entry?.expires && entry.expires < Date.now()) store.delete(key);

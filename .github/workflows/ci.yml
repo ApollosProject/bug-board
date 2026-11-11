@@ -35,6 +35,10 @@ jobs:
       - run: npx e2e run tests/dashboard.e2e.ts --no-cache
         env:
           GITHUB_TOKEN: ${{ github.token }}
+      - run: npx e2e run tests/churches.e2e.ts --no-cache
+        env:
+          E2E_FIXTURES: "1"
+          GITHUB_TOKEN: ${{ github.token }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
