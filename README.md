@@ -141,6 +141,9 @@ npx e2e run --no-cache
 # Deterministic surface only (also run in CI):
 npx e2e run tests/dashboard.e2e.ts --no-cache
 
+# Fixture church directory (also run in CI):
+E2E_FIXTURES=1 npx e2e run tests/churches.e2e.ts --no-cache
+
 # Already-running, populated local surface:
 E2E_BASE_URL=http://127.0.0.1:3000 E2E_DATA=1 \
   npx e2e run tests/data.e2e.ts --no-cache
@@ -158,7 +161,7 @@ Manual runs write job summaries because they have no PR event context.
 
 ### Fixture data and nightly exploration
 
-`npm run start:fixtures` serves the production build with fake, public-safe data: `tests/fixtures/upstream.mts` is a Node preload that answers Linear, GitHub GraphQL, Airflow, the PTO feed, and Upstash Redis from a fake roster (`tests/fixtures/config.yml`, selected through `BUG_BOARD_CONFIG`) and blocks every other outbound request. It blanks other credentials, refuses to load on Vercel, and stands in for Cron by refreshing the fleet, metrics, and review snapshots every minute. Apps, churches, and regression cards have no fixture and stay unavailable. App code is unchanged; only the network boundary is fake. `E2E_FIXTURES=1` makes e2e start this server.
+`npm run start:fixtures` serves the production build with fake, public-safe data: `tests/fixtures/upstream.mts` is a Node preload that answers Linear, GitHub GraphQL, Airflow, the PTO feed, and Upstash Redis from a fake roster (`tests/fixtures/config.yml`, selected through `BUG_BOARD_CONFIG`) and blocks every other outbound request. It blanks other credentials, refuses to load on Vercel, and stands in for Cron by refreshing the fleet, metrics, and review snapshots every minute. Apps and regression cards have no fixture and stay unavailable. The church directory is a seeded snapshot (Cedar Creek and Harbor Chapel). App code is unchanged; only the network boundary is fake. `E2E_FIXTURES=1` makes e2e start this server.
 
 `.github/workflows/explore.yml` runs one `e2e explore` nightly (08:00 UTC) on fixture data across the team, reviews, home, projects, and DAG views, with the `explore` agent's larger per-step budget. Within the run, e2e passes each step the findings so far so it does not report them twice. On `main`, `scripts/explore-linear.mts` files each reported issue in Linear (team from `config.yml`) as `Bug Board: <title>` in Triage, unassigned, Low priority, with the Bug and `e2e explore` labels, the screenshot, and a link to the run's trace and video. Low priority keeps them out of priority-bug metrics, the home page's Priority Bugs, and Slack digests until someone raises it. Titles of earlier `e2e explore` issues, in any state, are passed to the explorer so it does not report them on later nights: cancel false positives rather than deleting them. Findings are model claims; confirm each before fixing. It uses the `LINEAR_API_KEY` repository secret: a personal key named "Bug Board nightly explore" with Read and Write (Write is required for screenshot uploads), no Admin, limited to the Product + Engineering team. Issues are attributed to the key's owner. Both labels must already exist on the team. PRs that change the workflow, fixtures, filer, or `e2e.config.ts` run it and list findings in the job summary and a PR comment without filing.
 
