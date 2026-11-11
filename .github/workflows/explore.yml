@@ -33,9 +33,8 @@ jobs:
       - run: npm run build
       - name: Install Chromium
         timeout-minutes: 10
-        run: |
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
-          npx playwright-core install --with-deps chromium
+        # The runner image ships Chrome's system libraries; apt mirrors can be unreachable.
+        run: npx playwright-core install chromium
       - name: Explore fixture data
         env:
           AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
