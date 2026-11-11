@@ -30,7 +30,7 @@ test("timeline includes undated active ownership, preserves dated bounds, and ke
   });
   t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-12T12:00:00Z") });
   const projects = [
-    project("undated-lead", { priorityLabel: "High" }),
+    project("undated-lead", { priorityLabel: "High", description: "Short summary", progress: 0.42, members: { nodes: [{ displayName: "Zach" }, { displayName: "Outside Collaborator" }] } }),
     project("undated-member", { lead: null, members: { nodes: [{ displayName: "Zach" }] }, priorityLabel: "Low" }),
     project("dated", { startDate: "2026-10-19", targetDate: "2026-10-25", priorityLabel: "Medium" }),
     project("start-only", { startDate: "2026-10-19" }),
@@ -60,10 +60,15 @@ test("timeline includes undated active ownership, preserves dated bounds, and ke
     assert.ok(matches, `Missing ${id}`);
     return matches.find((a) => a.includes('class="timeline-bar')) || matches[0];
   };
+  const card = (id: string) => {
+    const ref = anchor(id).match(/aria-describedby="([^"]+)"[^>]*anchor-name:--\1"/)?.[1];
+    assert.ok(ref, `Missing card for ${id}`);
+    return html.match(new RegExp(`<div class="project-card" id="${ref}" role="tooltip" popover="manual" style="position-anchor:--${ref}">[^]*?</div></div>`))?.[0] || "";
+  };
   for (const id of ["undated-lead", "undated-member"]) {
     const bar = anchor(id);
     assert.match(bar, /grid-column:1 \/ span 42/);
-    assert.match(bar, /Dates not set/);
+    assert.match(card(id), /<dt>Dates<\/dt><dd>Not set<\/dd>/);
     assert.match(bar, /target="_blank" rel="noopener noreferrer"/);
   }
   assert.notEqual(
@@ -86,8 +91,13 @@ test("timeline includes undated active ownership, preserves dated bounds, and ke
   assert.doesNotMatch(anchor("start-only"), /opacity="0.35"/);
   assert.match(html, /aria-label="Priority key"[^]*Very Low[^]*No priority/);
   assert.match(anchor("unassigned"), /aria-label="Priority: Urgent"[^]*fill-rule="evenodd"/);
-  assert.match(anchor("undated-lead"), /class="timeline-bar neutral idle lead"[^>]*title="undated-lead · Lead · Ready · /);
-  assert.match(anchor("started"), /class="timeline-bar onTrack lead"[^>]*title="started · Lead · In Progress · /);
+  assert.match(anchor("undated-lead"), /class="timeline-bar neutral idle lead"/);
+  assert.doesNotMatch(html, /class="timeline-bar[^>]*title=/);
+  assert.match(card("undated-lead"), /<strong>undated-lead<\/strong><p>Short summary<\/p><p><meter value="0.42"><\/meter>42%<\/p>/);
+  assert.match(card("undated-lead"), /<dt>Status<\/dt><dd>Ready<\/dd>[^]*<dt>Priority<\/dt><dd>High<\/dd>[^]*<dt>Lead<\/dt><dd>Zach<\/dd>[^]*<dt>Members<\/dt><dd>Outside Collaborator<\/dd>/);
+  assert.match(card("undated-lead"), /<small>Opens in Linear in a new tab<\/small>/);
+  assert.match(anchor("started"), /class="timeline-bar onTrack lead"/);
+  assert.match(card("started"), /<dt>Status<\/dt><dd>In Progress · On track<\/dd>/);
   assert.match(anchor("paused"), /class="timeline-bar atRisk idle lead"/);
   assert.doesNotMatch(anchor("undated-member"), / lead"|· Lead/);
   assert.ok(html.includes("No projects in this window"));
