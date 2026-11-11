@@ -148,8 +148,8 @@ export default async function ChurchPage({
                 <tr>
                   <th>App</th>
                   <th>Status</th>
-                  <th>Runtime / source</th>
-                  <th>Target</th>
+                  <th>Live</th>
+                  <th>Latest</th>
                 </tr>
               </thead>
               <tbody>
@@ -163,11 +163,13 @@ export default async function ChurchPage({
                     </th>
                     <td>
                       <span
-                        className={`badge ${row.is_outdated ? "low" : row.version_status_label === "At release" ? "high" : ""}`}
+                        className={`badge ${row.is_outdated ? "low" : row.version_status_label === "Up to date" ? "high" : ""}`}
                       >
                         {row.version_status_label}
                       </span>
-                      <small>{row.live_status_detail}</small>
+                      {row.live_status_detail && (
+                        <small>{row.live_status_detail}</small>
+                      )}
                     </td>
                     <td>{row.freshness_display || "Unknown"}</td>
                     <td>{row.comparison_display}</td>
@@ -178,7 +180,7 @@ export default async function ChurchPage({
           </TableScroll>
         ) : (
           <p className="muted">
-            No app observations matched this church. Shared TV and web apps
+            No app observations matched this church. Shared TV apps
             list only their most recent build church.
           </p>
         )}

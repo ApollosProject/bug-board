@@ -390,14 +390,21 @@ export const openPRs = cache(async (approved: boolean | "only") => {
   return prs;
 });
 export const stableTagPattern = /^v\d{4}\.\d{2}\.\d{2}\.\d{2}$/;
-export async function stableTags(token = process.env.GITHUB_TOKEN) {
+export const rokuTagPattern = /^roku-v\d{4}\.\d{2}\.\d{2}\.\d{2}$/;
+// Weekly/hotfix (`v…`) and daily Roku (`roku-v…`) release tags, newest first.
+export async function releaseTags(token = process.env.GITHUB_TOKEN) {
   const result: { name: string; commit: { sha: string } }[] = [];
   for (let page = 1; ; page++) {
     const tags = await githubRest<typeof result>(
       `/repos/ApollosProject/apollos-platforms/tags?per_page=100&page=${page}`,
       token,
     );
-    result.push(...tags.filter((tag) => stableTagPattern.test(tag.name)));
+    result.push(
+      ...tags.filter(
+        (tag) =>
+          stableTagPattern.test(tag.name) || rokuTagPattern.test(tag.name),
+      ),
+    );
     if (tags.length < 100) break;
   }
   return result.sort((a, b) => b.name.localeCompare(a.name));
