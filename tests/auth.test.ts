@@ -156,27 +156,6 @@ test("OAuth fails closed, protects unknown APIs and resources, and separates coo
       else process.env[key] = value;
   }
 });
-test("Heroku review apps fail closed even when OAuth was not configured", async () => {
-  const names = ["VERCEL_ENV", "HEROKU_APP_NAME", "DYNO", "GITHUB_OAUTH_ENABLED", "GITHUB_OAUTH_CLIENT_ID", "GITHUB_OAUTH_CLIENT_SECRET", "GITHUB_OAUTH_CALLBACK_URL", "APP_URL", "AUTH_SECRET"];
-  const old = Object.fromEntries(names.map((name) => [name, process.env[name]]));
-  try {
-    for (const name of names) delete process.env[name];
-    process.env.HEROKU_APP_NAME = "review-app";
-    assert.equal((await proxy(new NextRequest("https://review-app.herokuapp.com/team"))).status, 503);
-    // DYNO is always present on Heroku; app-name metadata is optional.
-    delete process.env.HEROKU_APP_NAME;
-    process.env.DYNO = "web.1";
-    assert.equal((await proxy(new NextRequest("https://review-app.herokuapp.com/team"))).status, 503);
-    Object.assign(process.env, { GITHUB_OAUTH_CLIENT_ID: "test-client", GITHUB_OAUTH_CLIENT_SECRET: "test-secret", AUTH_SECRET: "a".repeat(40), APP_URL: "http://localhost:3000" });
-    assert.equal(authConfigured(), false);
-    process.env.APP_URL = "https://review-app.herokuapp.com";
-    assert.equal(authConfigured(), true);
-    assert.match((await proxy(new NextRequest("https://review-app.herokuapp.com/team"))).headers.get("x-middleware-rewrite") || "", /\/signin/);
-  } finally {
-    for (const [name, value] of Object.entries(old))
-      if (value === undefined) delete process.env[name]; else process.env[name] = value;
-  }
-});
 test("preview callback relays only signed origins and exchanges codes with the initiating cookie", async () => {
   const values = { VERCEL_ENV: "preview", VERCEL_URL: "unique-preview.vercel.app", VERCEL_BRANCH_URL: "branch-preview.vercel.app", APP_URL: "https://preview.example", GITHUB_OAUTH_CALLBACK_URL: "https://preview.example/auth/github/callback", GITHUB_OAUTH_CLIENT_ID: "test-client", GITHUB_OAUTH_CLIENT_SECRET: "test-secret", AUTH_SECRET: "a".repeat(40), GITHUB_OAUTH_ORG: "ApollosProject" };
   const old = Object.fromEntries(Object.keys(values).map(key => [key, process.env[key]]));

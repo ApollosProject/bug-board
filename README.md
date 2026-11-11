@@ -103,7 +103,7 @@ GitHub OAuth requests `read:org`, validates active membership, and uses PKCE wit
 
 Previews use a separate OAuth app, session secret, and fixed callback host (`APP_URL` / `GITHUB_OAUTH_CALLBACK_URL`). Point that preview-only alias at a current **Preview** deployment with this callback handler. Login accepts only the canonical host and Vercel's deployment/branch hosts, signs the initiating origin into the ten-minute OAuth state, and relays the callback back to it. The PKCE verifier and session cookies stay host-only; codes are exchanged only where the matching flow cookie exists. Production does not use this relay.
 
-Partially configured auth fails closed with `503`. Vercel production/preview deployments and Heroku review apps require auth even if `GITHUB_OAUTH_ENABLED` was omitted. Hosted callback URLs must use HTTPS. Sessions and authenticated responses are private/no-store. The no-auth local development path never enables deployment.
+Partially configured auth fails closed with `503`. Vercel production/preview deployments require auth even if `GITHUB_OAUTH_ENABLED` was omitted. Hosted callback URLs must use HTTPS. Sessions and authenticated responses are private/no-store. The no-auth local development path never enables deployment.
 
 **Optional features:**
 
