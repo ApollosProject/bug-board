@@ -87,9 +87,10 @@ export default async function Apps({
       {data && (
         <>
           <p className="muted">
-            <Checked at={data.checked_at} /> · iOS and Android: published store
-            build. TV and Roku: newest release build seen in the last{" "}
-            {data.lookback_days} days.
+            <Checked at={data.checked_at} /> · Live: iOS and Android show the
+            published store build; TV and Roku, the newest release build seen
+            in the last {data.lookback_days} days. Latest: the newest production
+            tag (Roku: <code>roku-v…</code>).
           </p>
           <TableScroll label="Apps">
             <table className="wide">
@@ -137,7 +138,10 @@ export default async function Apps({
                         )}
                       </td>
                       <td>{row.freshness_display || "Unknown"}</td>
-                      <td>{row.comparison_display}</td>
+                      <td>
+                        {row.comparison_display}
+                        {row.comparison_detail && <small>{row.comparison_detail}</small>}
+                      </td>
                       {!platform && (
                         <td>
                           {platformNames[row.apollos_platform] ||

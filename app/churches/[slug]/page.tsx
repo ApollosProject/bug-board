@@ -172,7 +172,10 @@ export default async function ChurchPage({
                       )}
                     </td>
                     <td>{row.freshness_display || "Unknown"}</td>
-                    <td>{row.comparison_display}</td>
+                    <td>
+                      {row.comparison_display}
+                      {row.comparison_detail && <small>{row.comparison_detail}</small>}
+                    </td>
                   </tr>
                 ))}
               </tbody>

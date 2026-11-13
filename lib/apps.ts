@@ -175,6 +175,8 @@ export const lookbackDays = () =>
   Math.min(positiveIntEnv("APP_VERSIONS_LOOKBACK_DAYS", 30), 366);
 export type Source = {
   revisions: Record<string, string>;
+  // Latest stable (production) tag, and its mobile runtime.
+  stable: string | null;
   mobile: string | null;
   // Template → oldest stable tag that already has the newest tag's code;
   // `complete` is false when that code predates the tags checked.
@@ -241,6 +243,7 @@ export async function appSource(): Promise<Source> {
     revisions: Object.fromEntries(
       tags.map((tag) => [tag.name, tag.commit.sha]),
     ),
+    stable: stable[0] || null,
     mobile,
     tv,
     roku: commits[0]?.sha || null,
@@ -355,17 +358,28 @@ export async function annotateApps(rows: AppRow[], source: Source) {
     const platform = row.apollos_platform;
     let live = row.apollos_version,
       latest: string | null | undefined,
+      latestDetail: string | undefined,
       cmp: number | null = null,
       detail = row.live_status_detail;
     if (storePlatforms.has(platform)) {
-      latest = source.mobile;
+      latest = source.stable;
+      latestDetail = source.mobile ? `Runtime ${source.mobile}` : undefined;
       live = row.live_runtime_display || live;
-      if (row.apollos_version && runtimePattern.test(row.apollos_version))
-        cmp = latest ? compareVersions(row.apollos_version, latest) : null;
+      if (!source.mobile) detail = "Latest release runtime unavailable";
+      else if (row.apollos_version && runtimePattern.test(row.apollos_version))
+        cmp = compareVersions(row.apollos_version, source.mobile);
       else if (row.live_runtime_display) detail = "Multiple live runtimes";
     } else if (platform === "roku") {
       latest = source.roku_tag;
-      live = row.source_revision?.slice(0, 7) || null;
+      // Name the build by its release tag when it was built from one.
+      const tags = Object.keys(source.revisions).filter((tag) =>
+        revisionsMatch(source.revisions[tag], row.source_revision || ""),
+      );
+      live =
+        tags.find((tag) => rokuTagPattern.test(tag)) ||
+        tags[0] ||
+        row.source_revision?.slice(0, 7) ||
+        null;
       if (source.roku && row.source_revision && sha.test(row.source_revision)) {
         const status = revisionsMatch(source.roku, row.source_revision)
           ? "identical"
@@ -383,7 +397,9 @@ export async function annotateApps(rows: AppRow[], source: Source) {
       }
     } else {
       const release = source.tv[tvTemplates[platform]];
-      latest = release?.tag;
+      latest = source.stable;
+      if (release?.complete && release.tag !== latest)
+        latestDetail = `TV code unchanged since ${release.tag}`;
       live = row.canonical_source_version || row.source_version || null;
       if (!row.canonical_source_version) detail = "Not a release build";
       else if (release) {
@@ -410,6 +426,7 @@ export async function annotateApps(rows: AppRow[], source: Source) {
               : "Up to date",
       freshness_display: live || "Unknown",
       comparison_display: latest || "Unknown",
+      comparison_detail: latestDetail,
       is_outdated: cmp !== null && cmp < 0,
       live_status_detail:
         cmp !== null

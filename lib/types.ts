@@ -181,6 +181,7 @@ export type AppRow = {
   live_status_detail?: string;
   version_status_label?: string;
   comparison_display?: string;
+  comparison_detail?: string;
   freshness_display?: string;
   is_outdated?: boolean;
 };
