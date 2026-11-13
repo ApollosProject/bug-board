@@ -36,6 +36,24 @@ test("preset and custom date windows survive navigation", async ({
     /start=2026-08-01.*end=2026-08-07/,
   );
 });
+test("browser Back to a preset resets the date inputs", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  await app.open("/?days=90");
+  const start = screen.getByLabel("Start", { exact: true });
+  const presetStart = await start.inputValue();
+  await start.fill("2026-09-01");
+  await screen.getByLabel("End", { exact: true }).fill("2026-09-30");
+  await screen.getByRole("button", "Apply dates").tap();
+  await expect(browser).toHaveURL(/start=2026-09-01.*end=2026-09-30/);
+  await browser.back();
+  await expect(browser).toHaveURL(/days=90/);
+  await expect(screen.getByLabel("Start", { exact: true })).toHaveValue(
+    presetStart,
+  );
+});
 test("review and DAG filters use URL state", async ({
   app,
   screen,
