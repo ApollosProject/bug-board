@@ -391,7 +391,8 @@ export const openPRs = cache(async (approved: boolean | "only") => {
 });
 export const stableTagPattern = /^v\d{4}\.\d{2}\.\d{2}\.\d{2}$/;
 export const rokuTagPattern = /^roku-v\d{4}\.\d{2}\.\d{2}\.\d{2}$/;
-// Weekly/hotfix (`v…`) and daily Roku (`roku-v…`) release tags, newest first.
+export const tvTagPattern = /^tv-v\d{4}\.\d{2}\.\d{2}\.\d{2}$/;
+// Weekly/hotfix (`v…`) and daily Roku (`roku-v…`) and TV (`tv-v…`) release tags, newest first.
 export async function releaseTags(token = process.env.GITHUB_TOKEN) {
   const result: { name: string; commit: { sha: string } }[] = [];
   for (let page = 1; ; page++) {
@@ -402,7 +403,9 @@ export async function releaseTags(token = process.env.GITHUB_TOKEN) {
     result.push(
       ...tags.filter(
         (tag) =>
-          stableTagPattern.test(tag.name) || rokuTagPattern.test(tag.name),
+          stableTagPattern.test(tag.name) ||
+          rokuTagPattern.test(tag.name) ||
+          tvTagPattern.test(tag.name),
       ),
     );
     if (tags.length < 100) break;

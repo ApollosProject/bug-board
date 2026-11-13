@@ -29,7 +29,7 @@ import {
   revisionsMatch,
   selectMobile,
   selectObserved,
-  tvReleases,
+  latestRelease,
 } from "../lib/apps";
 import { publishedAndroid, publishedApple } from "../lib/stores";
 import {
@@ -192,7 +192,7 @@ test("app evidence sorts behind, unknown, then current before platform and churc
       { builds: [{ native_build: "20", native_version: "1.0" }] },
     ]),
   );
-  const result = await buildApps(rows, { stable: "v2026.11.09.00", mobile: "102", tv: {}, roku: null, roku_tag: null, revisions: {} }, releases);
+  const result = await buildApps(rows, { stable: "v2026.11.09.00", mobile: "102", tv_tag: null, tv: {}, roku: null, roku_tag: null, revisions: {} }, releases);
   assert.deepEqual(result.rows.map((r) => [r.version_status_label, r.apollos_platform, r.live_status_detail]), [
     ["Behind", "android", undefined],
     ["Behind", "ios", undefined],
@@ -203,75 +203,65 @@ test("app evidence sorts behind, unknown, then current before platform and churc
   ]);
   assert.deepEqual([result.rows[0].comparison_display, result.rows[0].comparison_detail], ["v2026.11.09.00", "Runtime 102"]);
 });
-test("TV apps match the latest stable tag's TV code; Roku its own release, named by tag", async (t) => {
-  const trees: Record<string, Record<string, string>> = {
-    "v2026.11.09.00": { tvos: "tv2", androidtv: "atv2" },
-    "v2026.11.02.04": { tvos: "tv2", androidtv: "atv2" },
-    "v2026.11.02.00": { tvos: "tv2", androidtv: "atv1" },
-    "v2026.10.26.00": { tvos: "tv1", androidtv: "atv1" },
-    "v2026.10.19.00": {},
+test("TV and Roku ship from their own release tags; TV used the weekly tag before its first", () => {
+  const tags = ["v2026.11.09.00", "tv-v2026.11.13.00", "tv-v2026.11.12.00", "roku-v2026.11.10.00"];
+  assert.equal(latestRelease(tags, "tvos"), "tv-v2026.11.13.00");
+  assert.equal(latestRelease(tags, "amazon"), "tv-v2026.11.13.00");
+  assert.equal(latestRelease(tags, "roku"), "roku-v2026.11.10.00");
+  assert.equal(latestRelease(tags, "ios"), "v2026.11.09.00");
+  assert.equal(latestRelease(["v2026.11.09.00", "roku-v2026.11.10.00"], "androidtv"), "v2026.11.09.00");
+  assert.equal(latestRelease(["v2026.11.09.00"], "roku"), null);
+});
+test("TV and Roku apps match their release's last code change, named by tag", async (t) => {
+  // base...head → GitHub's compare status of the build (head) against the release's last change (base).
+  const statuses: Record<string, string> = {
+    "eeeeeee5ffff...bbbbbbb2ffff": "behind",
+    "fffffff6ffff...bbbbbbb2ffff": "ahead",
+    "fffffff6ffff...ccccccc3": "diverged",
+    "release1...aaaaaaa1": "behind",
+    "release1...bbbbbbb2": "ahead",
+    "release1...ccccccc3": "diverged",
   };
-  const refs: string[] = [];
   t.mock.method(globalThis, "fetch", async (input: string) => {
-    const url = new URL(input);
-    if (url.pathname.endsWith("/contents/templates")) {
-      refs.push(url.searchParams.get("ref")!);
-      return Response.json(Object.entries(trees[url.searchParams.get("ref")!]).map(([name, sha]) => ({ name, sha })));
-    }
-    const compare = /\/compare\/release1\.\.\.(\w+)$/.exec(url.pathname);
-    if (compare) return Response.json({ status: { aaaaaaa1: "behind", bbbbbbb2: "ahead", ccccccc3: "diverged" }[compare[1]] });
+    const compare = /\/compare\/(\w+\.\.\.\w+)$/.exec(new URL(input).pathname);
+    if (compare && statuses[compare[1]]) return Response.json({ status: statuses[compare[1]] });
     throw new Error(`unexpected ${input}`);
   });
-  const tv = await tvReleases(Object.keys(trees));
-  assert.deepEqual(tv, {
-    tvos: { tag: "v2026.11.02.00", complete: true },
-    androidtv: { tag: "v2026.11.02.04", complete: true },
-  });
-  assert.deepEqual(refs, Object.keys(trees).slice(0, 4), "stops once both templates changed");
   const observed = (apollos_platform: string, church: string, extra: Partial<AppRow>) =>
     ({ ...app, apollos_platform, church, bundle_id: apollos_platform === "roku" ? "roku" : `com.${church}`, ...extra });
   const result = await buildApps(
     [
-      observed("tvos", "hotfix", { source_version: "v2026.11.02.04" }),
-      observed("tvos", "old", { source_version: "v2026.10.26.00" }),
-      observed("tvos", "branch", { source_version: "deploy/v2026.08.31.00-rejected" }),
-      observed("amazon", "first", { source_version: "v2026.11.02.00" }),
-      observed("androidtv", "latest", { source_version: "v2026.11.09.00" }),
+      observed("tvos", "daily", { source_version: "tv-v2026.11.13.00", source_revision: "eeeeeee5" }),
+      observed("tvos", "weekly", { source_version: "v2026.11.09.00" }),
+      observed("androidtv", "weekly", { source_version: "v2026.11.09.00" }),
+      observed("amazon", "branch", { source_version: "deploy/v2026.08.31.00-rejected", source_revision: "ccccccc3" }),
+      observed("tvos", "unbuilt", { source_version: "deploy/v2026.08.31.00-rejected" }),
       observed("roku", "old", { source_revision: "aaaaaaa1", source_version: "2.4.1" }),
       observed("roku", "master", { source_revision: "bbbbbbb2", source_version: "2.4.1" }),
       observed("roku", "hotfix", { source_revision: "ccccccc3", source_version: "2.4.1" }),
       observed("unknown", "legacy", { source_version: "v2026.11.09.00" }),
     ],
-    { stable: "v2026.11.09.00", mobile: "102", tv, roku: "release1", roku_tag: "roku-v2026.11.10.00", revisions: { "roku-v2026.11.10.00": "bbbbbbb2ffff", "v2026.11.09.00": "bbbbbbb2ffff", "v2026.11.02.00": "aaaaaaa1ffff" } },
+    {
+      stable: "v2026.11.09.00", mobile: "102",
+      tv_tag: "tv-v2026.11.13.00", tv: { tvos: "eeeeeee5ffff", androidtv: "fffffff6ffff" },
+      roku: "release1", roku_tag: "roku-v2026.11.10.00",
+      revisions: { "tv-v2026.11.13.00": "eeeeeee5ffff", "roku-v2026.11.10.00": "bbbbbbb2ffff", "v2026.11.09.00": "bbbbbbb2ffff", "v2026.11.02.00": "aaaaaaa1ffff" },
+    },
     new Map(),
   );
   assert.deepEqual(
-    result.rows.map((r) => [r.apollos_platform, r.church, r.version_status_label, r.freshness_display, r.comparison_display, r.comparison_detail]),
+    result.rows.map((r) => [r.apollos_platform, r.church, r.version_status_label, r.freshness_display, r.comparison_display, r.live_status_detail]),
     [
-      ["amazon", "first", "Behind", "v2026.11.02.00", "v2026.11.09.00", "TV code unchanged since v2026.11.02.04"],
+      ["amazon", "branch", "Behind", "ccccccc", "tv-v2026.11.13.00", undefined],
       ["roku", "hotfix", "Behind", "ccccccc", "roku-v2026.11.10.00", undefined],
       ["roku", "old", "Behind", "v2026.11.02.00", "roku-v2026.11.10.00", undefined],
-      ["tvos", "old", "Behind", "v2026.10.26.00", "v2026.11.09.00", "TV code unchanged since v2026.11.02.00"],
-      ["tvos", "branch", "Unknown", "deploy/v2026.08.31.00-rejected", "v2026.11.09.00", "TV code unchanged since v2026.11.02.00"],
-      ["androidtv", "latest", "Up to date", "v2026.11.09.00", "v2026.11.09.00", "TV code unchanged since v2026.11.02.04"],
+      ["tvos", "weekly", "Behind", "v2026.11.09.00", "tv-v2026.11.13.00", undefined],
+      ["tvos", "unbuilt", "Unknown", "Unknown", "tv-v2026.11.13.00", "Not a release build"],
+      // Android TV code is unchanged since the weekly tag, so those builds are current.
+      ["androidtv", "weekly", "Up to date", "v2026.11.09.00", "tv-v2026.11.13.00", undefined],
       ["roku", "master", "Up to date", "roku-v2026.11.10.00", "roku-v2026.11.10.00", undefined],
-      ["tvos", "hotfix", "Up to date", "v2026.11.02.04", "v2026.11.09.00", "TV code unchanged since v2026.11.02.00"],
+      ["tvos", "daily", "Up to date", "tv-v2026.11.13.00", "tv-v2026.11.13.00", undefined],
     ],
-  );
-  assert.equal(result.rows.find((r) => r.church === "branch")?.live_status_detail, "Not a release build");
-  // Unchanged across the whole 20-tag walk: older tags may share the code, so they stay unknown.
-  const many = Array.from({ length: 21 }, (_, i) => `v2026.01.01.${String(20 - i).padStart(2, "0")}`);
-  for (const tag of many) trees[tag] = { tvos: "same", androidtv: "same" };
-  const capped = await tvReleases(many);
-  assert.deepEqual(capped.tvos, { tag: many[19], complete: false });
-  const old = await buildApps(
-    [observed("tvos", "walked", { source_version: many[19] }), observed("tvos", "older", { source_version: many[20] })],
-    { stable: many[0], mobile: null, tv: capped, roku: null, roku_tag: null, revisions: {} },
-    new Map(),
-  );
-  assert.deepEqual(
-    old.rows.map((r) => [r.church, r.version_status_label, r.live_status_detail]),
-    [["older", "Unknown", "Older than the releases checked"], ["walked", "Up to date", undefined]],
   );
 });
 test("Ready projects honor prerequisite projects and milestone dependencies", () => {
@@ -778,6 +768,7 @@ test("observed release selection excludes internal, master, and unmatched alpha 
     revisions: { "v2026.09.01.01": "abcdef123456" },
     stable: null,
     mobile: null,
+    tv_tag: null,
     tv: {},
     roku: null,
     roku_tag: null,
@@ -802,6 +793,14 @@ test("observed release selection excludes internal, master, and unmatched alpha 
   assert.equal(rows.length, 1);
   assert.equal(rows[0].apollos_version, "v2026.09.01.01");
   assert.equal(revisionsMatch("garbage", "garbage"), false);
+});
+test("a TV app's newest release build wins across weekly and daily TV tags", () => {
+  const source = { revisions: {}, stable: null, mobile: null, tv_tag: null, tv: {}, roku: null, roku_tag: null };
+  const build = (source_version: string) => ({ ...app, apollos_platform: "androidtv", source_version });
+  for (const order of [["tv-v2026.11.13.00", "v2026.11.09.00"], ["v2026.11.09.00", "tv-v2026.11.13.00"]]) {
+    assert.equal(selectObserved(order.map(build), source)[0].apollos_version, "tv-v2026.11.13.00");
+  }
+  assert.equal(selectObserved(["tv-v2026.11.13.00", "v2026.11.16.00"].map(build), source)[0].apollos_version, "v2026.11.16.00");
 });
 test("regression analysis parses deleted old-file lines, merges scores, and excludes fixing PRs", () => {
   assert.deepEqual(

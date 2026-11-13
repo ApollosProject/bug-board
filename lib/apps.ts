@@ -6,6 +6,7 @@ import {
   releaseTags,
   rokuTagPattern,
   stableTagPattern,
+  tvTagPattern,
 } from "./github";
 import { mapConcurrent } from "./http";
 import {
@@ -36,7 +37,7 @@ const fieldCandidates: Record<string, string[]> = {
   source_version: ["source_version", "sourceVersion"],
   deployment_track: ["deployment_track", "deploymentTrack"],
 };
-// Native TV apps ship from stable tags; Amazon builds from the Android TV template.
+// Native TV apps ship from `tv-v` tags; Amazon builds from the Android TV template.
 const tvTemplates: Record<string, string> = {
   tvos: "tvos",
   androidtv: "androidtv",
@@ -178,9 +179,10 @@ export type Source = {
   // Latest stable (production) tag, and its mobile runtime.
   stable: string | null;
   mobile: string | null;
-  // Template → oldest stable tag that already has the newest tag's code;
-  // `complete` is false when that code predates the tags checked.
-  tv: Record<string, { tag: string; complete: boolean }>;
+  // Latest TV release, and each TV template's last code change in it.
+  tv_tag: string | null;
+  tv: Record<string, string | null>;
+  // Latest Roku release, and its last app-code change.
   roku: string | null;
   roku_tag: string | null;
 };
@@ -195,58 +197,45 @@ async function mobileRuntime(ref: string) {
       )?.[1] || null
     : null;
 }
-// Releases without TV changes (most hotfixes) carry the same TV code, so an app
-// on any tag from the first one with today's code onward is up to date.
-// shortcut: walks the newest 20 tags; while TV code is older than that, apps on
-// older tags stay unknown. Cache per-tag trees if that becomes common.
-export async function tvReleases(tags: string[]) {
-  const newest: Record<string, string | undefined> = {},
-    first: Record<string, string> = {};
-  let open = ["tvos", "androidtv"];
-  for (const tag of tags.slice(0, 20)) {
-    if (!open.length) break;
-    const entries = await githubRest<{ name: string; sha: string }[]>(
-      `${platformsRepo}/contents/templates?ref=${tag}`,
-    );
-    open = open.filter((name) => {
-      const tree = entries.find((entry) => entry.name === name)?.sha;
-      if (!(name in newest)) newest[name] = tree;
-      if (!tree || tree !== newest[name]) return false;
-      first[name] = tag;
-      return true;
-    });
-  }
-  return Object.fromEntries(
-    Object.entries(first).map(([name, tag]) => [
-      name,
-      { tag, complete: tags.length <= 20 || !open.includes(name) },
-    ]),
-  );
+// The release each platform ships from, newest first in `tags`. TV shipped with
+// the weekly stable tag until its own daily `tv-v` releases began.
+export function latestRelease(tags: string[], platform: string) {
+  const find = (pattern: RegExp) => tags.find((tag) => pattern.test(tag)) || null;
+  if (platform === "roku") return find(rokuTagPattern);
+  if (Object.hasOwn(tvTemplates, platform))
+    return find(tvTagPattern) || find(stableTagPattern);
+  return find(stableTagPattern);
 }
+// A release's last change to one template's code; builds containing it are current.
+const lastChange = (tag: string | null, path: string) =>
+  tag
+    ? githubRest<{ sha: string }[]>(
+        `${platformsRepo}/commits?sha=${tag}&path=${path}&per_page=1`,
+      )
+        .then((commits) => commits[0]?.sha || null)
+        .catch(() => null)
+    : null;
 export async function appSource(): Promise<Source> {
-  const tags = await releaseTags().catch(() => []);
-  const stable = tags
-      .filter((tag) => stableTagPattern.test(tag.name))
-      .map((tag) => tag.name),
-    rokuTag = tags.find((tag) => rokuTagPattern.test(tag.name))?.name || null;
-  const [mobile, tv, commits] = await Promise.all([
-    stable[0] ? mobileRuntime(stable[0]).catch(() => null) : null,
-    tvReleases(stable).catch(() => ({})),
-    // The Roku release's last app-code change; builds containing it are current.
-    rokuTag
-      ? githubRest<{ sha: string }[]>(
-          `${platformsRepo}/commits?sha=${rokuTag}&path=templates/roku/src&per_page=1`,
-        ).catch(() => [])
-      : [],
+  const tags = await releaseTags().catch(() => []),
+    names = tags.map((tag) => tag.name);
+  const stable = latestRelease(names, "ios"),
+    tvTag = latestRelease(names, "tvos"),
+    rokuTag = latestRelease(names, "roku");
+  const [mobile, tvos, androidtv, roku] = await Promise.all([
+    stable ? mobileRuntime(stable).catch(() => null) : null,
+    lastChange(tvTag, "templates/tvos"),
+    lastChange(tvTag, "templates/androidtv"),
+    lastChange(rokuTag, "templates/roku/src"),
   ]);
   return {
     revisions: Object.fromEntries(
       tags.map((tag) => [tag.name, tag.commit.sha]),
     ),
-    stable: stable[0] || null,
+    stable,
     mobile,
-    tv,
-    roku: commits[0]?.sha || null,
+    tv_tag: tvTag,
+    tv: { tvos, androidtv },
+    roku,
     roku_tag: rokuTag,
   };
 }
@@ -301,6 +290,9 @@ export function selectMobile(
     "Published store build matched by native build ID";
   return selected;
 }
+// `tv-v` tags continue the weekly `v` tags TV shipped from before.
+const releaseOrder = (version?: string | null) =>
+  (version || "").replace(/^tv-/, "");
 export function selectObserved(rows: AppRow[], source: Source) {
   const selected = new Map<string, AppRow>();
   // Other platforms (unknown, legacy `tv`, web) have no release to compare.
@@ -311,15 +303,16 @@ export function selectObserved(rows: AppRow[], source: Source) {
   )) {
     const version = row.source_version || "",
       alpha = /^(v\d{4}\.\d{2}\.\d{2}\.\d{2})-alpha\.\d+$/.exec(version);
-    const canonical = stableTagPattern.test(version)
-      ? version
-      : alpha &&
-          revisionsMatch(
-            row.source_revision || "",
-            source.revisions[alpha[1]] || "",
-          )
-        ? alpha[1]
-        : null;
+    const canonical =
+      stableTagPattern.test(version) || tvTagPattern.test(version)
+        ? version
+        : alpha &&
+            revisionsMatch(
+              row.source_revision || "",
+              source.revisions[alpha[1]] || "",
+            )
+          ? alpha[1]
+          : null;
     if (
       internalTracks.has((row.deployment_track || "").toLowerCase()) ||
       version.toLowerCase() === "master" ||
@@ -339,8 +332,8 @@ export function selectObserved(rows: AppRow[], source: Source) {
     if (
       !current ||
       compareVersions(
-        candidate.apollos_version || "",
-        current.apollos_version || "",
+        releaseOrder(candidate.apollos_version),
+        releaseOrder(current.apollos_version),
       ) > 0 ||
       (candidate.apollos_version === current.apollos_version &&
         (compareVersions(
@@ -369,49 +362,41 @@ export async function annotateApps(rows: AppRow[], source: Source) {
       else if (row.apollos_version && runtimePattern.test(row.apollos_version))
         cmp = compareVersions(row.apollos_version, source.mobile);
       else if (row.live_runtime_display) detail = "Multiple live runtimes";
-    } else if (platform === "roku") {
-      latest = source.roku_tag;
+    } else {
+      // Roku and TV: does the build contain its release's last code change?
+      const roku = platform === "roku",
+        code = roku ? source.roku : source.tv[tvTemplates[platform]],
+        revision =
+          row.source_revision ||
+          source.revisions[row.source_version || ""] ||
+          "";
+      latest = roku ? source.roku_tag : source.tv_tag;
       // Name the build by its release tag when it was built from one.
       const tags = Object.keys(source.revisions).filter((tag) =>
-        revisionsMatch(source.revisions[tag], row.source_revision || ""),
+        revisionsMatch(source.revisions[tag], revision),
       );
       live =
-        tags.find((tag) => rokuTagPattern.test(tag)) ||
-        tags[0] ||
-        row.source_revision?.slice(0, 7) ||
+        tags.find((tag) =>
+          (roku ? rokuTagPattern : tvTagPattern).test(tag),
+        ) ||
+        tags.find((tag) => stableTagPattern.test(tag)) ||
+        revision.slice(0, 7) ||
         null;
-      if (source.roku && row.source_revision && sha.test(row.source_revision)) {
-        const status = revisionsMatch(source.roku, row.source_revision)
+      if (!sha.test(revision)) detail = "Not a release build";
+      else if (code) {
+        const status = revisionsMatch(code, revision)
           ? "identical"
           : (
               await githubRest<{ status: string }>(
-                `${platformsRepo}/compare/${source.roku}...${row.source_revision}`,
+                `${platformsRepo}/compare/${code}...${revision}`,
               ).catch(() => null)
             )?.status;
-        // Diverged builds also lack the release's last Roku change.
+        // Diverged builds also lack the release's last change.
         cmp = ["behind", "diverged"].includes(status || "")
           ? -1
           : ["identical", "ahead"].includes(status || "")
             ? 0
             : null;
-      }
-    } else {
-      const release = source.tv[tvTemplates[platform]];
-      latest = source.stable;
-      if (release?.complete && release.tag !== latest)
-        latestDetail = `TV code unchanged since ${release.tag}`;
-      live = row.canonical_source_version || row.source_version || null;
-      if (!row.canonical_source_version) detail = "Not a release build";
-      else if (release) {
-        cmp = Math.min(
-          compareVersions(row.canonical_source_version, release.tag),
-          0,
-        );
-        // Tags past the walk may still have today's code.
-        if (cmp < 0 && !release.complete) {
-          cmp = null;
-          detail = "Older than the releases checked";
-        }
       }
     }
     return {
@@ -511,10 +496,10 @@ export async function dispatchDeploy(church: string, platform: string) {
   const token = process.env.GITHUB_ACTIONS_TOKEN;
   if (!token) throw new Error("Deployment token not configured");
   // The same release the Apps page compares against.
-  const pattern = platform === "roku" ? rokuTagPattern : stableTagPattern;
-  const tag = (await releaseTags(token)).find((t) =>
-    pattern.test(t.name),
-  )?.name;
+  const tag = latestRelease(
+    (await releaseTags(token)).map((t) => t.name),
+    platform,
+  );
   if (!tag) throw new Error("No release tag found");
   const { githubHeaders } = await import("./github");
   // requestJson cannot consume GitHub's successful empty 204 body.
