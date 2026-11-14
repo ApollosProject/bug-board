@@ -118,7 +118,7 @@ export function WindowControls({
           </Link>
         ))}
       </div>
-      <form method="get">
+      <form method="get" autoComplete="off">
         {Object.entries(extra).map(([key, value]) => (
           <input type="hidden" key={key} name={key} value={value} />
         ))}
