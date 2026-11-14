@@ -802,6 +802,18 @@ test("a TV app's newest release build wins across weekly and daily TV tags", () 
   }
   assert.equal(selectObserved(["tv-v2026.11.13.00", "v2026.11.16.00"].map(build), source)[0].apollos_version, "v2026.11.16.00");
 });
+test("a same-version daily TV tag replaces the weekly tag", () => {
+  const source = { revisions: {}, stable: null, mobile: null, tv_tag: null, tv: {}, roku: null, roku_tag: null };
+  const build = (source_version: string, app_version: string, latest_seen_at: string) => ({
+    ...app, apollos_platform: "tvos", source_version, app_version, latest_seen_at,
+  });
+  // Weekly row is more recently active and has a newer app build. SQL orders by last activity.
+  const weekly = build("v2026.11.16.00", "9.0", "2026-11-16T18:00:00Z");
+  const daily = build("tv-v2026.11.16.00", "1.0", "2026-11-16T01:00:00Z");
+  for (const rows of [[weekly, daily], [daily, weekly]]) {
+    assert.equal(selectObserved(rows, source)[0].apollos_version, "tv-v2026.11.16.00");
+  }
+});
 test("regression analysis parses deleted old-file lines, merges scores, and excludes fixing PRs", () => {
   assert.deepEqual(
     deletedLines("@@ -10,3 +10,2 @@\n same\n-old\n+new\n-last"),

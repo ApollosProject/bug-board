@@ -291,8 +291,10 @@ export function selectMobile(
   return selected;
 }
 // `tv-v` tags continue the weekly `v` tags TV shipped from before.
-const releaseOrder = (version?: string | null) =>
-  (version || "").replace(/^tv-/, "");
+// A same-version `tv-v` sorts after the `v` tag it replaces.
+const releaseOrder = (a?: string | null, b?: string | null) =>
+  compareVersions((a || "").replace(/^tv-/, ""), (b || "").replace(/^tv-/, "")) ||
+  Number((a || "").startsWith("tv-")) - Number((b || "").startsWith("tv-"));
 export function selectObserved(rows: AppRow[], source: Source) {
   const selected = new Map<string, AppRow>();
   // Other platforms (unknown, legacy `tv`, web) have no release to compare.
@@ -331,10 +333,7 @@ export function selectObserved(rows: AppRow[], source: Source) {
       current = selected.get(key);
     if (
       !current ||
-      compareVersions(
-        releaseOrder(candidate.apollos_version),
-        releaseOrder(current.apollos_version),
-      ) > 0 ||
+      releaseOrder(candidate.apollos_version, current.apollos_version) > 0 ||
       (candidate.apollos_version === current.apollos_version &&
         (compareVersions(
           candidate.app_version || "",
