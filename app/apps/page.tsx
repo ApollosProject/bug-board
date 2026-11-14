@@ -90,7 +90,7 @@ export default async function Apps({
             <Checked at={data.checked_at} /> · Live: iOS and Android show the
             published store build; TV and Roku, the newest release build seen
             in the last {data.lookback_days} days. Latest: the newest production
-            tag (Roku: <code>roku-v…</code>).
+            tag (Roku: <code>roku-v…</code>, TV: <code>tv-v…</code>).
           </p>
           <TableScroll label="Apps">
             <table className="wide">
