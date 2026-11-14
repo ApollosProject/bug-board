@@ -50,8 +50,11 @@ export function safeNext(value: string | null | undefined) {
   )
     return "/";
   const url = new URL(value, "https://local.invalid");
-  return url.origin === "https://local.invalid"
-    ? url.pathname + url.search
+  const next = url.pathname + url.search;
+  return url.origin === "https://local.invalid" &&
+    next.startsWith("/") &&
+    !next.startsWith("//")
+    ? next
     : "/";
 }
 const key = () => new TextEncoder().encode(process.env.AUTH_SECRET);
