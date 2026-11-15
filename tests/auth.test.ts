@@ -223,8 +223,15 @@ test("return URLs reject open redirects and PKCE uses SHA256", () => {
     "//evil.example",
     "/\\evil.example",
     "/\r\nevil",
-  ])
-    assert.equal(safeNext(value), "/");
+    "/.//evil.com",
+    "/.//evil.com/phish",
+    "/%2e//evil.com",
+    "/foo/..//evil.com",
+  ]) {
+    const next = safeNext(value);
+    assert.equal(next, "/");
+    assert.equal(new URL(next, "https://app.example").origin, "https://app.example");
+  }
   assert.equal(safeNext("/team?days=7#fragment"), "/team?days=7");
   assert.equal(
     pkce("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"),
