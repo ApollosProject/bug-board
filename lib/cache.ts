@@ -26,14 +26,43 @@ export async function readSnapshot<T>(
     return null;
   }
 }
+// Upstash rejects a request body over 10MB. This is the pipeline JSON the client
+// posts for one SET, which is larger than the snapshot itself.
+const MAX_REDIS_REQUEST_BYTES = 9_000_000;
+
+function setRequestBytes(name: string, data: unknown, ttl: number, nx = false) {
+  const command = [
+    "set",
+    key(name),
+    JSON.stringify({ at: Date.now(), data }),
+    ...(nx ? ["nx"] : []),
+    "ex",
+    ttl,
+  ];
+  return new TextEncoder().encode(JSON.stringify([command])).byteLength;
+}
+
+function assertFits(name: string, data: unknown, ttl: number, nx = false) {
+  const bytes = setRequestBytes(name, data, ttl, nx);
+  if (bytes <= MAX_REDIS_REQUEST_BYTES) return;
+  console.warn(
+    "Redis snapshot skipped: request would exceed Upstash's 10MB limit",
+    name,
+    bytes,
+  );
+  throw new Error(`Redis snapshot exceeds the request size limit (${bytes} bytes)`);
+}
+
 export async function writeSnapshot<T>(name: string, data: T, ttl: number) {
   const client = redis();
   if (!client) throw new Error("Configure Upstash Redis REST credentials");
+  assertFits(name, data, ttl);
   await client.set(key(name), { at: Date.now(), data }, { ex: ttl });
 }
 export async function snapshotOnce<T>(name: string, data: T, ttl: number): Promise<T> {
   const client = redis();
   if (!client) throw new Error("Configure Upstash Redis REST credentials");
+  assertFits(name, data, ttl, true);
   await client.set(key(name), { at: Date.now(), data }, { nx: true, ex: ttl });
   const saved = await client.get<{ data: T }>(key(name));
   if (!saved) throw new Error("Saved snapshot unavailable");

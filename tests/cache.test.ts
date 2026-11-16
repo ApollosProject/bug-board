@@ -40,6 +40,61 @@ test("snapshotOnce retains the first writer and fails closed when storage is una
   }
 });
 
+test("snapshots over Upstash's request limit are not sent, and smaller ones still cache", async (t) => {
+  const names = ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"];
+  const previous = names.map((name) => process.env[name]);
+  process.env.UPSTASH_REDIS_REST_URL = "https://redis.example.test";
+  process.env.UPSTASH_REDIS_REST_TOKEN = "fixture-redis";
+  const bodies: number[] = [];
+  const warnings: unknown[][] = [];
+  t.mock.method(globalThis, "fetch", async (_url: unknown, init?: RequestInit) => {
+    bodies.push(new TextEncoder().encode(String(init?.body)).byteLength);
+    const body = JSON.parse(String(init?.body));
+    const commands = Array.isArray(body[0]) ? body : [body];
+    return Response.json(
+      Array.isArray(body[0])
+        ? commands.map(() => ({ result: "OK" }))
+        : { result: "OK" },
+    );
+  });
+  t.mock.method(console, "warn", (...args: unknown[]) => {
+    warnings.push(args);
+  });
+  const requestBytes = (data: unknown) => {
+    const command = ["set", "key", JSON.stringify({ at: 0, data }), "ex", 60];
+    return new TextEncoder().encode(JSON.stringify([command])).byteLength;
+  };
+  try {
+    await writeSnapshot("metrics", { ok: true }, 60);
+    const report = "x".repeat(2_500_000);
+    await writeSnapshot("report-v4:days=30", report, 60);
+    assert.equal(bodies.length, 2);
+    assert.ok(bodies[1] > 2_097_152, "a report past Next's 2MB cache limit still goes to Redis");
+    assert.ok(bodies.every((bytes) => bytes <= 9_000_000));
+    const oversized = "x".repeat(9_000_000);
+    assert.ok(requestBytes(oversized) > 9_000_000);
+    await assert.rejects(
+      writeSnapshot("linear-histories:open", oversized, 3600),
+      /Redis snapshot exceeds the request size limit/,
+    );
+    await assert.rejects(
+      snapshotOnce("notifications", oversized, 3600),
+      /Redis snapshot exceeds the request size limit/,
+    );
+    assert.equal(bodies.length, 2, "an oversized snapshot is not sent to Redis");
+    assert.equal(warnings.length, 2);
+    for (const warning of warnings) {
+      assert.match(String(warning[0]), /exceed Upstash's 10MB limit/);
+      assert.ok(Number(warning[2]) > 9_000_000);
+    }
+  } finally {
+    names.forEach((name, i) => {
+      if (previous[i] === undefined) delete process.env[name];
+      else process.env[name] = previous[i];
+    });
+  }
+});
+
 test("cache accepts Marketplace credentials without mixing partial standalone pairs", async () => {
   const names = [
     "UPSTASH_REDIS_REST_URL",
