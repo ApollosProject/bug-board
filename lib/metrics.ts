@@ -54,7 +54,7 @@ export const isPriorityBug = (issue: Issue) =>
   isBug(issue) && issue.priority >= 1 && issue.priority <= 2;
 // Person cards historically include unprioritized bugs; alerts and regressions do not.
 export const isCardBug = (issue: Issue) =>
-  isBug(issue) && issue.priority >= 0 && issue.priority <= 2;
+  isBug(issue) && !issue.project && issue.priority >= 0 && issue.priority <= 2;
 export const isWork = (issue: Issue) =>
   issue.labels.nodes.some((label) =>
     ["Bug", "Feature Request", "Technical Change"].includes(label.name),

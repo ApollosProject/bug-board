@@ -350,6 +350,13 @@ test("assignment time starts at creation when the ticket was made with its assig
   assert.equal(metricDisplay("avg_all_time_to_fix", 12), "12.0d");
   assert.equal(metricDisplay("avg_all_time_to_fix", null), "n/a");
 });
+test("person bug cards leave out bugs that belong to a project", () => {
+  const inProject = issue({ project: { id: "p1", name: "Big work" } });
+  assert.equal(isCardBug(inProject), false);
+  assert.equal(isCardBug(issue()), true);
+  const metrics = personMetrics("zach", [inProject, issue()], [], [], window);
+  assert.equal(metrics.priority_bugs_fixed, 1);
+});
 test("person bug cards preserve unprioritized counts without widening alerts or regression candidates", () => {
   const unprioritized = issue({ priority: 0 });
   assert.equal(isCardBug(unprioritized), true);
