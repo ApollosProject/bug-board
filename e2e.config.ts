@@ -20,7 +20,9 @@ export default {
     "tests/dashboard.e2e.ts",
     "tests/luna.e2e.ts",
     ...(process.env.E2E_DATA === "1" ? ["tests/data.e2e.ts"] : []),
-    ...(process.env.E2E_FIXTURES === "1" ? ["tests/churches.e2e.ts"] : []),
+    ...(process.env.E2E_FIXTURES === "1"
+      ? ["tests/churches.e2e.ts", "tests/reviews.e2e.ts"]
+      : []),
   ],
   targets: [
     {

@@ -144,6 +144,9 @@ npx e2e run tests/dashboard.e2e.ts --no-cache
 # Fixture church directory (also run in CI):
 E2E_FIXTURES=1 npx e2e run tests/churches.e2e.ts --no-cache
 
+# Fixture review queue (also run in CI):
+E2E_FIXTURES=1 npx e2e run tests/reviews.e2e.ts --no-cache
+
 # Already-running, populated local surface:
 E2E_BASE_URL=http://127.0.0.1:3000 E2E_DATA=1 \
   npx e2e run tests/data.e2e.ts --no-cache
