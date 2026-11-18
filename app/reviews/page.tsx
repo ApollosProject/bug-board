@@ -9,6 +9,7 @@ import {
 import { session } from "@/lib/auth";
 import { people, personName, priorityLabels } from "@/lib/config";
 import { cachedReviewQueue } from "@/lib/reviews";
+import { mergeBlocker } from "@/lib/pipeline";
 import { param, queryString } from "@/lib/window";
 import { UpstreamError } from "@/lib/http";
 import type { Search } from "@/lib/types";
@@ -99,7 +100,11 @@ async function Queue({ search }: { search: Search }) {
                       )}
                     </td>
                     <td>{row.waiting}</td>
-                    <td>{row.reason || row.ci}</td>
+                    <td>
+                      {row.section === "approved"
+                        ? mergeBlocker(row.pr)
+                        : row.reason || row.ci}
+                    </td>
                     <td title={`+${row.pr.additions} −${row.pr.deletions}`}>
                       {row.size}
                     </td>
