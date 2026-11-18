@@ -54,7 +54,7 @@
     "ai": "^7.0.159",
     "e2e": "^0.23.0",
     "eslint": "^10.14.0",
-    "eslint-config-next": "^16.4.5",
+    "eslint-config-next": "^16.4.6",
     "tsx": "^4.23.15",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "workflow": "^5.4.0"
