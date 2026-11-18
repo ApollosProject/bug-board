@@ -129,6 +129,7 @@ export function WindowControls({
             name="start"
             defaultValue={window.start}
             key={window.start}
+            autoComplete="off"
             required
           />
         </label>
@@ -139,6 +140,7 @@ export function WindowControls({
             name="end"
             defaultValue={window.end}
             key={window.end}
+            autoComplete="off"
             required
           />
         </label>

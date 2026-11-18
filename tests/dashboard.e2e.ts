@@ -36,6 +36,22 @@ test("preset and custom date windows survive navigation", async ({
     /start=2026-08-01.*end=2026-08-07/,
   );
 });
+test("date inputs match the window after Back to the default", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  await app.open("/team");
+  await screen.getByLabel("Start", { exact: true }).fill("2026-10-01");
+  await screen.getByLabel("End", { exact: true }).fill("2026-10-31");
+  await screen.getByRole("button", "Apply dates").tap();
+  await expect(browser).toHaveURL(/start=2026-10-01.*end=2026-10-31/);
+  await app.open("/team?start=2026-10-01&end=2026-10-31");
+  await browser.back();
+  await expect(browser).toHaveURL(/\/team$/);
+  await expect(screen.getByLabel("Start", { exact: true })).not.toHaveValue("2026-10-01");
+  await expect(screen.getByLabel("End", { exact: true })).not.toHaveValue("2026-10-31");
+});
 test("review and DAG filters use URL state", async ({
   app,
   screen,
