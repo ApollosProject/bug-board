@@ -162,7 +162,8 @@ export function IssueList({
   return issues.length ? (
     <ul className="issue-list">
       {issues.map((issue) => {
-        const slug = slugFor(issue.assignee?.name, issue.assignee?.displayName);
+        const owner = issue.assignee || issue.delegate,
+          slug = slugFor(owner?.name, owner?.displayName);
         return (
           <li key={issue.id}>
             <span className={`badge priority-${issue.priority}`}>
@@ -183,7 +184,7 @@ export function IssueList({
               </Link>
             ) : (
               <span className="muted">
-                {issue.assignee?.displayName || "Unassigned"}
+                {owner?.displayName || owner?.name || "Unassigned"}
               </span>
             )}
           </li>

@@ -15,10 +15,11 @@ import {
   TableScroll,
 } from "@/components/dashboard";
 const assigneeName = (issue: Issue) => {
-  const slug = slugFor(issue.assignee?.name, issue.assignee?.displayName);
+  const owner = issue.assignee || issue.delegate,
+    slug = slugFor(owner?.name, owner?.displayName);
   return slug
     ? personName(slug)
-    : issue.assignee?.displayName || issue.assignee?.name || "Unassigned";
+    : owner?.displayName || owner?.name || "Unassigned";
 };
 async function OpenWork() {
   const data = await openWork().catch(() => null);
@@ -41,7 +42,7 @@ async function OpenWork() {
         {/* Grouped and collapsed by person: the flat list ran to thousands of pixels. */}
         <GroupedIssues
           issues={issues
-            .filter((i) => i.assignee && i.priority > 2 && isWork(i))
+            .filter((i) => (i.assignee || i.delegate) && i.priority > 2 && isWork(i))
             .sort(
               (a, b) =>
                 assigneeName(a).localeCompare(assigneeName(b)) ||
