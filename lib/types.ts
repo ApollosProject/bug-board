@@ -31,6 +31,7 @@ export type Issue = {
   slaType?: string;
   slaStartedAt?: string;
   assignee: Identity | null;
+  delegate?: Identity | null;
   project: { id: string; name: string } | null;
   parent?: { id: string } | null;
   state: IssueState;

@@ -51,7 +51,7 @@ async function LinearStages({ window, everyone }: { window: Window; everyone: bo
           <ul className="issue-list">{row.oldest.map(({ issue, seconds }) => (
             <li key={issue.id}>
               <div><a href={issue.url}>{issue.identifier} · {issue.title}</a>
-                <small>{issue.project?.name || "Support / no project"} · {issue.assignee?.displayName || issue.assignee?.name || "Unassigned"}</small>
+                <small>{issue.project?.name || "Support / no project"} · {issue.assignee?.displayName || issue.assignee?.name || issue.delegate?.displayName || "Unassigned"}</small>
               </div>
               <span>{duration(seconds)} in status</span>
             </li>

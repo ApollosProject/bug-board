@@ -37,10 +37,11 @@ const mention = (slug: string | undefined) =>
     : "No Assignee";
 function bugLine(issue: Issue, reviewers: string[]) {
   const platform = platformFor(issue),
-    slug = slugFor(issue.assignee?.name, issue.assignee?.displayName),
+    owner = issue.assignee || issue.delegate,
+    slug = slugFor(owner?.name, owner?.displayName),
     assignee = slug && people[slug].slack_id
       ? mention(slug)
-      : escape(issue.assignee?.displayName || issue.assignee?.name || "");
+      : escape(owner?.displayName || owner?.name || "");
   return `- ${issue.priority === 1 ? "🚨 " : ""}${link(issue.url, issue.title)} (${slaText(issue) || `+${daysSince(issue.createdAt)}d`}${platform ? `, ${platform}` : ""}${assignee ? `, ${assignee}` : ""}${reviewers.length ? `, Review requested: ${reviewers.map(mention).join(", ")}` : ""})`;
 }
 export async function priorityMessage() {
@@ -64,7 +65,7 @@ export async function priorityMessage() {
       waiting.get(issue.id)!.add(slug);
     }
   }
-  const unassigned = bugs.filter((b) => !b.assignee),
+  const unassigned = bugs.filter((b) => !b.assignee && !b.delegate),
     overdue = bugs.filter(
       (b) => Date.parse(b.slaBreachesAt || "") <= Date.now(),
     );
