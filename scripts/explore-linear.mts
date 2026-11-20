@@ -6,11 +6,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { config } from "../lib/config";
-import { graphql } from "../lib/http";
+import { linear } from "../lib/linear";
 
 const mode = process.argv[2], label = "e2e explore", root = ".e2e/explore", prefix = "Bug Board: ";
-const linear = <T>(query: string, variables: object = {}) =>
-  graphql<T>("https://api.linear.app/graphql", process.env.LINEAR_API_KEY || "", query, variables);
 type Finding = { kind: string; title: string; severity: number; expected: string; actual: string; reproduction: string[]; path?: string; artifactId?: string };
 type Artifact = { id: string; path: string };
 
