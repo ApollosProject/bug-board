@@ -14,7 +14,7 @@ export default async function DAGs({
   searchParams: Promise<Search>;
 }) {
   const search = await searchParams,
-    query = param(search, "q"),
+    query = param(search, "q").trim(),
     state = param(search, "state");
   const fleet = await fleetDashboard().catch(() => null);
   // Failures first, successes last; the stable sort keeps each group alphabetical.
