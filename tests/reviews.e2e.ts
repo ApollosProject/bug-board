@@ -50,6 +50,8 @@ test("review queue keeps blocked pull requests out of ready", async ({
   await expect(
     approved.getByRole("link", "Login link expiry", { exact: true }),
   ).toBeVisible();
+  // Same readiness as Team's "Approved but unmerged" list.
+  await expect(approved).toContainText("Conflicts");
   await expect(
     ready.getByRole("link", "Feed query speedup", { exact: true }),
   ).toHaveCount(0);

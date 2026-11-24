@@ -177,7 +177,7 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
       }] } }];
       const message = (await staleMessage())!;
       assert.ok(message.includes("<@U01865757S9> (avg review decision: 6.0h, last 30d):"));
-      assert.ok(message.includes("<@U0BLNNPAB> (avg completion: 3d, last 30d):"));
+      assert.ok(message.includes("<@U0BLNNPAB> (avg completion: 3.0d, last 30d):"));
       report = null;
       const unavailable = (await staleMessage())!;
       assert.ok(unavailable.includes("(avg review decision: n/a, last 30d)"));
@@ -255,6 +255,7 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
         { ...issue(42), assignee: { displayName: "Outside <@U123> & team | `name`" } },
         { ...issue(43), assignee: { name: "zach", displayName: "zach" } },
         { ...issue(44), assignee: null },
+        { ...issue(45), assignee: null, delegate: { name: "Medic", displayName: "medic" } },
       ].map((i) => ({ ...i, priority: 2, slaBreachesAt: overdue, labels: { nodes: [{ name: "Bug" }] } }));
       const slackId = people.zach.slack_id;
       people.zach.slack_id = "";
@@ -266,10 +267,11 @@ test("Slack digests preserve complete lines and claim delivery per part", async 
         assert.ok(lines[2].endsWith(", Outside &lt;@U123&gt; &amp; team - -name-)"));
         assert.ok(lines[3].endsWith(", zach)"));
         assert.ok(!lines[4].includes("Assignee"));
+        assert.ok(lines[5].endsWith(", medic)"), "Show the delegated agent");
         assert.ok(!message.includes("No Assignee"));
         const unassigned = message.split("*Unassigned Priority Bugs*\n\n")[1].split("\n\n")[0];
         assert.ok(unassigned.includes(issues[4].url));
-        for (const i of issues.slice(0, 4)) assert.ok(!unassigned.includes(i.url));
+        for (const i of issues.filter((_, n) => n !== 4)) assert.ok(!unassigned.includes(i.url));
       } finally {
         people.zach.slack_id = slackId;
       }

@@ -327,6 +327,36 @@ test("assignment time uses the latest matching assignment before completion", ()
   assert.equal(assignmentDays(issue()), null);
   assert.equal(isPriorityBug(issue({ priority: 0 })), false);
 });
+test("assignment time starts at creation when the ticket was made with its assignee, and keeps the hours", () => {
+  assert.equal(assignmentDays(issue({ history: { edges: [] } })), 5, "no assign step: the assignee had it from creation");
+  assert.equal(assignmentDays(issue()), null, "no history fetched: unknown, not creation");
+  assert.equal(assignmentDays(issue({ assignee: null, history: { edges: [] } })), null);
+  assert.equal(assignmentDays(issue({ completedAt: undefined, history: { edges: [] } })), null);
+  assert.equal(assignmentDays(issue({ createdAt: "2026-09-05T18:00:00Z", history: { edges: [] } })), 0.25);
+  const handedOver = issue({ history: { edges: [{ node: { toAssignee: { displayName: "zach" }, updatedAt: "2026-09-05T06:00:00Z" } }] } });
+  assert.equal(assignmentDays(handedOver), 0.75, "a later hand-over still starts the clock");
+  const handedOverAfterDone = issue({ history: { edges: [{ node: { toAssignee: { displayName: "zach" }, updatedAt: "2026-09-20T00:00:00Z" } }] } });
+  assert.equal(assignmentDays(handedOverAfterDone), null, "handed over after it was done: unknown, not creation");
+  const fromSomeoneElse = issue({ history: { edges: [{ node: { toAssignee: { displayName: "casey" }, updatedAt: "2026-09-03T00:00:00Z" } }] } });
+  assert.equal(assignmentDays(fromSomeoneElse), null, "it changed hands but never to the finisher before done: unknown");
+  const metrics = personMetrics("zach", [
+    issue({ createdAt: "2026-09-05T18:00:00Z", history: { edges: [] } }),
+    issue({ id: "i2", createdAt: "2026-09-04T22:48:00Z", history: { edges: [] } }),
+  ], [], [], window);
+  assert.equal(metrics.priority_bug_avg_time_to_fix, 0.65);
+  assert.equal(metricDisplay("priority_bug_avg_time_to_fix", metrics.priority_bug_avg_time_to_fix), "0.7d");
+  assert.equal(metricDisplay("avg_all_time_to_fix", metrics.avg_all_time_to_fix), "0.7d");
+  assert.equal(metricDisplay("avg_all_time_to_fix", 0), "0.0d");
+  assert.equal(metricDisplay("avg_all_time_to_fix", 12), "12.0d");
+  assert.equal(metricDisplay("avg_all_time_to_fix", null), "n/a");
+});
+test("person bug cards leave out bugs that belong to a project", () => {
+  const inProject = issue({ project: { id: "p1", name: "Big work" } });
+  assert.equal(isCardBug(inProject), false);
+  assert.equal(isCardBug(issue()), true);
+  const metrics = personMetrics("zach", [inProject, issue()], [], [], window);
+  assert.equal(metrics.priority_bugs_fixed, 1);
+});
 test("person bug cards preserve unprioritized counts without widening alerts or regression candidates", () => {
   const unprioritized = issue({ priority: 0 });
   assert.equal(isCardBug(unprioritized), true);
