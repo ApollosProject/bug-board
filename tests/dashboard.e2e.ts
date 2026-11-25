@@ -1,6 +1,6 @@
 import { test } from "@e2e-dev/web";
 import { expect } from "e2e";
-test("dashboard navigation and no-secrets rendering", async ({
+test("dashboard navigation and no-secrets rendering", { tags: ["smoke"] }, async ({
   app,
   screen,
 }) => {
@@ -139,7 +139,7 @@ test("sign-in card has room around its action on phones and desktop", async ({
     await app.screenshot(`signin-${width}`);
   }
 });
-test("health is public, API and cron remain closed without authentication", async ({
+test("health is public, API and cron remain closed without authentication", { tags: ["smoke"] }, async ({
   app,
 }) => {
   const health = await fetch(new URL("/healthz", app.baseUrl));

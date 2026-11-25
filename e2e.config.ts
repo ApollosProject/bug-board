@@ -1,4 +1,5 @@
-import type { E2EConfig } from "e2e";
+import type { E2EConfig, TestFilter } from "e2e";
+import { decisionFilter } from "@e2e-dev/decision";
 import { web } from "@e2e-dev/web";
 import { github } from "@e2e-dev/github";
 import { gateway } from "ai";
@@ -15,7 +16,21 @@ const agent = {
       ? " This build serves fake fixture people, issues, PRs, projects, PTO, DAGs, and churches. Apps and regression cards have no fixture and correctly show unavailable or refreshing. Linear and GitHub links point at fake URLs: do not follow or report external linear.app or github.com links."
       : ""),
 };
+// With --changed-since (PR CI only), Jev leaves out the tests the diff can't
+// affect. Smoke always runs, so every PR still boots the app.
+const decision = decisionFilter({
+  model: gateway.decisionModel("typesafe-ai/jev"),
+});
+const affected = {
+  name: "decision",
+  filter: (tests, context) =>
+    decision.filter(
+      tests.filter((test) => !test.tags.includes("smoke")),
+      context,
+    ),
+} satisfies TestFilter;
 export default {
+  filters: [affected],
   tests: [
     "tests/dashboard.e2e.ts",
     "tests/luna.e2e.ts",
