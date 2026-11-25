@@ -91,7 +91,7 @@ export default async function Team({
     <>
       <Heading
         title="Team"
-        detail="Delivery metrics across engineering. Select a person for their current work and comparisons."
+        detail={`Delivery metrics across ${everyone ? "everyone" : "engineering"}. Select a person for their current work and comparisons.`}
       />
       <WindowControls window={window} search={search} />
       <div className="toolbar">
