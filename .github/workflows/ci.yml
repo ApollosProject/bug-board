@@ -4,21 +4,21 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
-    inputs:
-      run_ai:
-        description: Run uncached Luna tests through AI Gateway
-        type: boolean
-        default: false
 permissions:
   contents: read
   pull-requests: write
+env:
+  # PRs run only the e2e tests the diff can affect; main runs all.
+  CHANGED_SINCE: ${{ github.event_name == 'pull_request' && format('--changed-since origin/{0}', github.base_ref) || '' }}
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # --changed-since diffs against the merge base with main.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -32,17 +32,20 @@ jobs:
         timeout-minutes: 10
         # The runner image ships Chrome's system libraries; apt mirrors can be unreachable.
         run: npx playwright-core install chromium
-      - run: npx e2e run tests/dashboard.e2e.ts --no-cache
+      - run: npx e2e run tests/dashboard.e2e.ts --no-cache $CHANGED_SINCE
         env:
           GITHUB_TOKEN: ${{ github.token }}
-      - run: npx e2e run tests/churches.e2e.ts --no-cache
-        env:
-          E2E_FIXTURES: "1"
-          GITHUB_TOKEN: ${{ github.token }}
-      - run: npx e2e run tests/reviews.e2e.ts --no-cache
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+      - run: npx e2e run tests/churches.e2e.ts --no-cache $CHANGED_SINCE
         env:
           E2E_FIXTURES: "1"
           GITHUB_TOKEN: ${{ github.token }}
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+      - run: npx e2e run tests/reviews.e2e.ts --no-cache $CHANGED_SINCE
+        env:
+          E2E_FIXTURES: "1"
+          GITHUB_TOKEN: ${{ github.token }}
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -51,14 +54,16 @@ jobs:
           include-hidden-files: true
           retention-days: 7
   luna:
+    # Forks and Dependabot get no Gateway key, and Luna fails without one.
     if: >-
-      (github.event_name == 'workflow_dispatch' && inputs.run_ai) ||
-      (github.event_name == 'pull_request' &&
-       github.event.pull_request.head.repo.full_name == github.repository &&
-       contains(github.event.pull_request.labels.*.name, 'e2e'))
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       github.actor != 'dependabot[bot]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -69,10 +74,10 @@ jobs:
         timeout-minutes: 10
         # The runner image ships Chrome's system libraries; apt mirrors can be unreachable.
         run: npx playwright-core install chromium
-      - run: npx e2e run tests/luna.e2e.ts --no-cache
+      - run: npx e2e run tests/luna.e2e.ts --no-cache $CHANGED_SINCE
         env:
-          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:

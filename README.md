@@ -147,6 +147,9 @@ E2E_FIXTURES=1 npx e2e run tests/churches.e2e.ts --no-cache
 # Fixture review queue (also run in CI):
 E2E_FIXTURES=1 npx e2e run tests/reviews.e2e.ts --no-cache
 
+# What PR CI would run for this branch's commits:
+npx e2e list --changed-since origin/main
+
 # Already-running, populated local surface:
 E2E_BASE_URL=http://127.0.0.1:3000 E2E_DATA=1 \
   npx e2e run tests/data.e2e.ts --no-cache
@@ -156,9 +159,9 @@ E2E_BASE_URL=http://127.0.0.1:3000 E2E_DATA=1 \
 
 AI instructions prohibit deployment and authentication actions. Keep recordings private when testing internal data.
 
-Tests, traces, screenshots, videos, reports, and local Workflow state stay outside Git. `.e2e/` is ignored. CI runs type/lint checks, domain/security tests, a production build, and deterministic browser tests.
+Tests, traces, screenshots, videos, reports, and local Workflow state stay outside Git. `.e2e/` is ignored. CI runs type/lint checks, domain/security tests, a production build, deterministic browser tests, and the Luna suite.
 
-The manual `run_ai` input runs the Luna suite with the repository's `AI_GATEWAY_API_KEY` secret. The `e2e` label enables Luna on same-repository PRs, with the same key and budget limit. TesterArmy's native `@e2e-dev/github` reporter posts results, model usage, and artifact links as PR comments. Reruns update those comments.
+Luna runs on main, manual runs, and every same-repository PR except Dependabot's, with the repository's `AI_GATEWAY_API_KEY` secret. On PRs, `--changed-since` lets JEV leave out the e2e tests the diff can't affect; tests tagged `smoke` always run, and a changed test file, config, or lockfile runs everything. TesterArmy's native `@e2e-dev/github` reporter posts results, model usage, and artifact links as PR comments. Reruns update those comments.
 
 Manual runs write job summaries because they have no PR event context.
 
