@@ -31,6 +31,7 @@ test("preset and custom date windows survive navigation", async ({
   await expect(browser).toHaveURL(/start=2026-08-01.*end=2026-08-07/);
   await screen.getByRole("link", "Show everyone").tap();
   await expect(browser).toHaveURL(/everyone=1/);
+  await expect(screen.getByText(/Delivery metrics across everyone/)).toBeVisible();
   await expect(screen.getByRole("link", "Export CSV")).toHaveAttribute(
     "href",
     /start=2026-08-01.*end=2026-08-07/,
