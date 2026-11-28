@@ -3,13 +3,6 @@ on:
   schedule:
     - cron: "0 8 * * *"
   workflow_dispatch:
-  pull_request:
-    branches: [main]
-    paths:
-      - .github/workflows/explore.yml
-      - e2e.config.ts
-      - scripts/explore-linear.mts
-      - tests/fixtures/**
 permissions:
   contents: read
   # e2e's GitHub reporter comments its findings on pull requests.
