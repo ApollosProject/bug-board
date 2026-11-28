@@ -96,11 +96,11 @@ export function publishedAndroid(
     );
 }
 async function apple(church: string, bundle: string) {
-  const encoded = await config(church, "APP.APPLE_API_KEY_B64");
   const key = decode(
-    encoded
-      ? Buffer.from(String(encoded), "base64").toString()
-      : await config(church, "APP.APPLE_API_KEY"),
+    Buffer.from(
+      String(await config(church, "APP.APPLE_API_KEY_B64")),
+      "base64",
+    ).toString(),
   );
   const pem = key.is_key_content_base64
     ? Buffer.from(String(key.key), "base64").toString()
